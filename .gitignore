@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+*.txt
+!requirements.txt
+.env
+.claude/
+키움*
