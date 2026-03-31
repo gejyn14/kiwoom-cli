@@ -59,8 +59,14 @@ def _sign_color(value: str) -> str:
     return "white"
 
 
-def _fmt_number(value: str) -> str:
-    """Format a number string with commas, stripping leading zeros."""
+def _fmt_number(value: str, strip_sign: bool = False) -> str:
+    """Format a number string with commas, stripping leading zeros.
+
+    Args:
+        strip_sign: If True, remove the +/- prefix. Use for absolute value
+            fields where Kiwoom uses +/- only as a direction indicator
+            (e.g. cur_prc, open_pric, high_pric, etc.).
+    """
     v = value.strip()
     if not v:
         return "-"
@@ -69,6 +75,8 @@ def _fmt_number(value: str) -> str:
         sign = v[0]
         v = v[1:]
     v = v.lstrip("0") or "0"
+    if strip_sign:
+        sign = ""
     try:
         return sign + f"{int(v):,}"
     except ValueError:
@@ -76,6 +84,37 @@ def _fmt_number(value: str) -> str:
             return sign + f"{float(v):,.2f}"
         except ValueError:
             return value
+
+
+# Fields where +/- is a direction indicator, not the actual sign.
+# These represent absolute values (prices, amounts, quantities).
+_ABS_FIELDS = frozenset({
+    "cur_prc", "open_pric", "high_pric", "low_pric", "close_pric",
+    "strt_pric", "base_pric", "upl_pric", "lst_pric",
+    "oyr_hgst", "oyr_lwst", "250hgst", "250lwst",
+    "sel_fpr_bid", "buy_fpr_bid", "exp_cntr_pric",
+    "avg_prc", "evlt_amt", "pur_amt", "repl_pric",
+    "mac", "fav", "cap", "flo_stk", "dstr_stk",
+    "entr", "d2_entra", "tot_est_amt", "aset_evlt_amt",
+    "tot_pur_amt", "prsm_dpst_aset_amt",
+    "rmnd_qty", "ord_qty", "ord_uv", "mdfy_uv",
+    "trde_qty", "acc_trde_qty", "now_trde_qty",
+    "10", "16", "17", "18", "27", "28",  # WebSocket field IDs
+})
+
+# Fields where +/- is meaningful (changes, rates).
+_SIGNED_FIELDS = frozenset({
+    "pred_pre", "flu_rt", "pre_rt", "pl_amt", "pl_rt",
+    "tdy_lspft", "lspft", "tdy_lspft_rt", "lspft_rt", "lspft_ratio",
+    "11", "12", "15",  # WebSocket: 전일대비, 등락율, 거래량(+매수/-매도)
+})
+
+
+def _smart_fmt(value: str, field_key: str) -> str:
+    """Format a value based on the field type."""
+    if field_key in _ABS_FIELDS:
+        return _fmt_number(value, strip_sign=True)
+    return _fmt_number(value)
 
 
 def print_stock_info(data: dict[str, Any]) -> None:
@@ -94,24 +133,24 @@ def print_stock_info(data: dict[str, Any]) -> None:
     cur = data.get("cur_prc", "0")
     change = data.get("pred_pre", "0")
     rate = data.get("flu_rt", "0")
-    color = _sign_color(change)
+    color = _sign_color(cur)
 
-    t.add_row("현재가", Text(_fmt_number(cur), style=f"bold {color}"))
+    t.add_row("현재가", Text(_fmt_number(cur, strip_sign=True), style=f"bold {color}"))
     t.add_row("전일대비", Text(f"{_fmt_number(change)} ({rate}%)", style=color))
-    t.add_row("거래량", _fmt_number(data.get("trde_qty", "")))
-    t.add_row("시가", _fmt_number(data.get("open_pric", "")))
-    t.add_row("고가", _fmt_number(data.get("high_pric", "")))
-    t.add_row("저가", _fmt_number(data.get("low_pric", "")))
+    t.add_row("거래량", _fmt_number(data.get("trde_qty", ""), strip_sign=True))
+    t.add_row("시가", _fmt_number(data.get("open_pric", ""), strip_sign=True))
+    t.add_row("고가", _fmt_number(data.get("high_pric", ""), strip_sign=True))
+    t.add_row("저가", _fmt_number(data.get("low_pric", ""), strip_sign=True))
     t.add_row("", "")
-    t.add_row("시가총액", _fmt_number(data.get("mac", "")) + "억")
+    t.add_row("시가총액", _fmt_number(data.get("mac", ""), strip_sign=True) + "억")
     t.add_row("PER", data.get("per", "-") or "-")
     t.add_row("PBR", data.get("pbr", "-") or "-")
-    t.add_row("EPS", _fmt_number(data.get("eps", "")))
-    t.add_row("BPS", _fmt_number(data.get("bps", "")))
+    t.add_row("EPS", _fmt_number(data.get("eps", ""), strip_sign=True))
+    t.add_row("BPS", _fmt_number(data.get("bps", ""), strip_sign=True))
     t.add_row("ROE", data.get("roe", "-") or "-")
     t.add_row("", "")
-    t.add_row("52주 최고", _fmt_number(data.get("oyr_hgst", "")))
-    t.add_row("52주 최저", _fmt_number(data.get("oyr_lwst", "")))
+    t.add_row("52주 최고", _fmt_number(data.get("oyr_hgst", ""), strip_sign=True))
+    t.add_row("52주 최저", _fmt_number(data.get("oyr_lwst", ""), strip_sign=True))
     t.add_row("상장주식수", _fmt_number(data.get("flo_stk", "")))
     t.add_row("외인소진률", data.get("for_exh_rt", "-") or "-")
     console.print(t)
@@ -309,11 +348,11 @@ def print_chart_data(items: list[dict[str, Any]], title: str = "차트") -> None
     for item in items[:30]:
         t.add_row(
             item.get("dt", item.get("date", "")),
-            _fmt_number(item.get("open_pric", item.get("strt_pric", ""))),
-            _fmt_number(item.get("high_pric", "")),
-            _fmt_number(item.get("low_pric", "")),
-            _fmt_number(item.get("close_pric", item.get("cls_pric", item.get("cur_prc", "")))),
-            _fmt_number(item.get("trde_qty", item.get("acml_trde_qty", ""))),
+            _fmt_number(item.get("open_pric", item.get("strt_pric", "")), strip_sign=True),
+            _fmt_number(item.get("high_pric", ""), strip_sign=True),
+            _fmt_number(item.get("low_pric", ""), strip_sign=True),
+            _fmt_number(item.get("close_pric", item.get("cls_pric", item.get("cur_prc", ""))), strip_sign=True),
+            _fmt_number(item.get("trde_qty", item.get("acml_trde_qty", "")), strip_sign=True),
         )
     console.print(t)
 
@@ -380,7 +419,10 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             row = []
             for k in keys:
                 v = str(item.get(k, ""))
-                row.append(_fmt_number(v) if v.lstrip("+-").isdigit() and len(v) > 4 else v)
+                if v.lstrip("+-").isdigit() and len(v) > 4:
+                    row.append(_smart_fmt(v, k))
+                else:
+                    row.append(v)
             t.add_row(*row)
         console.print(t)
     elif isinstance(data, dict):
@@ -393,7 +435,10 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             t.add_column("값", width=35)
             for k, v in scalar.items():
                 label = _FIELD_LABELS.get(k, k)
-                t.add_row(label, str(v))
+                sv = str(v)
+                if sv.lstrip("+-").isdigit() and len(sv) > 4:
+                    sv = _smart_fmt(sv, k)
+                t.add_row(label, sv)
             console.print(t)
 
         for list_key, list_val in lists.items():
