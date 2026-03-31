@@ -209,20 +209,20 @@ def brokers():
 
 @stock.command("short")
 @click.argument("code")
-@click.option("--start", "strt_dt", required=True, help="시작일자 (YYYYMMDD)")
-@click.option("--end", "end_dt", required=True, help="종료일자 (YYYYMMDD)")
-@click.option(
-    "--time-type", "tm_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="시간구분 (0=시작일, 1=기간)",
-)
-def short_selling(code: str, strt_dt: str, end_dt: str, tm_tp: str):
+@click.option("--from", "strt_dt", default=None, help="시작일자 (YYYYMMDD, 기본=30일전)")
+@click.option("--to", "end_dt", default=None, help="종료일자 (YYYYMMDD, 기본=오늘)")
+def short_selling(code: str, strt_dt: str | None, end_dt: str | None):
     """공매도 추이 조회. (ka10014)"""
+    from datetime import datetime, timedelta
+    today = datetime.now()
+    if not end_dt:
+        end_dt = today.strftime("%Y%m%d")
+    if not strt_dt:
+        strt_dt = (today - timedelta(days=30)).strftime("%Y%m%d")
     with KiwoomClient() as c:
         data, _ = c.request("ka10014", {
             "stk_cd": code,
-            "tm_tp": tm_tp,
+            "tm_tp": "1",
             "strt_dt": strt_dt,
             "end_dt": end_dt,
         })
