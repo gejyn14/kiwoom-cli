@@ -63,8 +63,8 @@ kiwoom stock watchlist "005930|000660" # 관심종목
 ### 차트
 
 ```bash
-kiwoom stock chart tick 005930 --scope 1        # 틱
-kiwoom stock chart minute 005930 --scope 5      # 5분봉
+kiwoom stock chart tick 005930 --range 1        # 틱
+kiwoom stock chart minute 005930 --range 5      # 5분봉
 kiwoom stock chart day 005930 --date 20260301   # 일봉
 kiwoom stock chart week 005930 --date 20260301  # 주봉
 kiwoom stock chart month 005930 --date 20260301 # 월봉
