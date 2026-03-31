@@ -8,4 +8,5 @@ build/
 !requirements.txt
 .env
 .claude/
+CLAUDE.md
 키움*
