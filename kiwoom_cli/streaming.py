@@ -11,14 +11,8 @@ import signal
 import sys
 from typing import Any
 
-from rich.console import Console
-from rich.live import Live
-from rich.table import Table
-from rich.text import Text
-
 from . import auth, config
-
-console = Console()
+from .output import console
 
 # Real-time type codes -> (name, description)
 REALTIME_TYPES: dict[str, tuple[str, str]] = {

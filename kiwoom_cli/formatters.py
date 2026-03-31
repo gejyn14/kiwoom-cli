@@ -2,14 +2,52 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
+import sys
 from typing import Any
 
-from rich.console import Console
+import click
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-console = Console()
+from .output import console
+
+
+def _get_format() -> str:
+    ctx = click.get_current_context(silent=True)
+    if ctx and ctx.obj:
+        return ctx.obj.get("format", "table")
+    return "table"
+
+
+def _output_json(data: Any) -> None:
+    """Write data as JSON to stdout."""
+    clean = data
+    if isinstance(data, dict):
+        clean = {k: v for k, v in data.items() if k not in ("return_code", "return_msg")}
+    click.echo(json.dumps(clean, ensure_ascii=False, indent=2))
+
+
+def _output_csv(rows: list[dict], keys: list[str] | None = None) -> None:
+    """Write rows as CSV to stdout."""
+    if not rows:
+        return
+    if keys is None:
+        keys = list(rows[0].keys())
+    w = csv.DictWriter(sys.stdout, fieldnames=keys, extrasaction="ignore")
+    w.writeheader()
+    for r in rows:
+        w.writerow({k: r.get(k, "") for k in keys})
+
+
+def _flat_dict(data: dict) -> list[dict]:
+    """Flatten a dict with scalar values into a single-row list for CSV."""
+    clean = {k: v for k, v in data.items()
+             if not isinstance(v, (list, dict)) and k not in ("return_code", "return_msg")}
+    return [clean] if clean else []
 
 
 def _sign_color(value: str) -> str:
@@ -43,6 +81,13 @@ def _fmt_number(value: str) -> str:
 
 def print_stock_info(data: dict[str, Any]) -> None:
     """Format stock basic info (ka10001)."""
+    fmt = _get_format()
+    if fmt == "json":
+        _output_json(data)
+        return
+    if fmt == "csv":
+        _output_csv(_flat_dict(data))
+        return
     t = Table(title=f"📊 {data.get('stk_nm', '')} ({data.get('stk_cd', '')})", show_header=False, border_style="dim")
     t.add_column("항목", style="cyan", width=20)
     t.add_column("값", width=30)
@@ -75,6 +120,13 @@ def print_stock_info(data: dict[str, Any]) -> None:
 
 def print_orderbook(data: dict[str, Any]) -> None:
     """Format 10-level orderbook (ka10004)."""
+    fmt = _get_format()
+    if fmt == "json":
+        _output_json(data)
+        return
+    if fmt == "csv":
+        _output_csv(_flat_dict(data))
+        return
     t = Table(title="📋 호가창", border_style="dim")
     t.add_column("매도잔량", justify="right", style="blue", width=12)
     t.add_column("매도호가", justify="right", style="blue", width=10)
@@ -122,6 +174,17 @@ def print_orderbook(data: dict[str, Any]) -> None:
 
 def print_account_eval(data: dict[str, Any]) -> None:
     """Format account evaluation (kt00004)."""
+    fmt = _get_format()
+    if fmt == "json":
+        _output_json(data)
+        return
+    if fmt == "csv":
+        holdings = data.get("stk_acnt_evlt_prst", [])
+        if holdings:
+            _output_csv(holdings)
+        else:
+            _output_csv(_flat_dict(data))
+        return
     summary = Table(title="💰 계좌평가현황", show_header=False, border_style="dim")
     summary.add_column("항목", style="cyan", width=20)
     summary.add_column("값", width=25)
@@ -171,6 +234,13 @@ def print_account_eval(data: dict[str, Any]) -> None:
 
 def print_order_result(data: dict[str, Any], action: str = "주문") -> None:
     """Format order response."""
+    fmt = _get_format()
+    if fmt == "json":
+        _output_json(data)
+        return
+    if fmt == "csv":
+        _output_csv(_flat_dict(data))
+        return
     msg = data.get("return_msg", "")
     ord_no = data.get("ord_no", "")
     console.print(Panel(
@@ -183,6 +253,13 @@ def print_order_result(data: dict[str, Any], action: str = "주문") -> None:
 
 def print_pending_orders(items: list[dict[str, Any]]) -> None:
     """Format pending orders list (ka10075)."""
+    fmt = _get_format()
+    if fmt == "json":
+        _output_json(items)
+        return
+    if fmt == "csv":
+        _output_csv(items)
+        return
     if not items:
         console.print("[dim]미체결 주문이 없습니다.[/]")
         return
@@ -211,6 +288,13 @@ def print_pending_orders(items: list[dict[str, Any]]) -> None:
 
 def print_chart_data(items: list[dict[str, Any]], title: str = "차트") -> None:
     """Format chart data (OHLCV)."""
+    fmt = _get_format()
+    if fmt == "json":
+        _output_json(items)
+        return
+    if fmt == "csv":
+        _output_csv(items)
+        return
     if not items:
         console.print("[dim]데이터가 없습니다.[/]")
         return
@@ -250,12 +334,30 @@ _FIELD_LABELS: dict[str, str] = {
 
 
 def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> None:
-    """Generic formatter for any API response."""
+    """Generic formatter for any API response. Respects --format option."""
+    fmt = _get_format()
+
+    if fmt == "json":
+        _output_json(data)
+        return
+    if fmt == "csv":
+        if isinstance(data, list):
+            _output_csv(data)
+        elif isinstance(data, dict):
+            # Flatten: output lists first, then scalars
+            lists = {k: v for k, v in data.items() if isinstance(v, list)}
+            if lists:
+                for lv in lists.values():
+                    _output_csv(lv)
+            else:
+                _output_csv(_flat_dict(data))
+        return
+
+    # Table mode (default)
     if isinstance(data, list):
         if not data:
             console.print("[dim]데이터가 없습니다.[/]")
             return
-        # Filter out columns that are empty across all rows
         all_keys = list(data[0].keys())
         keys = [
             k for k in all_keys
@@ -267,7 +369,6 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
         t = Table(title=title, border_style="dim", show_lines=False)
         for k in keys:
             label = _FIELD_LABELS.get(k, k)
-            # Right-align numeric-looking columns
             justify = "right" if k in (
                 "cur_prc", "pred_pre", "flu_rt", "trde_qty", "trde_amt",
                 "open_pric", "high_pric", "low_pric", "close_pric",
@@ -284,7 +385,6 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             t.add_row(*row)
         console.print(t)
     elif isinstance(data, dict):
-        # Filter out return_code/return_msg and list values
         scalar = {k: v for k, v in data.items() if not isinstance(v, (list, dict)) and k not in ("return_code", "return_msg")}
         lists = {k: v for k, v in data.items() if isinstance(v, list)}
 
@@ -303,6 +403,13 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
 
 def print_deposit(data: dict[str, Any]) -> None:
     """Format deposit info (kt00001)."""
+    fmt = _get_format()
+    if fmt == "json":
+        _output_json(data)
+        return
+    if fmt == "csv":
+        _output_csv(_flat_dict(data))
+        return
     t = Table(title="💵 예수금 상세현황", show_header=False, border_style="dim")
     t.add_column("항목", style="cyan", width=25)
     t.add_column("금액", width=20, justify="right")

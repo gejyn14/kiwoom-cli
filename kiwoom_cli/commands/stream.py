@@ -233,10 +233,9 @@ def custom(type_codes: str, codes: tuple[str, ...], raw: bool):
 @stream.command("types")
 def list_types():
     """사용 가능한 실시간 타입 코드 목록."""
-    from rich.console import Console
     from rich.table import Table
+    from ..output import console
 
-    c = Console()
     t = Table(title="실시간 타입 코드", border_style="dim")
     t.add_column("코드", style="bold")
     t.add_column("이름")
@@ -244,4 +243,4 @@ def list_types():
 
     for code, (name, desc) in REALTIME_TYPES.items():
         t.add_row(code, name, desc)
-    c.print(t)
+    console.print(t)

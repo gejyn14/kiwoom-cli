@@ -3,20 +3,56 @@
 from __future__ import annotations
 
 import json
+import sys
 
 import click
-from rich.console import Console
+import httpx
 
 from . import __version__, auth, config
 from .client import KiwoomClient, KiwoomAPIError
 from .formatters import print_generic_table
+from .output import console
 
-console = Console()
+# Exit codes
+EXIT_OK = 0
+EXIT_INPUT = 1   # Click default for bad args
+EXIT_API = 2     # API or network error
+EXIT_AUTH = 3    # Token missing or expired
 
 
-@click.group()
+class KiwoomGroup(click.Group):
+    """Custom group that catches API/network errors globally."""
+
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except KiwoomAPIError as e:
+            fmt = ctx.obj.get("format", "table") if ctx.obj else "table"
+            if fmt == "json":
+                click.echo(json.dumps({"error": e.msg, "code": e.code}, ensure_ascii=False))
+            else:
+                console.print(f"[red]API 오류:[/] {e}")
+            ctx.exit(EXIT_API)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                console.print("[red]인증 오류:[/] 토큰이 만료되었습니다. [dim]kiwoom auth login[/]")
+                ctx.exit(EXIT_AUTH)
+            else:
+                console.print(f"[red]HTTP 오류:[/] {e.response.status_code}")
+                ctx.exit(EXIT_API)
+        except httpx.ConnectError:
+            console.print("[red]연결 오류:[/] API 서버에 연결할 수 없습니다. 도메인을 확인하세요.")
+            ctx.exit(EXIT_API)
+
+
+@click.group(cls=KiwoomGroup)
 @click.version_option(__version__, prog_name="kiwoom")
-def cli():
+@click.option("-f", "--format", "output_format",
+              type=click.Choice(["table", "json", "csv"]),
+              default="table", help="출력 형식")
+@click.option("--no-color", is_flag=True, help="색상 없이 출력")
+@click.pass_context
+def cli(ctx, output_format, no_color):
     """키움증권 REST API CLI.
 
     사용법:
@@ -30,9 +66,16 @@ def cli():
       kiwoom order buy 005930 10 --type market --confirm  # 시장가 매수
       kiwoom market rank volume     # 거래량 상위
       kiwoom stream quote 005930   # 실시간 체결 스트리밍
-      kiwoom api ka10001 '{"stk_cd":"005930"}'  # Raw API 호출
+      kiwoom api ka10001 '{"stk_cd":"005930"}' -f json  # JSON 출력
     """
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj["format"] = output_format
+
+    if no_color:
+        from rich.console import Console as RichConsole
+        from . import output
+        output.console = RichConsole(no_color=True)
+        output.err_console = RichConsole(stderr=True, no_color=True)
 
 
 # ── Config ────────────────────────────────────────────
@@ -162,12 +205,14 @@ from .commands.account import account
 from .commands.order import order
 from .commands.market import market
 from .commands.stream import stream
+from .commands.dashboard import dashboard
 
 cli.add_command(stock)
 cli.add_command(account)
 cli.add_command(order)
 cli.add_command(market)
 cli.add_command(stream)
+cli.add_command(dashboard)
 
 
 if __name__ == "__main__":

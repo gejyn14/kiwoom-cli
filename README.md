@@ -4,7 +4,9 @@
 
 - 207개 API 전체 지원 (188 REST + 19 WebSocket 실시간)
 - 종목 조회, 호가, 차트, 계좌, 주문, 순위, 업종, 테마, ETF, ELW, 금현물
-- Rich 테이블 출력, 자동 페이지네이션, 실시간 스트리밍
+- 출력 형식: Rich 테이블 / JSON / CSV (`-f json`, `-f csv`)
+- 실시간 WebSocket 스트리밍 (체결, 호가, VI, 잔고 등)
+- AI 에이전트 친화적: 구조화된 JSON 출력, exit code (0/1/2/3)
 
 ## 설치
 
@@ -298,6 +300,63 @@ kiwoom api ka10001 '{"stk_cd":"005930"}' --raw   # JSON 원본
 
 ---
 
+## dashboard - 대시보드
+
+```bash
+kiwoom dashboard                        # 계좌 요약 + 거래량 상위 한눈에
+```
+
+## 종목 비교
+
+```bash
+kiwoom stock compare 005930 000660      # 삼성전자 vs SK하이닉스
+kiwoom stock compare 005930 000660 035420  # 3종목 비교
+kiwoom -f json stock compare 005930 000660  # JSON 출력
+```
+
+---
+
+## 출력 형식
+
+모든 명령에 `-f` / `--format` 옵션 사용 가능:
+
+```bash
+kiwoom stock info 005930                # 기본: Rich 테이블
+kiwoom -f json stock info 005930        # JSON (파이핑, AI 에이전트용)
+kiwoom -f csv stock daily 005930        # CSV (엑셀, 데이터 분석용)
+kiwoom --no-color stock info 005930     # 색상 없이 (파일 저장용)
+```
+
+```bash
+# jq로 필터링
+kiwoom -f json market rank volume | jq '.[].stk_nm'
+
+# CSV를 파일로 저장
+kiwoom -f csv stock daily 005930 > samsung_daily.csv
+```
+
+## Shell 자동완성
+
+```bash
+# Bash
+eval "$(_KIWOOM_COMPLETE=bash_source kiwoom)"
+
+# Zsh
+eval "$(_KIWOOM_COMPLETE=zsh_source kiwoom)"
+
+# Fish
+eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
+```
+
+## Exit Codes
+
+| 코드 | 의미 |
+|------|------|
+| 0 | 성공 |
+| 1 | 입력 오류 (잘못된 인자) |
+| 2 | API/네트워크 오류 |
+| 3 | 인증 필요 (토큰 만료) |
+
 ## 참고
 
 | 항목 | 값 |
@@ -313,3 +372,7 @@ kiwoom api ka10001 '{"stk_cd":"005930"}' --raw   # JSON 원본
 - 연속조회(페이지네이션) 자동 처리
 - 종목코드 6자리: `005930` (삼성전자)
 - 금현물: `M04020000` (1kg), `M04020100` (미니 100g)
+
+## License
+
+MIT

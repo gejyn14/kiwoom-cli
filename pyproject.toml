@@ -5,8 +5,22 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kiwoom-cli"
 version = "0.1.0"
-description = "User-friendly CLI for the Kiwoom Securities REST API"
+description = "User-friendly CLI for the Kiwoom Securities REST API (키움증권)"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.10"
+keywords = ["kiwoom", "stock", "trading", "cli", "korea", "finance"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
 dependencies = [
     "click>=8.1",
     "httpx>=0.27",
@@ -17,7 +31,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-httpx>=0.30"]
+dev = ["pytest>=8.0", "pytest-httpx>=0.30", "ruff>=0.4"]
+
+[project.urls]
+Homepage = "https://github.com/gejyn14/kiwoom-cli"
+Repository = "https://github.com/gejyn14/kiwoom-cli"
+Issues = "https://github.com/gejyn14/kiwoom-cli/issues"
 
 [project.scripts]
 kiwoom = "kiwoom_cli.main:cli"

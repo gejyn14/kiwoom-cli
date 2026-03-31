@@ -13,13 +13,11 @@ Subgroups:
 from __future__ import annotations
 
 import click
-from rich.console import Console
 from rich.panel import Panel
 
 from ..client import KiwoomClient
 from ..formatters import print_order_result, print_generic_table
-
-console = Console()
+from ..output import console
 
 ORDER_TYPES = {
     "limit": "0",         # 보통 (지정가)

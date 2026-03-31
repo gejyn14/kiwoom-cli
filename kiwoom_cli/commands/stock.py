@@ -6,11 +6,17 @@ import click
 
 from ..client import KiwoomClient
 from ..formatters import (
+    _fmt_number,
+    _get_format,
+    _output_csv,
+    _output_json,
+    _sign_color,
     print_chart_data,
     print_generic_table,
     print_orderbook,
     print_stock_info,
 )
+from ..output import console
 
 
 def _find_list(data: dict) -> list | None:
@@ -1509,3 +1515,95 @@ def lending_detail(dt: str, mrkt_tp: str):
             "mrkt_tp": mrkt_tp,
         })
         print_generic_table(data, title="대차거래내역")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# stock compare -- 종목 비교
+# ═══════════════════════════════════════════════════════════════════
+
+
+_COMPARE_ROWS = [
+    ("종목명", "stk_nm"),
+    ("현재가", "cur_prc"),
+    ("전일대비", "pred_pre"),
+    ("등락율", "flu_rt"),
+    ("거래량", "trde_qty"),
+    ("시가총액", "mac"),
+    ("PER", "per"),
+    ("PBR", "pbr"),
+    ("52주고", "oyr_hgst"),
+    ("52주저", "oyr_lwst"),
+]
+
+
+@stock.command("compare")
+@click.argument("codes", nargs=-1, required=True)
+def compare(codes: tuple[str, ...]):
+    """종목 비교 (2개 이상). 주요 지표를 나란히 비교합니다. (ka10001)
+
+    \b
+    예시:
+      kiwoom stock compare 005930 000660
+      kiwoom stock compare 005930 000660 035420
+    """
+    if len(codes) < 2:
+        raise click.UsageError("비교할 종목 코드를 2개 이상 입력하세요.")
+
+    results: list[dict] = []
+    with KiwoomClient() as c:
+        for code in codes:
+            data, _ = c.request("ka10001", {"stk_cd": code})
+            data["_code"] = code
+            results.append(data)
+
+    fmt = _get_format()
+
+    # ── JSON output ───────────────────────────────────────
+    if fmt == "json":
+        _output_json(results)
+        return
+
+    # ── CSV output ────────────────────────────────────────
+    if fmt == "csv":
+        rows = []
+        for r in results:
+            row = {"종목코드": r.get("_code", r.get("stk_cd", ""))}
+            for label, key in _COMPARE_ROWS:
+                row[label] = r.get(key, "")
+            rows.append(row)
+        _output_csv(rows)
+        return
+
+    # ── Rich table output ─────────────────────────────────
+    from rich.table import Table
+
+    t = Table(title="종목 비교", border_style="dim")
+    t.add_column("항목", style="cyan", width=12)
+    for r in results:
+        name = r.get("stk_nm", r.get("_code", ""))
+        code = r.get("_code", r.get("stk_cd", ""))
+        t.add_column(f"{name}\n({code})", justify="right", min_width=14)
+
+    for label, key in _COMPARE_ROWS:
+        row_vals: list[str | Text] = [label]
+        for r in results:
+            val = r.get(key, "-") or "-"
+            if key in ("cur_prc", "trde_qty", "mac", "oyr_hgst", "oyr_lwst"):
+                display = _fmt_number(val)
+                if key == "mac":
+                    display += "억"
+            elif key == "pred_pre":
+                display = _fmt_number(val)
+            elif key == "flu_rt":
+                display = val + "%"
+            else:
+                display = val
+
+            if key in ("pred_pre", "flu_rt"):
+                color = _sign_color(val)
+                row_vals.append(Text(display, style=color))
+            else:
+                row_vals.append(display)
+        t.add_row(*row_vals)
+
+    console.print(t)

@@ -9,12 +9,10 @@ from typing import Any
 
 import click
 import httpx
-from rich.console import Console
 
 from . import auth, config
 from .api_spec import get_url
-
-console = Console(stderr=True)
+from .output import err_console
 
 CONTENT_TYPE = "application/json;charset=UTF-8"
 
@@ -59,6 +57,15 @@ class KiwoomClient:
             h["next-key"] = next_key
         return h
 
+    def _should_spin(self) -> bool:
+        """Show spinner only for table format on a real terminal."""
+        if not err_console.is_terminal:
+            return False
+        ctx = click.get_current_context(silent=True)
+        if ctx and ctx.obj and ctx.obj.get("format") != "table":
+            return False
+        return True
+
     def request(
         self,
         api_id: str,
@@ -70,7 +77,11 @@ class KiwoomClient:
         """Make a single API request. Returns (body_json, response_headers)."""
         url_path = get_url(api_id)
         headers = self._headers(api_id, cont_yn, next_key)
-        resp = self._http.post(url_path, headers=headers, json=body or {})
+        if self._should_spin():
+            with err_console.status("[dim]조회 중...[/]", spinner="dots"):
+                resp = self._http.post(url_path, headers=headers, json=body or {})
+        else:
+            resp = self._http.post(url_path, headers=headers, json=body or {})
         resp.raise_for_status()
         data = resp.json()
 
