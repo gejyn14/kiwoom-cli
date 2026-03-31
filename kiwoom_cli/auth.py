@@ -5,7 +5,6 @@ Tokens are stored in ~/.kiwoom/token and loaded automatically by the client.
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from . import config
 

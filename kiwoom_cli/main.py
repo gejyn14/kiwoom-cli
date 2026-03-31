@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import json
-import sys
 
 import click
 import httpx
 
 from . import __version__, auth, config
 from .client import KiwoomClient, KiwoomAPIError
+from .commands.account import account
+from .commands.dashboard import dashboard
+from .commands.market import market
+from .commands.order import order
+from .commands.stock import stock
+from .commands.stream import stream
 from .formatters import print_generic_table
 from .output import console
 
@@ -140,7 +145,7 @@ def auth_login():
         try:
             token = c.issue_token()
             masked = token[:10] + "..." + token[-4:] if len(token) > 14 else token
-            console.print(f"[green]토큰 발급 완료![/]")
+            console.print("[green]토큰 발급 완료![/]")
             console.print(f"  토큰: {masked}")
             console.print(f"  저장 위치: {auth.TOKEN_FILE}")
         except KiwoomAPIError as e:
@@ -199,13 +204,6 @@ def raw_api(api_id: str, body: str, raw: bool):
 
 
 # ── Register subcommands ─────────────────────────────
-
-from .commands.stock import stock
-from .commands.account import account
-from .commands.order import order
-from .commands.market import market
-from .commands.stream import stream
-from .commands.dashboard import dashboard
 
 cli.add_command(stock)
 cli.add_command(account)

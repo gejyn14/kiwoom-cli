@@ -7,8 +7,6 @@ and streams real-time market data.
 from __future__ import annotations
 
 import json
-import signal
-import sys
 from typing import Any
 
 from . import auth, config
