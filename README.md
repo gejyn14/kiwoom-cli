@@ -32,15 +32,16 @@ kiwoom stock info 005930
 ## 명령어 구조
 
 ```
-kiwoom
-├── config    설정 (setup / show / domain)
-├── auth      인증 (login / logout / status)
-├── stock     종목 조회
-├── account   계좌 조회
-├── order     주문
-├── market    시장 정보
-├── stream    실시간 스트리밍
-└── api       Raw API 호출
+kiwoom [--format table|json|csv] [--no-color]
+├── config      설정 (setup / show / domain)
+├── auth        인증 (login / logout / status)
+├── stock       종목 조회 (info / orderbook / chart / compare ...)
+├── account     계좌 조회 (balance / deposit / returns / pnl ...)
+├── order       주문 (buy / sell / modify / cancel / credit / gold)
+├── market      시장 정보 (rank / sector / theme / etf / elw / gold)
+├── stream      실시간 스트리밍 (quote / orderbook / order / vi ...)
+├── dashboard   대시보드 (계좌 + 거래량 상위 한눈에)
+└── api         Raw API 호출
 ```
 
 ---
