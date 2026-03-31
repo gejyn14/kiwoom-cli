@@ -222,8 +222,14 @@ def run_stream(
                         console.print_json(json.dumps(data, ensure_ascii=False))
                         continue
 
-                    # Handle system messages (login, errors)
                     trnm = data.get("trnm", "")
+
+                    # Respond to PING with PONG to keep connection alive
+                    if trnm == "PING":
+                        await ws.send(json.dumps({"trnm": "PONG"}))
+                        continue
+
+                    # Handle system messages (login, errors)
                     if trnm == "SYSTEM":
                         msg = data.get("message", "")
                         code = data.get("code", "")
