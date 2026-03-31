@@ -29,6 +29,19 @@ kiwoom auth login
 kiwoom stock info 005930
 ```
 
+### 모의투자 vs 실거래
+
+`config setup` 시 도메인을 선택합니다. 이후 변경:
+
+```bash
+kiwoom config domain mock   # 모의투자 (기본값, 테스트용)
+kiwoom config domain prod   # 실거래
+
+kiwoom config show          # 현재 설정 확인
+```
+
+모의투자는 KRX만 지원됩니다. 실거래 전환 후에는 `kiwoom auth login`으로 토큰을 재발급하세요.
+
 ## 명령어 구조
 
 ```
