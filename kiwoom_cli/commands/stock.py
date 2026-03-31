@@ -1576,6 +1576,7 @@ def compare(codes: tuple[str, ...]):
 
     # ── Rich table output ─────────────────────────────────
     from rich.table import Table
+    from rich.text import Text
 
     t = Table(title="종목 비교", border_style="dim")
     t.add_column("항목", style="cyan", width=12)
