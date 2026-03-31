@@ -229,8 +229,9 @@ def run_stream(
 
                     trnm = data.get("trnm", "")
 
-                    # Server sends PING as keepalive - just ignore it
+                    # Server sends PING as keepalive - echo it back
                     if trnm == "PING":
+                        await ws.send(json.dumps({"trnm": "PING"}))
                         continue
 
                     # Handle system messages (login, errors)
