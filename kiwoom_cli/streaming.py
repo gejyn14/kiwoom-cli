@@ -224,9 +224,8 @@ def run_stream(
 
                     trnm = data.get("trnm", "")
 
-                    # Respond to PING with PONG to keep connection alive
+                    # Server sends PING as keepalive - just ignore it
                     if trnm == "PING":
-                        await ws.send(json.dumps({"trnm": "PONG"}))
                         continue
 
                     # Handle system messages (login, errors)
