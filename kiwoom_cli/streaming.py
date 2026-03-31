@@ -183,17 +183,34 @@ def run_stream(
     async def _stream():
         url = f"{ws_url}/api/dostk/websocket"
         headers = {
-            "api-id": types[0],
-            "authorization": f"Bearer {token}",
             "content-type": "application/json;charset=UTF-8",
         }
 
         try:
             async with websockets.connect(url, additional_headers=headers) as ws:
-                # Send registration
+                # Step 1: Send token authentication first
+                auth_msg = {
+                    "trnm": "LOGIN",
+                    "token": token,
+                }
+                await ws.send(json.dumps(auth_msg))
+                console.print("[dim]토큰 인증 요청...[/]")
+
+                # Wait for auth response
+                auth_resp = await ws.recv()
+                try:
+                    auth_data = json.loads(auth_resp)
+                    if auth_data.get("code") and auth_data["code"] != "0":
+                        console.print(f"[red]인증 실패: {auth_data.get('message', auth_resp)}[/]")
+                        return
+                    console.print("[green]인증 성공[/]")
+                except json.JSONDecodeError:
+                    pass
+
+                # Step 2: Send registration
                 reg_msg = _build_register_msg(types, items)
                 await ws.send(json.dumps(reg_msg))
-                console.print("[green]등록 요청 전송 완료[/]")
+                console.print("[dim]종목 등록 요청...[/]")
 
                 # Receive loop
                 async for message in ws:
@@ -206,6 +223,17 @@ def run_stream(
 
                     if raw:
                         console.print_json(json.dumps(data, ensure_ascii=False))
+                        continue
+
+                    # Handle system messages (login, errors)
+                    trnm = data.get("trnm", "")
+                    if trnm == "SYSTEM":
+                        msg = data.get("message", "")
+                        code = data.get("code", "")
+                        if code and code != "0":
+                            console.print(f"[red]시스템: {msg}[/]")
+                        else:
+                            console.print(f"[dim]시스템: {msg}[/]")
                         continue
 
                     # Handle registration response
