@@ -229,7 +229,7 @@ def print_chart_data(items: list[dict[str, Any]], title: str = "차트") -> None
             _fmt_number(item.get("open_pric", item.get("strt_pric", ""))),
             _fmt_number(item.get("high_pric", "")),
             _fmt_number(item.get("low_pric", "")),
-            _fmt_number(item.get("cls_pric", item.get("cur_prc", ""))),
+            _fmt_number(item.get("close_pric", item.get("cls_pric", item.get("cur_prc", "")))),
             _fmt_number(item.get("trde_qty", item.get("acml_trde_qty", ""))),
         )
     console.print(t)

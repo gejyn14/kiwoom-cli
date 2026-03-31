@@ -13,6 +13,14 @@ from ..formatters import (
 )
 
 
+def _find_list(data: dict) -> list | None:
+    """Find the first list value in API response (skipping return_code/return_msg)."""
+    for k, v in data.items():
+        if isinstance(v, list) and k not in ("return_code", "return_msg"):
+            return v
+    return None
+
+
 @click.group("stock")
 def stock():
     """주식 종목 정보 및 시세 조회."""
@@ -68,9 +76,9 @@ def daily(code: str, qry_type: str):
     tp_map = {"day": "1", "week": "2", "month": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10005", {"stk_cd": code, "qry_tp": tp_map[qry_type]})
-        items = data.get("stk_dt_pole", data.get("output", []))
-        if isinstance(items, list):
-            title = {"day": "일별", "week": "주별", "month": "월별"}[qry_type]
+        items = _find_list(data)
+        title = {"day": "일별", "week": "주별", "month": "월별"}[qry_type]
+        if items:
             print_chart_data(items, title=f"{code} {title} 시세")
         else:
             print_generic_table(data, title="시세")
