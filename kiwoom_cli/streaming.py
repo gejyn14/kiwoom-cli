@@ -184,7 +184,12 @@ def run_stream(
         }
 
         try:
-            async with websockets.connect(url, additional_headers=headers) as ws:
+            async with websockets.connect(
+                url,
+                additional_headers=headers,
+                ping_interval=None,
+                ping_timeout=None,
+            ) as ws:
                 # Step 1: Send token authentication first
                 auth_msg = {
                     "trnm": "LOGIN",
