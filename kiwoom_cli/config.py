@@ -1,17 +1,19 @@
 """Configuration management for Kiwoom CLI.
 
-Stores settings in ~/.kiwoom/config.toml:
-  [auth]
-  appkey = "..."
-  secretkey = "..."
+Priority: environment variables > ~/.kiwoom/config.toml
 
-  [general]
-  domain = "prod"   # "prod" or "mock"
-  account = ""      # default account number
+Environment variables:
+  KIWOOM_APPKEY       앱키
+  KIWOOM_SECRETKEY    시크릿키
+  KIWOOM_DOMAIN       도메인 (prod / mock)
+  KIWOOM_ACCOUNT      계좌번호
+
+Config file: ~/.kiwoom/config.toml
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -54,18 +56,21 @@ def save_config(cfg: dict) -> None:
 
 
 def get_domain() -> str:
+    env = os.environ.get("KIWOOM_DOMAIN")
+    if env:
+        return DOMAINS.get(env, DOMAINS["mock"])
     cfg = load_config()
     key = cfg.get("general", {}).get("domain", "mock")
     return DOMAINS.get(key, DOMAINS["mock"])
 
 
 def get_appkey() -> str:
-    return load_config().get("auth", {}).get("appkey", "")
+    return os.environ.get("KIWOOM_APPKEY") or load_config().get("auth", {}).get("appkey", "")
 
 
 def get_secretkey() -> str:
-    return load_config().get("auth", {}).get("secretkey", "")
+    return os.environ.get("KIWOOM_SECRETKEY") or load_config().get("auth", {}).get("secretkey", "")
 
 
 def get_account() -> str:
-    return load_config().get("general", {}).get("account", "")
+    return os.environ.get("KIWOOM_ACCOUNT") or load_config().get("general", {}).get("account", "")

@@ -42,6 +42,19 @@ kiwoom config show          # 현재 설정 확인
 
 모의투자는 KRX만 지원됩니다. 실거래 전환 후에는 `kiwoom auth login`으로 토큰을 재발급하세요.
 
+### 환경변수 설정
+
+`config.toml` 대신 환경변수로도 설정 가능합니다. 환경변수가 우선합니다.
+
+```bash
+export KIWOOM_APPKEY="your-app-key"
+export KIWOOM_SECRETKEY="your-secret-key"
+export KIWOOM_DOMAIN="prod"       # prod 또는 mock
+export KIWOOM_ACCOUNT="1234567"   # 선택
+```
+
+Docker, CI, 클라우드 환경에서 `config setup` 없이 바로 사용 가능합니다.
+
 ## 명령어 구조
 
 ```
