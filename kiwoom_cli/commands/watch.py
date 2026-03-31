@@ -109,74 +109,82 @@ def watch(codes: tuple[str, ...]):
         import websockets
 
         url = f"{ws_url}/api/dostk/websocket"
-        async with websockets.connect(
-            url,
-            additional_headers={"content-type": "application/json;charset=UTF-8"},
-            ping_interval=None,
-            ping_timeout=None,
-        ) as ws:
-            # Auth
-            await ws.send(json.dumps({"trnm": "LOGIN", "token": token}))
-            auth_resp = json.loads(await ws.recv())
-            if auth_resp.get("return_code", -1) != 0:
-                console.print(f"[red]인증 실패: {auth_resp.get('return_msg', '')}[/]")
-                return
+        try:
+            async with websockets.connect(
+                url,
+                additional_headers={"content-type": "application/json;charset=UTF-8"},
+                ping_interval=None,
+                ping_timeout=None,
+            ) as ws:
+                # Auth
+                await ws.send(json.dumps({"trnm": "LOGIN", "token": token}))
+                auth_resp = json.loads(await ws.recv())
+                if auth_resp.get("return_code", -1) != 0:
+                    console.print(f"[red]인증 실패: {auth_resp.get('return_msg', '')}[/]")
+                    return
 
-            # Register for 0B (체결) + 0A (기세)
-            reg = {
-                "trnm": "REG",
-                "grp_no": "1",
-                "refresh": "1",
-                "data": [{"item": code_list, "type": ["0B"]}],
-            }
-            await ws.send(json.dumps(reg))
-            reg_resp = json.loads(await ws.recv())
-            if reg_resp.get("return_code", -1) != 0:
-                console.print(f"[red]등록 실패: {reg_resp.get('return_msg', '')}[/]")
-                return
+                # Register for 0B (체결)
+                reg = {
+                    "trnm": "REG",
+                    "grp_no": "1",
+                    "refresh": "1",
+                    "data": [{"item": code_list, "type": ["0B"]}],
+                }
+                await ws.send(json.dumps(reg))
+                reg_resp = json.loads(await ws.recv())
+                if reg_resp.get("return_code", -1) != 0:
+                    console.print(f"[red]등록 실패: {reg_resp.get('return_msg', '')}[/]")
+                    return
 
-            tick_count = 0
+                tick_count = 0
 
-            with Live(
-                _build_live_table(stock_state),
-                console=console,
-                refresh_per_second=4,
-                transient=False,
-            ) as live:
-                async for message in ws:
-                    try:
-                        data = json.loads(message)
-                    except json.JSONDecodeError:
-                        continue
+                with Live(
+                    _build_live_table(stock_state),
+                    console=console,
+                    refresh_per_second=4,
+                    transient=False,
+                ) as live:
+                    async for message in ws:
+                        try:
+                            data = json.loads(message)
+                        except json.JSONDecodeError:
+                            continue
 
-                    trnm = data.get("trnm", "")
+                        trnm = data.get("trnm", "")
 
-                    # Heartbeat
-                    if trnm == "PING":
-                        await ws.send(json.dumps({"trnm": "PING"}))
-                        continue
+                        # Heartbeat
+                        if trnm == "PING":
+                            try:
+                                await ws.send(json.dumps({"trnm": "PING"}))
+                            except websockets.exceptions.ConnectionClosed:
+                                break
+                            continue
 
-                    if trnm != "REAL":
-                        continue
+                        if trnm != "REAL":
+                            continue
 
-                    # Update stock state from real-time data
-                    for entry in data.get("data", []):
-                        item_code = entry.get("item", "")
-                        values = entry.get("values", {})
-                        if isinstance(values, list) and values:
-                            values = values[0] if isinstance(values[0], dict) else {}
+                        # Update stock state from real-time data
+                        for entry in data.get("data", []):
+                            item_code = entry.get("item", "")
+                            values = entry.get("values", {})
+                            if isinstance(values, list) and values:
+                                values = values[0] if isinstance(values[0], dict) else {}
 
-                        if item_code in stock_state:
-                            # Preserve name, update everything else
-                            name = stock_state[item_code].get("_name", item_code)
-                            for k, v in values.items():
-                                if v:
-                                    stock_state[item_code][k] = v
-                            stock_state[item_code]["_name"] = name
+                            if item_code in stock_state:
+                                name = stock_state[item_code].get("_name", item_code)
+                                for k, v in values.items():
+                                    if v:
+                                        stock_state[item_code][k] = v
+                                stock_state[item_code]["_name"] = name
 
-                    tick_count += 1
-                    title = f"실시간 시세 (tick #{tick_count})"
-                    live.update(_build_live_table(stock_state, title=title))
+                        tick_count += 1
+                        title = f"실시간 시세 (tick #{tick_count})"
+                        live.update(_build_live_table(stock_state, title=title))
+
+        except websockets.exceptions.ConnectionClosed:
+            console.print("\n[yellow]서버 연결 종료. 재접속하려면 다시 실행하세요.[/]")
+        except ConnectionRefusedError:
+            console.print("[red]WebSocket 연결 실패. 도메인과 토큰을 확인하세요.[/]")
 
     try:
         asyncio.run(_live_stream())
