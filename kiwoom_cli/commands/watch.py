@@ -47,7 +47,7 @@ def _build_live_table(stocks: dict[str, dict[str, str]], title: str = "실시간
             Text(_fmt_number(vals.get("10", "-"), strip_sign=True), style=f"bold {color}"),
             Text(_fmt_number(change), style=color),
             Text(f"{rate}%", style=color),
-            _fmt_number(vals.get("15", "-")),
+            _fmt_number(vals.get("15", "-"), strip_sign=True),
             _fmt_number(vals.get("13", "-"), strip_sign=True),
             _fmt_number(vals.get("16", "-"), strip_sign=True),
             _fmt_number(vals.get("17", "-"), strip_sign=True),
