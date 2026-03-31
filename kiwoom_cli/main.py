@@ -15,6 +15,7 @@ from .commands.market import market
 from .commands.order import order
 from .commands.stock import stock
 from .commands.stream import stream
+from .commands.watch import watch
 from .formatters import print_generic_table
 from .output import console
 
@@ -211,6 +212,7 @@ cli.add_command(order)
 cli.add_command(market)
 cli.add_command(stream)
 cli.add_command(dashboard)
+cli.add_command(watch)
 
 
 if __name__ == "__main__":
