@@ -20,6 +20,14 @@ def _today() -> str:
     return datetime.now().strftime("%Y%m%d")
 
 
+def _find_list(data: dict) -> list | None:
+    """Find the first list value in API response."""
+    for k, v in data.items():
+        if isinstance(v, list) and k not in ("return_code", "return_msg"):
+            return v
+    return None
+
+
 @click.group("account")
 def account():
     """계좌 정보 조회."""
@@ -110,7 +118,7 @@ def daily_balance_returns(qry_dt: str | None):
     """일별 잔고수익률 조회. (ka01690)"""
     with KiwoomClient() as c:
         data, _ = c.request("ka01690", {"qry_dt": qry_dt or _today()})
-        items = data.get("daily_pnl", data.get("output", []))
+        items = _find_list(data)
         if isinstance(items, list):
             print_generic_table(items, title="일별 잔고수익률")
         else:
@@ -217,7 +225,7 @@ def orders_pending(all_stk_tp: str, trde_tp: str, stk_cd: str, stex_tp: str):
         if stk_cd:
             body["stk_cd"] = stk_cd
         data, _ = c.request("ka10075", body)
-        items = data.get("uncn_list", data.get("output", []))
+        items = _find_list(data)
         if isinstance(items, list):
             print_pending_orders(items)
         else:
@@ -243,7 +251,7 @@ def orders_executed(stk_cd: str, qry_tp: str, sell_tp: str, ord_no: str, stex_tp
         if ord_no:
             body["ord_no"] = ord_no
         data, _ = c.request("ka10076", body)
-        items = data.get("cntr_list", data.get("output", []))
+        items = _find_list(data)
         if isinstance(items, list):
             print_generic_table(items, title="체결 내역")
         else:

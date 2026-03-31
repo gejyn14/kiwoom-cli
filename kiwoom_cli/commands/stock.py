@@ -90,8 +90,8 @@ def executions(code: str):
     """체결정보 조회. (ka10003)"""
     with KiwoomClient() as c:
         data, _ = c.request("ka10003", {"stk_cd": code})
-        items = data.get("cntr_info", data.get("output", []))
-        if isinstance(items, list):
+        items = _find_list(data)
+        if items:
             print_generic_table(items, title=f"{code} 체결정보")
         else:
             print_generic_table(data, title="체결정보")
@@ -183,7 +183,7 @@ def search(keyword: str | None, mrkt_tp: str):
     """종목 리스트 / 검색. (ka10099)"""
     with KiwoomClient() as c:
         data, _ = c.request("ka10099", {"mrkt_tp": mrkt_tp})
-        items = data.get("stk_list", data.get("output", []))
+        items = _find_list(data) or []
         if keyword and isinstance(items, list):
             items = [
                 i for i in items
@@ -200,7 +200,7 @@ def brokers():
     """회원사(증권사) 리스트 조회. (ka10102)"""
     with KiwoomClient() as c:
         data, _ = c.request("ka10102", {})
-        items = data.get("mmcm_list", data.get("output", []))
+        items = _find_list(data) or []
         if isinstance(items, list):
             print_generic_table(items, title="회원사 리스트")
         else:
@@ -226,7 +226,7 @@ def short_selling(code: str, strt_dt: str, end_dt: str, tm_tp: str):
             "strt_dt": strt_dt,
             "end_dt": end_dt,
         })
-        items = data.get("shsa_trend", data.get("output", []))
+        items = _find_list(data)
         if isinstance(items, list):
             print_generic_table(items, title=f"{code} 공매도 추이")
         else:
@@ -1214,7 +1214,7 @@ def chart_tick(code: str, tic_scope: str, upd_stkpc_tp: str):
             "tic_scope": tic_scope,
             "upd_stkpc_tp": upd_stkpc_tp,
         })
-        items = data.get("chart", data.get("output", []))
+        items = _find_list(data)
         if isinstance(items, list):
             print_chart_data(items, title=f"{code} 틱 차트")
         else:
@@ -1247,7 +1247,7 @@ def chart_minute(code: str, tic_scope: str, upd_stkpc_tp: str, base_dt: str):
         body["base_dt"] = base_dt
     with KiwoomClient() as c:
         data, _ = c.request("ka10080", body)
-        items = data.get("chart", data.get("output", []))
+        items = _find_list(data)
         if isinstance(items, list):
             print_chart_data(items, title=f"{code} {tic_scope}분봉 차트")
         else:
@@ -1271,7 +1271,7 @@ def chart_day(code: str, base_dt: str, upd_stkpc_tp: str):
             "base_dt": base_dt,
             "upd_stkpc_tp": upd_stkpc_tp,
         })
-        items = data.get("chart", data.get("output", []))
+        items = _find_list(data)
         if isinstance(items, list):
             print_chart_data(items, title=f"{code} 일봉 차트")
         else:
@@ -1295,7 +1295,7 @@ def chart_week(code: str, base_dt: str, upd_stkpc_tp: str):
             "base_dt": base_dt,
             "upd_stkpc_tp": upd_stkpc_tp,
         })
-        items = data.get("chart", data.get("output", []))
+        items = _find_list(data)
         if isinstance(items, list):
             print_chart_data(items, title=f"{code} 주봉 차트")
         else:
@@ -1319,7 +1319,7 @@ def chart_month(code: str, base_dt: str, upd_stkpc_tp: str):
             "base_dt": base_dt,
             "upd_stkpc_tp": upd_stkpc_tp,
         })
-        items = data.get("chart", data.get("output", []))
+        items = _find_list(data)
         if isinstance(items, list):
             print_chart_data(items, title=f"{code} 월봉 차트")
         else:
@@ -1343,7 +1343,7 @@ def chart_year(code: str, base_dt: str, upd_stkpc_tp: str):
             "base_dt": base_dt,
             "upd_stkpc_tp": upd_stkpc_tp,
         })
-        items = data.get("chart", data.get("output", []))
+        items = _find_list(data)
         if isinstance(items, list):
             print_chart_data(items, title=f"{code} 년봉 차트")
         else:
