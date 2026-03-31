@@ -235,19 +235,53 @@ def print_chart_data(items: list[dict[str, Any]], title: str = "차트") -> None
     console.print(t)
 
 
+_FIELD_LABELS: dict[str, str] = {
+    "stk_cd": "종목코드", "stk_nm": "종목명", "cur_prc": "현재가",
+    "pred_pre": "전일대비", "flu_rt": "등락율", "trde_qty": "거래량",
+    "trde_amt": "거래대금", "open_pric": "시가", "high_pric": "고가",
+    "low_pric": "저가", "close_pric": "종가", "date": "일자", "dt": "일자",
+    "stk_cnd": "종목조건", "sel_fpr_bid": "매도호가", "buy_fpr_bid": "매수호가",
+    "ord_no": "주문번호", "ord_qty": "주문수량", "ord_uv": "주문가격",
+    "rmnd_qty": "보유수량", "avg_prc": "평균단가", "evlt_amt": "평가금액",
+    "pl_amt": "손익금액", "pl_rt": "손익율", "acnt_nm": "계좌명",
+    "pre_rt": "등락율", "acc_trde_qty": "누적거래량", "tm": "시간",
+    "cntr_trde_qty": "체결량", "now_trde_qty": "거래량",
+}
+
+
 def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> None:
     """Generic formatter for any API response."""
     if isinstance(data, list):
         if not data:
             console.print("[dim]데이터가 없습니다.[/]")
             return
-        # Use first item's keys as columns
-        keys = list(data[0].keys())
-        t = Table(title=title, border_style="dim")
+        # Filter out columns that are empty across all rows
+        all_keys = list(data[0].keys())
+        keys = [
+            k for k in all_keys
+            if any(str(item.get(k, "")).strip() for item in data[:50])
+        ]
+        if not keys:
+            keys = all_keys
+
+        t = Table(title=title, border_style="dim", show_lines=False)
         for k in keys:
-            t.add_column(k)
+            label = _FIELD_LABELS.get(k, k)
+            # Right-align numeric-looking columns
+            justify = "right" if k in (
+                "cur_prc", "pred_pre", "flu_rt", "trde_qty", "trde_amt",
+                "open_pric", "high_pric", "low_pric", "close_pric",
+                "ord_qty", "ord_uv", "rmnd_qty", "avg_prc", "evlt_amt",
+                "pl_amt", "pl_rt", "acc_trde_qty", "cntr_trde_qty",
+                "now_trde_qty", "pre_rt",
+            ) else "left"
+            t.add_column(label, justify=justify)
         for item in data[:50]:
-            t.add_row(*[str(item.get(k, "")) for k in keys])
+            row = []
+            for k in keys:
+                v = str(item.get(k, ""))
+                row.append(_fmt_number(v) if v.lstrip("+-").isdigit() and len(v) > 4 else v)
+            t.add_row(*row)
         console.print(t)
     elif isinstance(data, dict):
         # Filter out return_code/return_msg and list values
@@ -259,7 +293,8 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             t.add_column("항목", style="cyan", width=25)
             t.add_column("값", width=35)
             for k, v in scalar.items():
-                t.add_row(k, str(v))
+                label = _FIELD_LABELS.get(k, k)
+                t.add_row(label, str(v))
             console.print(t)
 
         for list_key, list_val in lists.items():
