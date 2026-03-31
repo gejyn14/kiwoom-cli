@@ -52,19 +52,20 @@ WS_DOMAINS = {
 def _build_register_msg(
     types: list[str],
     items: list[str],
-    grp_no: str = "0001",
+    grp_no: str = "1",
     refresh: str = "1",
 ) -> dict[str, Any]:
-    """Build WebSocket registration message."""
-    data = []
-    for item in items:
-        for t in types:
-            data.append({"item": item, "type": t})
+    """Build WebSocket registration message.
 
-    # If type is 00 or 04 (account-level), item is not needed
+    Per the API docs, item and type inside data must be arrays:
+      {"item": ["005930"], "type": ["0B"]}
+    """
+    # Account-level types (no item needed)
     account_types = {"00", "04"}
     if all(t in account_types for t in types):
-        data = [{"item": "", "type": t} for t in types]
+        data = [{"item": [], "type": types}]
+    else:
+        data = [{"item": items, "type": types}]
 
     return {
         "trnm": "REG",
@@ -77,17 +78,13 @@ def _build_register_msg(
 def _build_unregister_msg(
     types: list[str],
     items: list[str],
-    grp_no: str = "0001",
+    grp_no: str = "1",
 ) -> dict[str, Any]:
     """Build WebSocket unregistration message."""
-    data = []
-    for item in items:
-        for t in types:
-            data.append({"item": item, "type": t})
     return {
         "trnm": "REMOVE",
         "grp_no": grp_no,
-        "data": data,
+        "data": [{"item": items, "type": types}],
     }
 
 
