@@ -340,17 +340,18 @@ def credit():
 @click.option("--date", "dt", required=True, help="일자 (YYYYMMDD)")
 @click.option(
     "--type", "qry_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="구분 (1=융자, 2=대주)",
+    type=click.Choice(["loan", "short-sell"]),
+    default="loan",
+    help="구분 (loan=융자, short-sell=대주)",
 )
 def credit_trend(code: str, dt: str, qry_tp: str):
     """신용매매동향 조회. (ka10013)"""
+    _type_map = {"loan": "1", "short-sell": "2"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10013", {
             "stk_cd": code,
             "dt": dt,
-            "qry_tp": qry_tp,
+            "qry_tp": _type_map[qry_tp],
         })
         print_generic_table(data, title=f"{code} 신용매매동향")
 
@@ -477,9 +478,9 @@ def price_cluster(
 @analysis.command("per-rank")
 @click.option(
     "--type", "pertp",
-    type=click.Choice(["1", "2", "3", "4", "5", "6"]),
-    default="3",
-    help="PER구분 (1=저PBR, 2=고PBR, 3=저PER, 4=고PER, 5=저ROE, 6=고ROE)",
+    type=click.Choice(["low-pbr", "high-pbr", "low-per", "high-per", "low-roe", "high-roe"]),
+    default="low-per",
+    help="PER구분 (low-pbr/high-pbr/low-per/high-per/low-roe/high-roe)",
 )
 @click.option(
     "--exchange", "stex_tp",
@@ -489,9 +490,10 @@ def price_cluster(
 )
 def per_rank(pertp: str, stex_tp: str):
     """고저PER 조회. (ka10026)"""
+    _type_map = {"low-pbr": "1", "high-pbr": "2", "low-per": "3", "high-per": "4", "low-roe": "5", "high-roe": "6"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10026", {
-            "pertp": pertp,
+            "pertp": _type_map[pertp],
             "stex_tp": stex_tp,
         })
         print_generic_table(data, title="고저PER")

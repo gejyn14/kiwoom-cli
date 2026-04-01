@@ -374,17 +374,18 @@ def orderable():
 
 @orderable.command("amount")
 @click.argument("code")
-@click.option("--side", "trde_tp", required=True, type=click.Choice(["1", "2"]), help="매매구분 (1=매도, 2=매수)")
+@click.option("--side", "trde_tp", required=True, type=click.Choice(["sell", "buy"]), help="매매구분 (sell=매도, buy=매수)")
 @click.option("--price", "uv", required=True, help="매수가격")
 @click.option("--io-amount", "io_amt", default="", help="입출금액")
 @click.option("--qty", "trde_qty", default="", help="매매수량")
 @click.option("--est-price", "exp_buy_unp", default="", help="예상매수단가")
 def orderable_amount(code: str, trde_tp: str, uv: str, io_amt: str, trde_qty: str, exp_buy_unp: str):
     """주문 인출가능 금액 조회. (kt00010)"""
+    _side_map = {"sell": "1", "buy": "2"}
     with KiwoomClient() as c:
         body: dict = {
             "stk_cd": code,
-            "trde_tp": trde_tp,
+            "trde_tp": _side_map[trde_tp],
             "uv": uv,
         }
         if io_amt:

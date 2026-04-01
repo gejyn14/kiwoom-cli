@@ -94,16 +94,16 @@ kiwoom stock watchlist "005930|000660" # 관심종목
 ```bash
 kiwoom stock chart tick 005930 --range 1        # 틱
 kiwoom stock chart minute 005930 --range 5      # 5분봉
-kiwoom stock chart day 005930 --date 20260301   # 일봉
-kiwoom stock chart week 005930 --date 20260301  # 주봉
-kiwoom stock chart month 005930 --date 20260301 # 월봉
-kiwoom stock chart year 005930 --date 20260301  # 년봉
+kiwoom stock chart day 005930 --base-date 20260301   # 일봉
+kiwoom stock chart week 005930 --base-date 20260301  # 주봉
+kiwoom stock chart month 005930 --base-date 20260301 # 월봉
+kiwoom stock chart year 005930 --base-date 20260301  # 년봉
 ```
 
 ### 투자자/분석
 
 ```bash
-kiwoom stock investor daily-trade --from 20260301 --to 20260330
+kiwoom stock investor daily-trade --start 20260301 --end 20260330
 kiwoom stock investor by-stock 005930 --date 20260301
 kiwoom stock investor program-top
 kiwoom stock analysis vi-trigger
@@ -161,7 +161,7 @@ kiwoom account pnl today 005930    # 당일 실현손익
 kiwoom account orders pending      # 미체결 주문
 kiwoom account orders executed     # 체결 내역
 kiwoom account holdings eval       # 잔고내역
-kiwoom account orderable amount 005930 --trade buy --price 70000
+kiwoom account orderable amount 005930 --side buy --price 70000
 ```
 
 <details>
@@ -219,8 +219,8 @@ kiwoom order credit sell 005930 10 --type market --confirm
 
 # 금현물
 kiwoom order gold buy M04020000 1 --type market --confirm
-kiwoom order gold balance    # 잔고
-kiwoom order gold pending    # 미체결
+kiwoom order gold balance --confirm    # 잔고
+kiwoom order gold pending --confirm   # 미체결
 
 # 조건검색
 kiwoom order condition list
