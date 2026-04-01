@@ -85,7 +85,7 @@ kiwoom stock trader 005930            # 거래원
 kiwoom stock foreign 005930           # 외국인 매매동향
 kiwoom stock institution 005930       # 기관 매매동향
 kiwoom stock short 005930 --from 20260101 --to 20260330  # 공매도 추이
-kiwoom stock search --market 0        # 코스피 종목 리스트
+kiwoom stock search --market kospi     # 코스피 종목 리스트
 kiwoom stock watchlist "005930|000660" # 관심종목
 ```
 
@@ -93,7 +93,7 @@ kiwoom stock watchlist "005930|000660" # 관심종목
 
 ```bash
 kiwoom stock chart tick 005930 --range 1        # 틱
-kiwoom stock chart minute 005930 --range 5      # 5분봉
+kiwoom stock chart minute 005930 --interval 5    # 5분봉
 kiwoom stock chart day 005930 --base-date 20260301   # 일봉
 kiwoom stock chart week 005930 --base-date 20260301  # 주봉
 kiwoom stock chart month 005930 --base-date 20260301 # 월봉
@@ -103,7 +103,7 @@ kiwoom stock chart year 005930 --base-date 20260301  # 년봉
 ### 투자자/분석
 
 ```bash
-kiwoom stock investor daily-trade --start 20260301 --end 20260330
+kiwoom stock investor daily-trade --from 20260301 --to 20260330
 kiwoom stock investor by-stock 005930 --date 20260301
 kiwoom stock investor program-top
 kiwoom stock analysis vi-trigger
