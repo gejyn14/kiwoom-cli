@@ -109,6 +109,11 @@ _SIGNED_FIELDS = frozenset({
     "11", "12", "15",  # WebSocket: 전일대비, 등락율, 거래량(+매수/-매도)
 })
 
+# Code fields that should never be number-formatted.
+_CODE_FIELDS = frozenset({
+    "stk_cd", "ord_no",
+})
+
 
 def _smart_fmt(value: str, field_key: str) -> str:
     """Format a value based on the field type."""
@@ -419,7 +424,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             row = []
             for k in keys:
                 v = str(item.get(k, ""))
-                if v.lstrip("+-").isdigit() and len(v) > 4:
+                if k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4:
                     row.append(_smart_fmt(v, k))
                 else:
                     row.append(v)
@@ -436,7 +441,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             for k, v in scalar.items():
                 label = _FIELD_LABELS.get(k, k)
                 sv = str(v)
-                if sv.lstrip("+-").isdigit() and len(sv) > 4:
+                if k not in _CODE_FIELDS and sv.lstrip("+-").isdigit() and len(sv) > 4:
                     sv = _smart_fmt(sv, k)
                 t.add_row(label, sv)
             console.print(t)
