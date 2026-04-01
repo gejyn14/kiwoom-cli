@@ -5,7 +5,7 @@ Tokens are stored in ~/.kiwoom/token and loaded automatically by the client.
 
 from __future__ import annotations
 
-import sys
+import os
 
 from . import config
 
@@ -15,7 +15,7 @@ TOKEN_FILE = config.CONFIG_DIR / "token"
 def save_token(token: str) -> None:
     config.ensure_config_dir()
     TOKEN_FILE.write_text(token)
-    if sys.platform != "win32":
+    if os.name != "nt":
         TOKEN_FILE.chmod(0o600)
 
 
