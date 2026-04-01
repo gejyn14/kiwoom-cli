@@ -11,9 +11,7 @@
 ## 설치
 
 ```bash
-git clone https://github.com/gejyn14/kiwoom-cli.git
-cd kiwoom-cli
-pip install -e .
+pip install kiwoom-cli
 ```
 
 ## 시작하기
@@ -115,34 +113,34 @@ kiwoom stock credit trend 005930 --date 20260301 --type loan
 <details>
 <summary>전체 stock 하위 명령어</summary>
 
-| 명령 | 설명 |
-|------|------|
-| `info` | 종목 기본정보 |
-| `price` | 현재가 한 줄 |
-| `detail` | 종목정보 상세 |
-| `orderbook` | 10단계 호가창 |
-| `daily` | 일/주/월별 시세 |
-| `timeprice` | 시분 시세 |
-| `daily-price` | 일별주가 |
-| `after-hours` | 시간외단일가 |
-| `quote-info` | 시세표성정보 |
-| `exec` | 체결정보 |
-| `trader` | 거래원 |
-| `today-exec` | 당일/전일 체결 |
-| `today-volume` | 당일/전일 체결량 |
-| `tick-strength` | 체결강도 시간별 |
-| `daily-strength` | 체결강도 일별 |
-| `foreign` | 외국인 매매동향 |
-| `institution` | 기관 매매동향 |
-| `short` | 공매도 추이 |
-| `search` | 종목 리스트/검색 |
-| `watchlist` | 관심종목 |
-| `brokers` | 회원사 리스트 |
-| `chart *` | 틱/분봉/일봉/주봉/월봉/년봉, 투자자별 차트 |
-| `investor *` | 기관매매, 투자자별매매, 프로그램매매 등 10개 |
-| `analysis *` | 거래상세, 거래량갱신, 매물대, PER, VI, 증권사 등 10개 |
-| `lending *` | 대차거래 추이/상위/종목별/내역 |
-| `credit *` | 신용매매동향, 신용융자 가능 |
+| 명령             | 설명                                                  |
+| ---------------- | ----------------------------------------------------- |
+| `info`           | 종목 기본정보                                         |
+| `price`          | 현재가 한 줄                                          |
+| `detail`         | 종목정보 상세                                         |
+| `orderbook`      | 10단계 호가창                                         |
+| `daily`          | 일/주/월별 시세                                       |
+| `timeprice`      | 시분 시세                                             |
+| `daily-price`    | 일별주가                                              |
+| `after-hours`    | 시간외단일가                                          |
+| `quote-info`     | 시세표성정보                                          |
+| `exec`           | 체결정보                                              |
+| `trader`         | 거래원                                                |
+| `today-exec`     | 당일/전일 체결                                        |
+| `today-volume`   | 당일/전일 체결량                                      |
+| `tick-strength`  | 체결강도 시간별                                       |
+| `daily-strength` | 체결강도 일별                                         |
+| `foreign`        | 외국인 매매동향                                       |
+| `institution`    | 기관 매매동향                                         |
+| `short`          | 공매도 추이                                           |
+| `search`         | 종목 리스트/검색                                      |
+| `watchlist`      | 관심종목                                              |
+| `brokers`        | 회원사 리스트                                         |
+| `chart *`        | 틱/분봉/일봉/주봉/월봉/년봉, 투자자별 차트            |
+| `investor *`     | 기관매매, 투자자별매매, 프로그램매매 등 10개          |
+| `analysis *`     | 거래상세, 거래량갱신, 매물대, PER, VI, 증권사 등 10개 |
+| `lending *`      | 대차거래 추이/상위/종목별/내역                        |
+| `credit *`       | 신용매매동향, 신용융자 가능                           |
 
 </details>
 
@@ -167,35 +165,35 @@ kiwoom account orderable amount 005930 --side buy --price 70000
 <details>
 <summary>전체 account 하위 명령어</summary>
 
-| 그룹 | 명령 | 설명 |
-|------|------|------|
-| - | `list` | 계좌번호 조회 |
-| - | `balance` | 계좌 평가현황 |
-| - | `deposit` | 예수금 상세 |
-| - | `asset` | 추정자산 |
-| - | `today` | 당일현황 |
-| - | `margin-detail` | 증거금 세부내역 |
-| `returns` | `summary` | 계좌 수익률 |
-| `returns` | `daily-balance` | 일별 잔고수익률 |
-| `returns` | `daily-detail` | 일별 수익률 상세 |
-| `returns` | `daily-asset` | 일별 예탁자산 |
-| `pnl` | `today` | 당일 실현손익 |
-| `pnl` | `by-date` | 일자별 실현손익 |
-| `pnl` | `by-period` | 기간별 실현손익 |
-| `pnl` | `daily` | 일자별 실현손익 |
-| `orders` | `pending` | 미체결 주문 |
-| `orders` | `executed` | 체결 내역 |
-| `orders` | `detail` | 주문체결 상세 |
-| `orders` | `status` | 주문체결 현황 |
-| `orders` | `split-detail` | 분할주문 상세 |
-| `holdings` | `eval` | 계좌평가 잔고 |
-| `holdings` | `settled` | 체결잔고 |
-| `holdings` | `next-settle` | 익일결제예정 |
-| `orderable` | `amount` | 주문가능 금액 |
-| `orderable` | `margin-qty` | 증거금율별 수량 |
-| `orderable` | `credit-qty` | 신용보증금율별 수량 |
-| `history` | `transactions` | 위탁종합 거래내역 |
-| `history` | `journal` | 당일 매매일지 |
+| 그룹        | 명령            | 설명                |
+| ----------- | --------------- | ------------------- |
+| -           | `list`          | 계좌번호 조회       |
+| -           | `balance`       | 계좌 평가현황       |
+| -           | `deposit`       | 예수금 상세         |
+| -           | `asset`         | 추정자산            |
+| -           | `today`         | 당일현황            |
+| -           | `margin-detail` | 증거금 세부내역     |
+| `returns`   | `summary`       | 계좌 수익률         |
+| `returns`   | `daily-balance` | 일별 잔고수익률     |
+| `returns`   | `daily-detail`  | 일별 수익률 상세    |
+| `returns`   | `daily-asset`   | 일별 예탁자산       |
+| `pnl`       | `today`         | 당일 실현손익       |
+| `pnl`       | `by-date`       | 일자별 실현손익     |
+| `pnl`       | `by-period`     | 기간별 실현손익     |
+| `pnl`       | `daily`         | 일자별 실현손익     |
+| `orders`    | `pending`       | 미체결 주문         |
+| `orders`    | `executed`      | 체결 내역           |
+| `orders`    | `detail`        | 주문체결 상세       |
+| `orders`    | `status`        | 주문체결 현황       |
+| `orders`    | `split-detail`  | 분할주문 상세       |
+| `holdings`  | `eval`          | 계좌평가 잔고       |
+| `holdings`  | `settled`       | 체결잔고            |
+| `holdings`  | `next-settle`   | 익일결제예정        |
+| `orderable` | `amount`        | 주문가능 금액       |
+| `orderable` | `margin-qty`    | 증거금율별 수량     |
+| `orderable` | `credit-qty`    | 신용보증금율별 수량 |
+| `history`   | `transactions`  | 위탁종합 거래내역   |
+| `history`   | `journal`       | 당일 매매일지       |
 
 </details>
 
@@ -294,27 +292,27 @@ kiwoom stream custom 0B,0D 005930       # 타입 직접 지정
 kiwoom stream types                     # 타입 코드 목록
 ```
 
-| 코드 | 명령 | 설명 |
-|------|------|------|
-| 00 | `order` | 주문체결 |
-| 04 | `balance` | 잔고 |
-| 0A | `price` | 주식기세 |
-| 0B | `quote` | 주식체결 |
-| 0C | `best-bid` | 우선호가 |
-| 0D | `orderbook` | 호가잔량 |
-| 0E | `after-hours` | 시간외호가 |
-| 0F | `trader` | 당일거래원 |
-| 0G | `etf-nav` | ETF NAV |
-| 0H | `expected` | 예상체결 |
-| 0I | `gold` | 국제금환산 |
-| 0J | `sector-index` | 업종지수 |
-| 0U | `sector-change` | 업종등락 |
-| 0g | `stock-info` | 종목정보 |
-| 0m | `elw-theory` | ELW 이론가 |
-| 0s | `market-time` | 장시작시간 |
-| 0u | `elw-indicator` | ELW 지표 |
-| 0w | `program` | 프로그램매매 |
-| 1h | `vi` | VI발동/해제 |
+| 코드 | 명령            | 설명         |
+| ---- | --------------- | ------------ |
+| 00   | `order`         | 주문체결     |
+| 04   | `balance`       | 잔고         |
+| 0A   | `price`         | 주식기세     |
+| 0B   | `quote`         | 주식체결     |
+| 0C   | `best-bid`      | 우선호가     |
+| 0D   | `orderbook`     | 호가잔량     |
+| 0E   | `after-hours`   | 시간외호가   |
+| 0F   | `trader`        | 당일거래원   |
+| 0G   | `etf-nav`       | ETF NAV      |
+| 0H   | `expected`      | 예상체결     |
+| 0I   | `gold`          | 국제금환산   |
+| 0J   | `sector-index`  | 업종지수     |
+| 0U   | `sector-change` | 업종등락     |
+| 0g   | `stock-info`    | 종목정보     |
+| 0m   | `elw-theory`    | ELW 이론가   |
+| 0s   | `market-time`   | 장시작시간   |
+| 0u   | `elw-indicator` | ELW 지표     |
+| 0w   | `program`       | 프로그램매매 |
+| 1h   | `vi`            | VI발동/해제  |
 
 ---
 
@@ -377,22 +375,22 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 
 ## Exit Codes
 
-| 코드 | 의미 |
-|------|------|
-| 0 | 성공 |
-| 1 | 입력 오류 (잘못된 인자) |
-| 2 | API/네트워크 오류 |
-| 3 | 인증 필요 (토큰 만료) |
+| 코드 | 의미                    |
+| ---- | ----------------------- |
+| 0    | 성공                    |
+| 1    | 입력 오류 (잘못된 인자) |
+| 2    | API/네트워크 오류       |
+| 3    | 인증 필요 (토큰 만료)   |
 
 ## 참고
 
-| 항목 | 값 |
-|------|------|
-| 설정 파일 | `~/.kiwoom/config.toml` |
-| 토큰 파일 | `~/.kiwoom/token` |
-| 운영 도메인 | `https://api.kiwoom.com` |
+| 항목            | 값                           |
+| --------------- | ---------------------------- |
+| 설정 파일       | `~/.kiwoom/config.toml`      |
+| 토큰 파일       | `~/.kiwoom/token`            |
+| 운영 도메인     | `https://api.kiwoom.com`     |
 | 모의투자 도메인 | `https://mockapi.kiwoom.com` |
-| WebSocket | `wss://api.kiwoom.com:10000` |
+| WebSocket       | `wss://api.kiwoom.com:10000` |
 
 - `kiwoom <명령> --help`로 상세 옵션 확인
 - 모의투자 먼저 테스트: `kiwoom config domain mock`
