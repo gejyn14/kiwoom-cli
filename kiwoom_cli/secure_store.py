@@ -17,11 +17,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
-import os
 import secrets
 
 import keyring
+from cryptography.fernet import Fernet, InvalidToken
 
 
 class SecureStoreError(Exception):
@@ -35,9 +34,9 @@ class SecureStoreLocked(SecureStoreError):
 class SecureStore:
     """Encrypted credential store backed by OS keychain.
 
-    Values are encrypted with AES-like XOR cipher keyed by a password-derived
-    key. The encryption key never touches disk — it exists only in memory
-    after unlock.
+    Values are encrypted with Fernet (AES-128-CBC + HMAC) keyed by a
+    password-derived key. The encryption key never touches disk — it exists
+    only in memory after unlock.
     """
 
     def __init__(self, service: str):
@@ -78,7 +77,7 @@ class SecureStore:
                 self._key = None
                 return False
             return True
-        except Exception:
+        except (InvalidToken, Exception):
             self._key = None
             return False
 
@@ -114,36 +113,21 @@ class SecureStore:
 
     def _derive_key(self, password: str, salt: str) -> bytes:
         """Derive encryption key from password + salt using PBKDF2."""
-        return hashlib.pbkdf2_hmac(
+        raw = hashlib.pbkdf2_hmac(
             "sha256",
             password.encode("utf-8"),
             salt.encode("utf-8"),
             iterations=100_000,
             dklen=32,
         )
+        return base64.urlsafe_b64encode(raw)
 
     def _encrypt(self, data: bytes) -> str:
         """Encrypt data with the derived key."""
         assert self._key is not None
-        iv = os.urandom(16)
-        encrypted = bytes(a ^ b for a, b in zip(data, self._expand_key(len(data), iv)))
-        payload = {"iv": base64.b64encode(iv).decode(), "data": base64.b64encode(encrypted).decode()}
-        return base64.b64encode(json.dumps(payload).encode()).decode()
+        return Fernet(self._key).encrypt(data).decode("ascii")
 
     def _decrypt(self, token: str) -> bytes:
         """Decrypt data with the derived key."""
         assert self._key is not None
-        payload = json.loads(base64.b64decode(token))
-        iv = base64.b64decode(payload["iv"])
-        encrypted = base64.b64decode(payload["data"])
-        return bytes(a ^ b for a, b in zip(encrypted, self._expand_key(len(encrypted), iv)))
-
-    def _expand_key(self, length: int, iv: bytes) -> bytes:
-        """Expand key to match data length using HMAC-based stream."""
-        result = b""
-        counter = 0
-        while len(result) < length:
-            block = hashlib.sha256(self._key + iv + counter.to_bytes(4, "big")).digest()
-            result += block
-            counter += 1
-        return result[:length]
+        return Fernet(self._key).decrypt(token.encode("ascii"))

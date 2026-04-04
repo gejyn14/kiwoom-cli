@@ -1,6 +1,7 @@
 """Order management commands.
 
-All order commands require --confirm flag for safety.
+Order commands prompt for confirmation by default. Use --confirm to skip
+the prompt (for scripts/automation).
 
 Subgroups:
   order buy/sell/modify/cancel     - Stock orders (kt10000-kt10003)
@@ -83,12 +84,15 @@ def order():
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (스톱지정가 등)")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def buy(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: int, confirm: bool):
     """주식 매수주문 (kt10000).
 
     예: kiwoom order buy 005930 10 --price 70000 --type limit --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     _show_order_preview("매수", code, qty, price, order_type, stex)
 
     with KiwoomClient() as c:
@@ -110,12 +114,15 @@ def buy(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: in
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (스톱지정가 등)")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def sell(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: int, confirm: bool):
     """주식 매도주문 (kt10001).
 
     예: kiwoom order sell 005930 10 --type market --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     _show_order_preview("매도", code, qty, price, order_type, stex)
 
     with KiwoomClient() as c:
@@ -137,12 +144,15 @@ def sell(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: i
 @click.argument("price", type=int)
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "mdfy_cond_uv", type=int, default=0, help="정정 조건부가격")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, mdfy_cond_uv: int, confirm: bool):
     """주식 정정주문 (kt10002).
 
     예: kiwoom order modify 0000139 005930 1 70000 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     console.print(f"[yellow]정정 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty} 가격={price:,}")
 
     with KiwoomClient() as c:
@@ -162,12 +172,15 @@ def modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, mdfy_
 @click.argument("code")
 @click.option("--qty", type=int, default=0, help="취소수량 (0=전량취소)")
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: bool):
     """주식 취소주문 (kt10003).
 
     예: kiwoom order cancel 0000140 005930 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     console.print(f"[yellow]취소 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty or '전량'}")
 
     with KiwoomClient() as c:
@@ -197,12 +210,15 @@ def credit():
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def credit_buy(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: int, confirm: bool):
     """신용 매수주문 (kt10006).
 
     예: kiwoom order credit buy 005930 10 --type limit --price 70000 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     _show_order_preview("신용 매수", code, qty, price, order_type, stex)
 
     with KiwoomClient() as c:
@@ -224,12 +240,15 @@ def credit_buy(code: str, qty: int, price: int, order_type: str, stex: str, cond
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def credit_sell(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: int, confirm: bool):
     """신용 매도주문 (kt10007).
 
     예: kiwoom order credit sell 005930 10 --type market --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     _show_order_preview("신용 매도", code, qty, price, order_type, stex)
 
     with KiwoomClient() as c:
@@ -251,12 +270,15 @@ def credit_sell(code: str, qty: int, price: int, order_type: str, stex: str, con
 @click.argument("price", type=int)
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "mdfy_cond_uv", type=int, default=0, help="정정 조건부가격")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def credit_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, mdfy_cond_uv: int, confirm: bool):
     """신용 정정주문 (kt10008).
 
     예: kiwoom order credit modify 0000139 005930 1 70000 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     console.print(f"[yellow]신용 정정 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty} 가격={price:,}")
 
     with KiwoomClient() as c:
@@ -276,12 +298,15 @@ def credit_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str
 @click.argument("code")
 @click.option("--qty", type=int, default=0, help="취소수량 (0=전량취소)")
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def credit_cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: bool):
     """신용 취소주문 (kt10009).
 
     예: kiwoom order credit cancel 0000140 005930 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     console.print(f"[yellow]신용 취소 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty or '전량'}")
 
     with KiwoomClient() as c:
@@ -310,12 +335,15 @@ def gold():
 @click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def gold_buy(code: str, qty: int, price: int, order_type: str, stex: str, confirm: bool):
     """금현물 매수주문 (kt50000).
 
     예: kiwoom order gold buy 730060 10 --type limit --price 90000 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     _show_order_preview("금현물 매수", code, qty, price, order_type, stex)
 
     with KiwoomClient() as c:
@@ -335,12 +363,15 @@ def gold_buy(code: str, qty: int, price: int, order_type: str, stex: str, confir
 @click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def gold_sell(code: str, qty: int, price: int, order_type: str, stex: str, confirm: bool):
     """금현물 매도주문 (kt50001).
 
     예: kiwoom order gold sell 730060 10 --type market --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     _show_order_preview("금현물 매도", code, qty, price, order_type, stex)
 
     with KiwoomClient() as c:
@@ -360,12 +391,15 @@ def gold_sell(code: str, qty: int, price: int, order_type: str, stex: str, confi
 @click.argument("qty", type=int)
 @click.argument("price", type=int)
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def gold_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, confirm: bool):
     """금현물 정정주문 (kt50002).
 
     예: kiwoom order gold modify 0000139 730060 1 90000 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     console.print(f"[yellow]금현물 정정 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty} 가격={price:,}")
 
     with KiwoomClient() as c:
@@ -384,12 +418,15 @@ def gold_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, 
 @click.argument("code")
 @click.option("--qty", type=int, default=0, help="취소수량 (0=전량취소)")
 @click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
-@click.option("--confirm", is_flag=True, required=True, help="주문 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def gold_cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: bool):
     """금현물 취소주문 (kt50003).
 
     예: kiwoom order gold cancel 0000140 730060 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     console.print(f"[yellow]금현물 취소 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty or '전량'}")
 
     with KiwoomClient() as c:
@@ -405,11 +442,10 @@ def gold_cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: boo
 # ── Gold Account Queries ───────────────────────────────
 
 @gold.command("balance")
-@click.option("--confirm", is_flag=True, required=True, help="조회 확인 (필수)")
-def gold_balance(confirm: bool):
+def gold_balance():
     """금현물 잔고확인 (kt50020).
 
-    예: kiwoom order gold balance --confirm
+    예: kiwoom order gold balance
     """
     with KiwoomClient() as c:
         data, _ = c.request("kt50020", {})
@@ -417,11 +453,10 @@ def gold_balance(confirm: bool):
 
 
 @gold.command("deposit")
-@click.option("--confirm", is_flag=True, required=True, help="조회 확인 (필수)")
-def gold_deposit(confirm: bool):
+def gold_deposit():
     """금현물 예수금 (kt50021).
 
-    예: kiwoom order gold deposit --confirm
+    예: kiwoom order gold deposit
     """
     with KiwoomClient() as c:
         data, _ = c.request("kt50021", {})
@@ -429,11 +464,10 @@ def gold_deposit(confirm: bool):
 
 
 @gold.command("executions-all")
-@click.option("--confirm", is_flag=True, required=True, help="조회 확인 (필수)")
-def gold_executions_all(confirm: bool):
+def gold_executions_all():
     """금현물 주문체결전체조회 (kt50030).
 
-    예: kiwoom order gold executions-all --confirm
+    예: kiwoom order gold executions-all
     """
     with KiwoomClient() as c:
         data, _ = c.request("kt50030", {})
@@ -441,11 +475,10 @@ def gold_executions_all(confirm: bool):
 
 
 @gold.command("executions")
-@click.option("--confirm", is_flag=True, required=True, help="조회 확인 (필수)")
-def gold_executions(confirm: bool):
+def gold_executions():
     """금현물 주문체결조회 (kt50031).
 
-    예: kiwoom order gold executions --confirm
+    예: kiwoom order gold executions
     """
     with KiwoomClient() as c:
         data, _ = c.request("kt50031", {})
@@ -453,11 +486,10 @@ def gold_executions(confirm: bool):
 
 
 @gold.command("history")
-@click.option("--confirm", is_flag=True, required=True, help="조회 확인 (필수)")
-def gold_history(confirm: bool):
+def gold_history():
     """금현물 거래내역조회 (kt50032).
 
-    예: kiwoom order gold history --confirm
+    예: kiwoom order gold history
     """
     with KiwoomClient() as c:
         data, _ = c.request("kt50032", {})
@@ -465,11 +497,10 @@ def gold_history(confirm: bool):
 
 
 @gold.command("pending")
-@click.option("--confirm", is_flag=True, required=True, help="조회 확인 (필수)")
-def gold_pending(confirm: bool):
+def gold_pending():
     """금현물 미체결조회 (kt50075).
 
-    예: kiwoom order gold pending --confirm
+    예: kiwoom order gold pending
     """
     with KiwoomClient() as c:
         data, _ = c.request("kt50075", {})
@@ -487,11 +518,10 @@ def condition():
 
 
 @condition.command("list")
-@click.option("--confirm", is_flag=True, required=True, help="조회 확인 (필수)")
-def condition_list(confirm: bool):
+def condition_list():
     """조건검색 목록조회 (ka10171).
 
-    예: kiwoom order condition list --confirm
+    예: kiwoom order condition list
     """
     with KiwoomClient() as c:
         data, _ = c.request("ka10171", {
@@ -505,12 +535,15 @@ def condition_list(confirm: bool):
 @click.option("--exchange", "stex_tp", default="K", type=click.Choice(["K"]), help="거래소 (K=KRX)")
 @click.option("--cont-yn", default="", help="연속조회여부")
 @click.option("--next-key", default="", help="연속조회키")
-@click.option("--confirm", is_flag=True, required=True, help="조회 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def condition_search(seq: str, stex_tp: str, cont_yn: str, next_key: str, confirm: bool):
     """조건검색 요청 일반 (ka10172).
 
     예: kiwoom order condition search 001 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     body = {
         "trnm": "CNSRREQ",
         "seq": seq,
@@ -530,12 +563,15 @@ def condition_search(seq: str, stex_tp: str, cont_yn: str, next_key: str, confir
 @condition.command("realtime")
 @click.argument("seq")
 @click.option("--exchange", "stex_tp", default="K", type=click.Choice(["K"]), help="거래소 (K=KRX)")
-@click.option("--confirm", is_flag=True, required=True, help="조회 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def condition_realtime(seq: str, stex_tp: str, confirm: bool):
     """조건검색 요청 실시간 (ka10173).
 
     예: kiwoom order condition realtime 001 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10173", {
             "trnm": "CNSRREQ",
@@ -548,12 +584,15 @@ def condition_realtime(seq: str, stex_tp: str, confirm: bool):
 
 @condition.command("stop")
 @click.argument("seq")
-@click.option("--confirm", is_flag=True, required=True, help="조회 확인 (필수)")
+@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 def condition_stop(seq: str, confirm: bool):
     """조건검색 실시간 해제 (ka10174).
 
     예: kiwoom order condition stop 001 --confirm
     """
+    if not confirm:
+        click.confirm("주문을 실행하시겠습니까?", abort=True)
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10174", {
             "trnm": "CNSRCLR",

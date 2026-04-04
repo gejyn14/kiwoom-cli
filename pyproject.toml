@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kiwoom-cli"
-version = "0.7.0"
+dynamic = ["version"]
 description = "User-friendly CLI for the Kiwoom Securities REST API (키움증권)"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 keywords = ["kiwoom", "stock", "trading", "cli", "korea", "finance"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Financial and Insurance Industry",
     "License :: OSI Approved :: MIT License",
@@ -29,6 +29,7 @@ dependencies = [
     "tomli-w>=1.0",
     "keyring>=25.0",
     "websockets>=12.0",
+    "cryptography>=42.0",
 ]
 
 [project.optional-dependencies]
@@ -44,3 +45,6 @@ kiwoom = "kiwoom_cli.main:cli"
 
 [tool.setuptools.packages.find]
 include = ["kiwoom_cli*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "kiwoom_cli.__version__"}

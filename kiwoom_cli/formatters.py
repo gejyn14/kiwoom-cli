@@ -51,10 +51,11 @@ def _flat_dict(data: dict) -> list[dict]:
 
 def _sign_color(value: str) -> str:
     """Return color based on sign: red for positive (상승), blue for negative (하락)."""
-    v = value.strip().lstrip("+").lstrip("-")
-    if value.strip().startswith("-"):
+    s = value.strip()
+    if s.startswith("-"):
         return "blue"
-    if value.strip().startswith("+") or (v and v != "0" and not value.strip().startswith("-")):
+    v = s.lstrip("+").lstrip("0")
+    if v and (v[:1].isdigit() or v[:1] == "."):
         return "red"
     return "white"
 
