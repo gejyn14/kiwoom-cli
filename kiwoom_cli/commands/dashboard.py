@@ -11,6 +11,7 @@ from rich.text import Text
 
 from ..client import KiwoomClient, KiwoomAPIError
 from ..formatters import (
+    _calc_eval_pl,
     _fmt_number,
     _get_format,
     _sign_color,
@@ -32,18 +33,7 @@ def _build_account_panel(data: dict[str, Any]) -> Panel:
     t.add_row("예탁자산평가액", _fmt_number(data.get("aset_evlt_amt", "")))
 
     # 평가손익 = 유가잔고평가액 - 총매입금액
-    try:
-        evlt = int(data.get("tot_est_amt", "0").lstrip("0") or "0")
-        pur = int(data.get("tot_pur_amt", "0").lstrip("0") or "0")
-        eval_pl = evlt - pur
-        eval_pl_rt = (eval_pl / pur * 100) if pur else 0
-        eval_pl_str = f"+{eval_pl:,}" if eval_pl > 0 else f"{eval_pl:,}"
-        eval_pl_rt_str = f"{eval_pl_rt:+.2f}"
-    except (ValueError, ZeroDivisionError):
-        eval_pl_str = "-"
-        eval_pl_rt_str = "0.00"
-        eval_pl = 0
-    eval_color = "red" if eval_pl > 0 else ("blue" if eval_pl < 0 else "white")
+    _, eval_pl_str, eval_pl_rt_str, eval_color = _calc_eval_pl(data)
     t.add_row("평가손익", Text(eval_pl_str, style=eval_color))
     t.add_row("평가손익율", Text(eval_pl_rt_str + "%", style=eval_color))
 

@@ -5,20 +5,13 @@ from __future__ import annotations
 import click
 
 from ..client import KiwoomClient
-from ..formatters import print_generic_table
-
-
-# ── Helpers ──────────────────────────────────────────
-
-
-def _output(data, title: str):
-    """Extract the first list value from *data* and print it, or print data as-is."""
-    if isinstance(data, dict):
-        for v in data.values():
-            if isinstance(v, list):
-                print_generic_table(v, title=title)
-                return
-    print_generic_table(data, title=title)
+from ..formatters import print_api_response
+from ._constants import (
+    EXCHANGE_TWO,
+    MARKET_ALL,
+    MARKET_KOSPI_KOSDAQ,
+    MARKET_TWO,
+)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -58,16 +51,15 @@ def rank():
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_new_highlow(mrkt_tp, ntl_tp, high_low_close_tp, dt, stk_cnd, trde_qty_tp, crd_cnd, updown_incls, stex_tp):
     """신고저가 순위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10016", {
-            "mrkt_tp": _market_map[mrkt_tp], "ntl_tp": ntl_tp,
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "ntl_tp": ntl_tp,
             "high_low_close_tp": high_low_close_tp, "stk_cnd": stk_cnd,
             "trde_qty_tp": trde_qty_tp, "crd_cnd": crd_cnd,
-            "updown_incls": updown_incls, "dt": dt, "stex_tp": _exchange_map[stex_tp],
+            "updown_incls": updown_incls, "dt": dt, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "신고저가")
+        print_api_response(data, "신고저가")
 
 
 # ── ka10017  상하한가 ────────────────────────────────
@@ -84,15 +76,14 @@ def rank_new_highlow(mrkt_tp, ntl_tp, high_low_close_tp, dt, stk_cnd, trde_qty_t
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_limit(mrkt_tp, updown_tp, sort_tp, stk_cnd, trde_qty_tp, crd_cnd, trde_gold_tp, stex_tp):
     """상하한가 순위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10017", {
-            "mrkt_tp": _market_map[mrkt_tp], "updown_tp": updown_tp, "sort_tp": sort_tp,
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "updown_tp": updown_tp, "sort_tp": sort_tp,
             "stk_cnd": stk_cnd, "trde_qty_tp": trde_qty_tp, "crd_cnd": crd_cnd,
-            "trde_gold_tp": trde_gold_tp, "stex_tp": _exchange_map[stex_tp],
+            "trde_gold_tp": trde_gold_tp, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "상하한가")
+        print_api_response(data, "상하한가")
 
 
 # ── ka10018  고저가근접 ──────────────────────────────
@@ -108,15 +99,14 @@ def rank_limit(mrkt_tp, updown_tp, sort_tp, stk_cnd, trde_qty_tp, crd_cnd, trde_
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_near_highlow(high_low_tp, alacc_rt, mrkt_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp):
     """고저가근접 순위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10018", {
             "high_low_tp": high_low_tp, "alacc_rt": alacc_rt,
-            "mrkt_tp": _market_map[mrkt_tp], "trde_qty_tp": trde_qty_tp,
-            "stk_cnd": stk_cnd, "crd_cnd": crd_cnd, "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "trde_qty_tp": trde_qty_tp,
+            "stk_cnd": stk_cnd, "crd_cnd": crd_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "고저가근접")
+        print_api_response(data, "고저가근접")
 
 
 # ── ka10019  가격급등락 ──────────────────────────────
@@ -135,15 +125,14 @@ def rank_near_highlow(high_low_tp, alacc_rt, mrkt_tp, trde_qty_tp, stk_cnd, crd_
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_surge(mrkt_tp, flu_tp, tm_tp, tm, trde_qty_tp, stk_cnd, crd_cnd, pric_cnd, updown_incls, stex_tp):
     """가격급등락 순위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10019", {
-            "mrkt_tp": _market_map[mrkt_tp], "flu_tp": flu_tp, "tm_tp": tm_tp, "tm": tm,
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "flu_tp": flu_tp, "tm_tp": tm_tp, "tm": tm,
             "trde_qty_tp": trde_qty_tp, "stk_cnd": stk_cnd, "crd_cnd": crd_cnd,
-            "pric_cnd": pric_cnd, "updown_incls": updown_incls, "stex_tp": _exchange_map[stex_tp],
+            "pric_cnd": pric_cnd, "updown_incls": updown_incls, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "가격급등락")
+        print_api_response(data, "가격급등락")
 
 
 # ── ka10020  호가잔량상위 ────────────────────────────
@@ -158,15 +147,14 @@ def rank_surge(mrkt_tp, flu_tp, tm_tp, tm, trde_qty_tp, stk_cnd, crd_cnd, pric_c
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_orderbook_top(mrkt_tp, sort_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp):
     """호가잔량 상위."""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10020", {
-            "mrkt_tp": _market_map[mrkt_tp], "sort_tp": sort_tp,
+            "mrkt_tp": MARKET_TWO[mrkt_tp], "sort_tp": sort_tp,
             "trde_qty_tp": trde_qty_tp, "stk_cnd": stk_cnd,
-            "crd_cnd": crd_cnd, "stex_tp": _exchange_map[stex_tp],
+            "crd_cnd": crd_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "호가잔량상위")
+        print_api_response(data, "호가잔량상위")
 
 
 # ── ka10021  호가잔량급증 ────────────────────────────
@@ -182,15 +170,14 @@ def rank_orderbook_top(mrkt_tp, sort_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp)
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_orderbook_surge(mrkt_tp, trde_tp, sort_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp):
     """호가잔량 급증."""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10021", {
-            "mrkt_tp": _market_map[mrkt_tp], "trde_tp": trde_tp, "sort_tp": sort_tp,
+            "mrkt_tp": MARKET_TWO[mrkt_tp], "trde_tp": trde_tp, "sort_tp": sort_tp,
             "tm_tp": tm_tp, "trde_qty_tp": trde_qty_tp,
-            "stk_cnd": stk_cnd, "stex_tp": _exchange_map[stex_tp],
+            "stk_cnd": stk_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "호가잔량급증")
+        print_api_response(data, "호가잔량급증")
 
 
 # ── ka10022  잔량율급증 ──────────────────────────────
@@ -205,14 +192,13 @@ def rank_orderbook_surge(mrkt_tp, trde_tp, sort_tp, tm_tp, trde_qty_tp, stk_cnd,
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_balance_rate_surge(mrkt_tp, rt_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp):
     """잔량율 급증."""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10022", {
-            "mrkt_tp": _market_map[mrkt_tp], "rt_tp": rt_tp, "tm_tp": tm_tp,
-            "trde_qty_tp": trde_qty_tp, "stk_cnd": stk_cnd, "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_TWO[mrkt_tp], "rt_tp": rt_tp, "tm_tp": tm_tp,
+            "trde_qty_tp": trde_qty_tp, "stk_cnd": stk_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "잔량율급증")
+        print_api_response(data, "잔량율급증")
 
 
 # ── ka10023  거래량급증 ──────────────────────────────
@@ -229,15 +215,14 @@ def rank_balance_rate_surge(mrkt_tp, rt_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_volume_surge(mrkt_tp, sort_tp, tm_tp, trde_qty_tp, tm, stk_cnd, pric_tp, stex_tp):
     """거래량 급증."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10023", {
-            "mrkt_tp": _market_map[mrkt_tp], "sort_tp": sort_tp, "tm_tp": tm_tp,
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "sort_tp": sort_tp, "tm_tp": tm_tp,
             "trde_qty_tp": trde_qty_tp, "tm": tm, "stk_cnd": stk_cnd,
-            "pric_tp": pric_tp, "stex_tp": _exchange_map[stex_tp],
+            "pric_tp": pric_tp, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "거래량급증")
+        print_api_response(data, "거래량급증")
 
 
 # ── ka10027  전일대비등락률상위 ───────────────────────
@@ -255,17 +240,16 @@ def rank_volume_surge(mrkt_tp, sort_tp, tm_tp, trde_qty_tp, tm, stk_cnd, pric_tp
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, updown_incls, pric_cnd, trde_prica_cnd, stex_tp):
     """전일대비 등락률 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10027", {
-            "mrkt_tp": _market_map[mrkt_tp], "sort_tp": sort_tp,
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "sort_tp": sort_tp,
             "trde_qty_cnd": trde_qty_cnd, "stk_cnd": stk_cnd,
             "crd_cnd": crd_cnd, "updown_incls": updown_incls,
             "pric_cnd": pric_cnd, "trde_prica_cnd": trde_prica_cnd,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "등락률상위")
+        print_api_response(data, "등락률상위")
 
 
 # ── ka10029  예상체결등락률상위 ───────────────────────
@@ -281,15 +265,14 @@ def rank_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, updown_incls, 
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_expected_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, pric_cnd, stex_tp):
     """예상체결 등락률 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10029", {
-            "mrkt_tp": _market_map[mrkt_tp], "sort_tp": sort_tp,
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "sort_tp": sort_tp,
             "trde_qty_cnd": trde_qty_cnd, "stk_cnd": stk_cnd,
-            "crd_cnd": crd_cnd, "pric_cnd": pric_cnd, "stex_tp": _exchange_map[stex_tp],
+            "crd_cnd": crd_cnd, "pric_cnd": pric_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "예상체결등락률상위")
+        print_api_response(data, "예상체결등락률상위")
 
 
 # ── ka10030  당일거래량상위 ──────────────────────────
@@ -307,17 +290,16 @@ def rank_expected_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, pric_
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_volume(mrkt_tp, sort_tp, mang_stk_incls, crd_tp, trde_qty_tp, pric_tp, trde_prica_tp, mrkt_open_tp, stex_tp):
     """당일 거래량 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10030", {
-            "mrkt_tp": _market_map[mrkt_tp], "sort_tp": sort_tp,
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "sort_tp": sort_tp,
             "mang_stk_incls": mang_stk_incls, "crd_tp": crd_tp,
             "trde_qty_tp": trde_qty_tp, "pric_tp": pric_tp,
             "trde_prica_tp": trde_prica_tp, "mrkt_open_tp": mrkt_open_tp,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "당일거래량상위")
+        print_api_response(data, "당일거래량상위")
 
 
 # ── ka10031  전일거래량상위 ──────────────────────────
@@ -331,15 +313,14 @@ def rank_volume(mrkt_tp, sort_tp, mang_stk_incls, crd_tp, trde_qty_tp, pric_tp, 
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_prev_volume(mrkt_tp, qry_tp, rank_strt, rank_end, stex_tp):
     """전일 거래량 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10031", {
-            "mrkt_tp": _market_map[mrkt_tp], "qry_tp": qry_tp,
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "qry_tp": qry_tp,
             "rank_strt": rank_strt, "rank_end": rank_end,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "전일거래량상위")
+        print_api_response(data, "전일거래량상위")
 
 
 # ── ka10032  거래대금상위 ────────────────────────────
@@ -351,14 +332,13 @@ def rank_prev_volume(mrkt_tp, qry_tp, rank_strt, rank_end, stex_tp):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_amount(mrkt_tp, mang_stk_incls, stex_tp):
     """거래대금 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10032", {
-            "mrkt_tp": _market_map[mrkt_tp], "mang_stk_incls": mang_stk_incls,
-            "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "mang_stk_incls": mang_stk_incls,
+            "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "거래대금상위")
+        print_api_response(data, "거래대금상위")
 
 
 # ── ka10033  신용비율상위 ────────────────────────────
@@ -373,15 +353,14 @@ def rank_amount(mrkt_tp, mang_stk_incls, stex_tp):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_credit_ratio(mrkt_tp, trde_qty_tp, stk_cnd, updown_incls, crd_cnd, stex_tp):
     """신용비율 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10033", {
-            "mrkt_tp": _market_map[mrkt_tp], "trde_qty_tp": trde_qty_tp,
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "trde_qty_tp": trde_qty_tp,
             "stk_cnd": stk_cnd, "updown_incls": updown_incls,
-            "crd_cnd": crd_cnd, "stex_tp": _exchange_map[stex_tp],
+            "crd_cnd": crd_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "신용비율상위")
+        print_api_response(data, "신용비율상위")
 
 
 # ── ka10034  외인기간별매매상위 ───────────────────────
@@ -394,14 +373,13 @@ def rank_credit_ratio(mrkt_tp, trde_qty_tp, stk_cnd, updown_incls, crd_cnd, stex
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_foreign_period(mrkt_tp, trde_tp, dt, stex_tp):
     """외인 기간별 매매 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10034", {
-            "mrkt_tp": _market_map[mrkt_tp], "trde_tp": trde_tp,
-            "dt": dt, "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "trde_tp": trde_tp,
+            "dt": dt, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "외인기간별매매상위")
+        print_api_response(data, "외인기간별매매상위")
 
 
 # ── ka10035  외인연속순매매상위 ───────────────────────
@@ -414,14 +392,13 @@ def rank_foreign_period(mrkt_tp, trde_tp, dt, stex_tp):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_foreign_consecutive(mrkt_tp, trde_tp, base_dt_tp, stex_tp):
     """외인 연속 순매매 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10035", {
-            "mrkt_tp": _market_map[mrkt_tp], "trde_tp": trde_tp,
-            "base_dt_tp": base_dt_tp, "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "trde_tp": trde_tp,
+            "base_dt_tp": base_dt_tp, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "외인연속순매매상위")
+        print_api_response(data, "외인연속순매매상위")
 
 
 # ── ka10036  외인한도소진율증가상위 ───────────────────
@@ -433,13 +410,12 @@ def rank_foreign_consecutive(mrkt_tp, trde_tp, base_dt_tp, stex_tp):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_foreign_exhaust(mrkt_tp, dt, stex_tp):
     """외인 한도소진율 증가 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10036", {
-            "mrkt_tp": _market_map[mrkt_tp], "dt": dt, "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "dt": dt, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "외인한도소진율증가상위")
+        print_api_response(data, "외인한도소진율증가상위")
 
 
 # ── ka10037  외국계창구매매상위 ───────────────────────
@@ -453,14 +429,13 @@ def rank_foreign_exhaust(mrkt_tp, dt, stex_tp):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_foreign_broker(mrkt_tp, dt, trde_tp, sort_tp, stex_tp):
     """외국계 창구 매매 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10037", {
-            "mrkt_tp": _market_map[mrkt_tp], "dt": dt, "trde_tp": trde_tp,
-            "sort_tp": sort_tp, "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "dt": dt, "trde_tp": trde_tp,
+            "sort_tp": sort_tp, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "외국계창구매매상위")
+        print_api_response(data, "외국계창구매매상위")
 
 
 # ── ka10038  종목별증권사순위 ────────────────────────
@@ -479,7 +454,7 @@ def rank_broker_by_stock(code, qry_tp, strt_dt, end_dt, dt):
             "stk_cd": code, "strt_dt": strt_dt, "end_dt": end_dt,
             "qry_tp": qry_tp, "dt": dt,
         })
-        _output(data, f"종목별증권사순위 ({code})")
+        print_api_response(data, f"종목별증권사순위 ({code})")
 
 
 # ── ka10039  증권사별매매상위 ────────────────────────
@@ -493,13 +468,13 @@ def rank_broker_by_stock(code, qry_tp, strt_dt, end_dt, dt):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_broker_top(broker_code, trde_qty_tp, trde_tp, dt, stex_tp):
     """증권사별 매매 상위."""
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10039", {
             "mmcm_cd": broker_code, "trde_qty_tp": trde_qty_tp,
-            "trde_tp": trde_tp, "dt": dt, "stex_tp": _exchange_map[stex_tp],
+            "trde_tp": trde_tp, "dt": dt, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, f"증권사별매매상위 ({broker_code})")
+        print_api_response(data, f"증권사별매매상위 ({broker_code})")
 
 
 # ── ka10040  당일주요거래원 ──────────────────────────
@@ -511,7 +486,7 @@ def rank_major_trader(code):
     """당일 주요 거래원."""
     with KiwoomClient() as c:
         data, _ = c.request("ka10040", {"stk_cd": code})
-        _output(data, f"당일주요거래원 ({code})")
+        print_api_response(data, f"당일주요거래원 ({code})")
 
 
 # ── ka10042  순매수거래원순위 ────────────────────────
@@ -533,7 +508,7 @@ def rank_net_buyer(code, strt_dt, end_dt, qry_dt_tp, pot_tp, dt, sort_base):
             "qry_dt_tp": qry_dt_tp, "pot_tp": pot_tp,
             "dt": dt, "sort_base": sort_base,
         })
-        _output(data, f"순매수거래원순위 ({code})")
+        print_api_response(data, f"순매수거래원순위 ({code})")
 
 
 # ── ka10053  당일상위이탈원 ──────────────────────────
@@ -545,7 +520,7 @@ def rank_top_exit(code):
     """당일 상위 이탈원."""
     with KiwoomClient() as c:
         data, _ = c.request("ka10053", {"stk_cd": code})
-        _output(data, f"당일상위이탈원 ({code})")
+        print_api_response(data, f"당일상위이탈원 ({code})")
 
 
 # ── ka10062  동일순매매순위 ──────────────────────────
@@ -561,15 +536,14 @@ def rank_top_exit(code):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_same_net_trade(strt_dt, end_dt, mrkt_tp, trde_tp, sort_cnd, unit_tp, stex_tp):
     """동일 순매매 순위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10062", {
-            "strt_dt": strt_dt, "end_dt": end_dt, "mrkt_tp": _market_map[mrkt_tp],
+            "strt_dt": strt_dt, "end_dt": end_dt, "mrkt_tp": MARKET_ALL[mrkt_tp],
             "trde_tp": trde_tp, "sort_cnd": sort_cnd,
-            "unit_tp": unit_tp, "stex_tp": _exchange_map[stex_tp],
+            "unit_tp": unit_tp, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "동일순매매순위")
+        print_api_response(data, "동일순매매순위")
 
 
 # ── ka10065  장중투자자별매매상위 ─────────────────────
@@ -582,13 +556,12 @@ def rank_same_net_trade(strt_dt, end_dt, mrkt_tp, trde_tp, sort_cnd, unit_tp, st
 @click.option("--unit", "amt_qty_tp", default="1", help="구분 (1=금액, 2=수량)")
 def rank_investor_top(trde_tp, mrkt_tp, orgn_tp, amt_qty_tp):
     """장중 투자자별 매매 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10065", {
-            "trde_tp": trde_tp, "mrkt_tp": _market_map[mrkt_tp],
+            "trde_tp": trde_tp, "mrkt_tp": MARKET_ALL[mrkt_tp],
             "orgn_tp": orgn_tp, "amt_qty_tp": amt_qty_tp,
         })
-        _output(data, "장중투자자별매매상위")
+        print_api_response(data, "장중투자자별매매상위")
 
 
 # ── ka10098  시간외단일가등락율순위 ───────────────────
@@ -603,14 +576,13 @@ def rank_investor_top(trde_tp, mrkt_tp, orgn_tp, amt_qty_tp):
 @click.option("--amount", "trde_prica", default="0", help="거래대금")
 def rank_afterhours_change(mrkt_tp, sort_base, stk_cnd, trde_qty_cnd, crd_cnd, trde_prica):
     """시간외 단일가 등락율 순위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10098", {
-            "mrkt_tp": _market_map[mrkt_tp], "sort_base": sort_base,
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "sort_base": sort_base,
             "stk_cnd": stk_cnd, "trde_qty_cnd": trde_qty_cnd,
             "crd_cnd": crd_cnd, "trde_prica": trde_prica,
         })
-        _output(data, "시간외단일가등락율순위")
+        print_api_response(data, "시간외단일가등락율순위")
 
 
 # ── ka90009  외국인기관매매상위 ───────────────────────
@@ -624,14 +596,13 @@ def rank_afterhours_change(mrkt_tp, sort_base, stk_cnd, trde_qty_cnd, crd_cnd, t
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_foreign_inst(mrkt_tp, amt_qty_tp, qry_dt_tp, date, stex_tp):
     """외국인/기관 매매 상위."""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka90009", {
-            "mrkt_tp": _market_map[mrkt_tp], "amt_qty_tp": amt_qty_tp,
-            "qry_dt_tp": qry_dt_tp, "date": date, "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "amt_qty_tp": amt_qty_tp,
+            "qry_dt_tp": qry_dt_tp, "date": date, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "외국인기관매매상위")
+        print_api_response(data, "외국인기관매매상위")
 
 
 # ── ka00198  실시간종목조회순위 ───────────────────────
@@ -644,7 +615,7 @@ def rank_hot(qry_tp):
     """실시간 종목 조회 순위."""
     with KiwoomClient() as c:
         data, _ = c.request("ka00198", {"qry_tp": qry_tp})
-        _output(data, "실시간종목조회순위")
+        print_api_response(data, "실시간종목조회순위")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -667,7 +638,7 @@ def sector_program(code):
     """업종 프로그램매매."""
     with KiwoomClient() as c:
         data, _ = c.request("ka10010", {"stk_cd": code})
-        _output(data, f"업종프로그램 ({code})")
+        print_api_response(data, f"업종프로그램 ({code})")
 
 
 # ── ka10051  업종별투자자순매수 ───────────────────────
@@ -680,14 +651,13 @@ def sector_program(code):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def sector_investor(mrkt_tp, amt_qty_tp, base_dt, stex_tp):
     """업종별 투자자 순매수."""
-    _market_map = {"kospi": "0", "kosdaq": "1"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka10051", {
-            "mrkt_tp": _market_map[mrkt_tp], "amt_qty_tp": amt_qty_tp,
-            "base_dt": base_dt, "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_KOSPI_KOSDAQ[mrkt_tp], "amt_qty_tp": amt_qty_tp,
+            "base_dt": base_dt, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "업종별투자자순매수")
+        print_api_response(data, "업종별투자자순매수")
 
 
 # ── ka20001  업종현재가 ──────────────────────────────
@@ -702,7 +672,7 @@ def sector_current(inds_cd, mrkt_tp):
         data, _ = c.request("ka20001", {
             "mrkt_tp": mrkt_tp, "inds_cd": inds_cd,
         })
-        _output(data, f"업종현재가 ({inds_cd})")
+        print_api_response(data, f"업종현재가 ({inds_cd})")
 
 
 # ── ka20002  업종별주가 ──────────────────────────────
@@ -714,12 +684,12 @@ def sector_current(inds_cd, mrkt_tp):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def sector_stocks(inds_cd, mrkt_tp, stex_tp):
     """업종별 주가."""
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka20002", {
-            "mrkt_tp": mrkt_tp, "inds_cd": inds_cd, "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": mrkt_tp, "inds_cd": inds_cd, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, f"업종별주가 ({inds_cd})")
+        print_api_response(data, f"업종별주가 ({inds_cd})")
 
 
 # ── ka20003  전업종지수 ──────────────────────────────
@@ -731,7 +701,7 @@ def sector_index(inds_cd):
     """전업종 지수."""
     with KiwoomClient() as c:
         data, _ = c.request("ka20003", {"inds_cd": inds_cd})
-        _output(data, "전업종지수")
+        print_api_response(data, "전업종지수")
 
 
 # ── ka20009  업종현재가일별 ──────────────────────────
@@ -746,7 +716,7 @@ def sector_daily(inds_cd, mrkt_tp):
         data, _ = c.request("ka20009", {
             "mrkt_tp": mrkt_tp, "inds_cd": inds_cd,
         })
-        _output(data, f"업종현재가일별 ({inds_cd})")
+        print_api_response(data, f"업종현재가일별 ({inds_cd})")
 
 
 # ── ka10101  업종코드리스트 ──────────────────────────
@@ -758,7 +728,7 @@ def sector_codes(mrkt_tp):
     """업종코드 리스트."""
     with KiwoomClient() as c:
         data, _ = c.request("ka10101", {"mrkt_tp": mrkt_tp})
-        _output(data, "업종코드리스트")
+        print_api_response(data, "업종코드리스트")
 
 
 # ── Sector Charts (업종차트) ─────────────────────────
@@ -782,7 +752,7 @@ def sector_chart_tick(inds_cd, tic_scope):
         data, _ = c.request("ka20004", {
             "inds_cd": inds_cd, "tic_scope": tic_scope,
         })
-        _output(data, f"업종틱차트 ({inds_cd})")
+        print_api_response(data, f"업종틱차트 ({inds_cd})")
 
 
 # ── ka20005  업종분봉 ────────────────────────────────
@@ -798,7 +768,7 @@ def sector_chart_minute(inds_cd, tic_scope, base_dt):
         data, _ = c.request("ka20005", {
             "inds_cd": inds_cd, "tic_scope": tic_scope, "base_dt": base_dt,
         })
-        _output(data, f"업종분봉 ({inds_cd})")
+        print_api_response(data, f"업종분봉 ({inds_cd})")
 
 
 # ── ka20006  업종일봉 ────────────────────────────────
@@ -813,7 +783,7 @@ def sector_chart_day(inds_cd, base_dt):
         data, _ = c.request("ka20006", {
             "inds_cd": inds_cd, "base_dt": base_dt,
         })
-        _output(data, f"업종일봉 ({inds_cd})")
+        print_api_response(data, f"업종일봉 ({inds_cd})")
 
 
 # ── ka20007  업종주봉 ────────────────────────────────
@@ -828,7 +798,7 @@ def sector_chart_week(inds_cd, base_dt):
         data, _ = c.request("ka20007", {
             "inds_cd": inds_cd, "base_dt": base_dt,
         })
-        _output(data, f"업종주봉 ({inds_cd})")
+        print_api_response(data, f"업종주봉 ({inds_cd})")
 
 
 # ── ka20008  업종월봉 ────────────────────────────────
@@ -843,7 +813,7 @@ def sector_chart_month(inds_cd, base_dt):
         data, _ = c.request("ka20008", {
             "inds_cd": inds_cd, "base_dt": base_dt,
         })
-        _output(data, f"업종월봉 ({inds_cd})")
+        print_api_response(data, f"업종월봉 ({inds_cd})")
 
 
 # ── ka20019  업종년봉 ────────────────────────────────
@@ -858,7 +828,7 @@ def sector_chart_year(inds_cd, base_dt):
         data, _ = c.request("ka20019", {
             "inds_cd": inds_cd, "base_dt": base_dt,
         })
-        _output(data, f"업종년봉 ({inds_cd})")
+        print_api_response(data, f"업종년봉 ({inds_cd})")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -885,14 +855,14 @@ def theme():
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def theme_groups(qry_tp, stk_cd, date_tp, thema_nm, flu_pl_amt_tp, stex_tp):
     """테마 그룹별 조회."""
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka90001", {
             "qry_tp": qry_tp, "stk_cd": stk_cd, "date_tp": date_tp,
             "thema_nm": thema_nm, "flu_pl_amt_tp": flu_pl_amt_tp,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "테마그룹별")
+        print_api_response(data, "테마그룹별")
 
 
 # ── ka90002  테마구성종목 ────────────────────────────
@@ -904,13 +874,13 @@ def theme_groups(qry_tp, stk_cd, date_tp, thema_nm, flu_pl_amt_tp, stex_tp):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def theme_stocks(theme_code, date_tp, stex_tp):
     """테마 구성종목 조회."""
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka90002", {
             "date_tp": date_tp, "thema_grp_cd": theme_code,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, f"테마구성종목 ({theme_code})")
+        print_api_response(data, f"테마구성종목 ({theme_code})")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -937,7 +907,7 @@ def etf_returns(code, etfobjt_idex_cd, dt):
         data, _ = c.request("ka40001", {
             "stk_cd": code, "etfobjt_idex_cd": etfobjt_idex_cd, "dt": dt,
         })
-        _output(data, f"ETF수익율 ({code})")
+        print_api_response(data, f"ETF수익율 ({code})")
 
 
 # ── ka40002  ETF종목정보 ─────────────────────────────
@@ -949,7 +919,7 @@ def etf_info(code):
     """ETF 종목정보."""
     with KiwoomClient() as c:
         data, _ = c.request("ka40002", {"stk_cd": code})
-        _output(data, f"ETF종목정보 ({code})")
+        print_api_response(data, f"ETF종목정보 ({code})")
 
 
 # ── ka40003  ETF일별추이 ─────────────────────────────
@@ -961,7 +931,7 @@ def etf_daily(code):
     """ETF 일별추이."""
     with KiwoomClient() as c:
         data, _ = c.request("ka40003", {"stk_cd": code})
-        _output(data, f"ETF일별추이 ({code})")
+        print_api_response(data, f"ETF일별추이 ({code})")
 
 
 # ── ka40004  ETF전체시세 ─────────────────────────────
@@ -976,14 +946,14 @@ def etf_daily(code):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def etf_all(txon_type, navpre, mngmcomp, txon_yn, trace_idex, stex_tp):
     """ETF 전체 시세."""
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka40004", {
             "txon_type": txon_type, "navpre": navpre,
             "mngmcomp": mngmcomp, "txon_yn": txon_yn,
-            "trace_idex": trace_idex, "stex_tp": _exchange_map[stex_tp],
+            "trace_idex": trace_idex, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "ETF전체시세")
+        print_api_response(data, "ETF전체시세")
 
 
 # ── ka40006  ETF시간대별추이 ─────────────────────────
@@ -995,7 +965,7 @@ def etf_time_trend(code):
     """ETF 시간대별 추이."""
     with KiwoomClient() as c:
         data, _ = c.request("ka40006", {"stk_cd": code})
-        _output(data, f"ETF시간대별추이 ({code})")
+        print_api_response(data, f"ETF시간대별추이 ({code})")
 
 
 # ── ka40007  ETF시간대별체결 ─────────────────────────
@@ -1007,7 +977,7 @@ def etf_time_exec(code):
     """ETF 시간대별 체결."""
     with KiwoomClient() as c:
         data, _ = c.request("ka40007", {"stk_cd": code})
-        _output(data, f"ETF시간대별체결 ({code})")
+        print_api_response(data, f"ETF시간대별체결 ({code})")
 
 
 # ── ka40008  ETF일자별체결 ───────────────────────────
@@ -1019,7 +989,7 @@ def etf_daily_exec(code):
     """ETF 일자별 체결."""
     with KiwoomClient() as c:
         data, _ = c.request("ka40008", {"stk_cd": code})
-        _output(data, f"ETF일자별체결 ({code})")
+        print_api_response(data, f"ETF일자별체결 ({code})")
 
 
 # ── ka40009  ETF시간대별체결2 ────────────────────────
@@ -1031,7 +1001,7 @@ def etf_time_exec2(code):
     """ETF 시간대별 체결 (상세)."""
     with KiwoomClient() as c:
         data, _ = c.request("ka40009", {"stk_cd": code})
-        _output(data, f"ETF시간대별체결2 ({code})")
+        print_api_response(data, f"ETF시간대별체결2 ({code})")
 
 
 # ── ka40010  ETF시간대별추이2 ────────────────────────
@@ -1043,7 +1013,7 @@ def etf_time_trend2(code):
     """ETF 시간대별 추이 (상세)."""
     with KiwoomClient() as c:
         data, _ = c.request("ka40010", {"stk_cd": code})
-        _output(data, f"ETF시간대별추이2 ({code})")
+        print_api_response(data, f"ETF시간대별추이2 ({code})")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1066,7 +1036,7 @@ def elw_sensitivity_daily(code):
     """ELW 일별 민감도 지표."""
     with KiwoomClient() as c:
         data, _ = c.request("ka10048", {"stk_cd": code})
-        _output(data, f"ELW일별민감도지표 ({code})")
+        print_api_response(data, f"ELW일별민감도지표 ({code})")
 
 
 # ── ka10050  ELW민감도지표 ───────────────────────────
@@ -1078,7 +1048,7 @@ def elw_sensitivity(code):
     """ELW 민감도 지표."""
     with KiwoomClient() as c:
         data, _ = c.request("ka10050", {"stk_cd": code})
-        _output(data, f"ELW민감도지표 ({code})")
+        print_api_response(data, f"ELW민감도지표 ({code})")
 
 
 # ── ka30001  ELW가격급등락 ───────────────────────────
@@ -1103,7 +1073,7 @@ def elw_surge(flu_tp, tm_tp, tm, trde_qty_tp, isscomp_cd, bsis_aset_cd, rght_tp,
             "bsis_aset_cd": bsis_aset_cd, "rght_tp": rght_tp,
             "lpcd": lpcd, "trde_end_elwskip": trde_end_elwskip,
         })
-        _output(data, "ELW가격급등락")
+        print_api_response(data, "ELW가격급등락")
 
 
 # ── ka30002  거래원별ELW순매매상위 ────────────────────
@@ -1123,7 +1093,7 @@ def elw_broker_top(isscomp_cd, trde_qty_tp, trde_tp, dt, trde_end_elwskip):
             "trde_tp": trde_tp, "dt": dt,
             "trde_end_elwskip": trde_end_elwskip,
         })
-        _output(data, "거래원별ELW순매매상위")
+        print_api_response(data, "거래원별ELW순매매상위")
 
 
 # ── ka30003  ELWLP보유일별추이 ───────────────────────
@@ -1138,7 +1108,7 @@ def elw_lp_daily(underlying_code, base_dt):
         data, _ = c.request("ka30003", {
             "bsis_aset_cd": underlying_code, "base_dt": base_dt,
         })
-        _output(data, f"ELWLP보유일별추이 ({underlying_code})")
+        print_api_response(data, f"ELWLP보유일별추이 ({underlying_code})")
 
 
 # ── ka30004  ELW괴리율 ───────────────────────────────
@@ -1158,7 +1128,7 @@ def elw_disparity(isscomp_cd, bsis_aset_cd, rght_tp, lpcd, trde_end_elwskip):
             "rght_tp": rght_tp, "lpcd": lpcd,
             "trde_end_elwskip": trde_end_elwskip,
         })
-        _output(data, "ELW괴리율")
+        print_api_response(data, "ELW괴리율")
 
 
 # ── ka30005  ELW조건검색 ─────────────────────────────
@@ -1177,7 +1147,7 @@ def elw_search(isscomp_cd, bsis_aset_cd, rght_tp, lpcd, sort_tp):
             "isscomp_cd": isscomp_cd, "bsis_aset_cd": bsis_aset_cd,
             "rght_tp": rght_tp, "lpcd": lpcd, "sort_tp": sort_tp,
         })
-        _output(data, "ELW조건검색")
+        print_api_response(data, "ELW조건검색")
 
 
 # ── ka30009  ELW등락율순위 ───────────────────────────
@@ -1194,7 +1164,7 @@ def elw_change_rank(sort_tp, rght_tp, trde_end_skip):
             "sort_tp": sort_tp, "rght_tp": rght_tp,
             "trde_end_skip": trde_end_skip,
         })
-        _output(data, "ELW등락율순위")
+        print_api_response(data, "ELW등락율순위")
 
 
 # ── ka30010  ELW잔량순위 ─────────────────────────────
@@ -1211,7 +1181,7 @@ def elw_balance_rank(sort_tp, rght_tp, trde_end_skip):
             "sort_tp": sort_tp, "rght_tp": rght_tp,
             "trde_end_skip": trde_end_skip,
         })
-        _output(data, "ELW잔량순위")
+        print_api_response(data, "ELW잔량순위")
 
 
 # ── ka30011  ELW근접율 ───────────────────────────────
@@ -1223,7 +1193,7 @@ def elw_proximity(code):
     """ELW 근접율."""
     with KiwoomClient() as c:
         data, _ = c.request("ka30011", {"stk_cd": code})
-        _output(data, f"ELW근접율 ({code})")
+        print_api_response(data, f"ELW근접율 ({code})")
 
 
 # ── ka30012  ELW종목상세정보 ─────────────────────────
@@ -1235,7 +1205,7 @@ def elw_detail(code):
     """ELW 종목 상세정보."""
     with KiwoomClient() as c:
         data, _ = c.request("ka30012", {"stk_cd": code})
-        _output(data, f"ELW종목상세정보 ({code})")
+        print_api_response(data, f"ELW종목상세정보 ({code})")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1258,7 +1228,7 @@ def gold_executions(stk_cd):
     """금현물 체결 추이."""
     with KiwoomClient() as c:
         data, _ = c.request("ka50010", {"stk_cd": stk_cd})
-        _output(data, "금현물체결추이")
+        print_api_response(data, "금현물체결추이")
 
 
 # ── ka50012  금현물일별추이 ──────────────────────────
@@ -1273,7 +1243,7 @@ def gold_daily(stk_cd, base_dt):
         data, _ = c.request("ka50012", {
             "stk_cd": stk_cd, "base_dt": base_dt,
         })
-        _output(data, "금현물일별추이")
+        print_api_response(data, "금현물일별추이")
 
 
 # ── ka50079  금현물틱차트 ────────────────────────────
@@ -1290,7 +1260,7 @@ def gold_chart_tick(stk_cd, tic_scope, upd_stkpc_tp):
             "stk_cd": stk_cd, "tic_scope": tic_scope,
             "upd_stkpc_tp": upd_stkpc_tp,
         })
-        _output(data, "금현물틱차트")
+        print_api_response(data, "금현물틱차트")
 
 
 # ── ka50080  금현물분봉차트 ──────────────────────────
@@ -1307,7 +1277,7 @@ def gold_chart_minute(stk_cd, tic_scope, upd_stkpc_tp):
             "stk_cd": stk_cd, "tic_scope": tic_scope,
             "upd_stkpc_tp": upd_stkpc_tp,
         })
-        _output(data, "금현물분봉차트")
+        print_api_response(data, "금현물분봉차트")
 
 
 # ── ka50081  금현물일봉차트 ──────────────────────────
@@ -1324,7 +1294,7 @@ def gold_chart_day(stk_cd, base_dt, upd_stkpc_tp):
             "stk_cd": stk_cd, "base_dt": base_dt,
             "upd_stkpc_tp": upd_stkpc_tp,
         })
-        _output(data, "금현물일봉차트")
+        print_api_response(data, "금현물일봉차트")
 
 
 # ── ka50082  금현물주봉차트 ──────────────────────────
@@ -1341,7 +1311,7 @@ def gold_chart_week(stk_cd, base_dt, upd_stkpc_tp):
             "stk_cd": stk_cd, "base_dt": base_dt,
             "upd_stkpc_tp": upd_stkpc_tp,
         })
-        _output(data, "금현물주봉차트")
+        print_api_response(data, "금현물주봉차트")
 
 
 # ── ka50083  금현물월봉차트 ──────────────────────────
@@ -1358,7 +1328,7 @@ def gold_chart_month(stk_cd, base_dt, upd_stkpc_tp):
             "stk_cd": stk_cd, "base_dt": base_dt,
             "upd_stkpc_tp": upd_stkpc_tp,
         })
-        _output(data, "금현물월봉차트")
+        print_api_response(data, "금현물월봉차트")
 
 
 # ── ka50087  금현물예상체결 ──────────────────────────
@@ -1370,7 +1340,7 @@ def gold_expected(stk_cd):
     """금현물 예상 체결."""
     with KiwoomClient() as c:
         data, _ = c.request("ka50087", {"stk_cd": stk_cd})
-        _output(data, "금현물예상체결")
+        print_api_response(data, "금현물예상체결")
 
 
 # ── ka50091  금현물당일틱차트 ─────────────────────────
@@ -1385,7 +1355,7 @@ def gold_today_tick(stk_cd, tic_scope):
         data, _ = c.request("ka50091", {
             "stk_cd": stk_cd, "tic_scope": tic_scope,
         })
-        _output(data, "금현물당일틱차트")
+        print_api_response(data, "금현물당일틱차트")
 
 
 # ── ka50092  금현물당일분봉차트 ───────────────────────
@@ -1400,7 +1370,7 @@ def gold_today_minute(stk_cd, tic_scope):
         data, _ = c.request("ka50092", {
             "stk_cd": stk_cd, "tic_scope": tic_scope,
         })
-        _output(data, "금현물당일분봉차트")
+        print_api_response(data, "금현물당일분봉차트")
 
 
 # ── ka50100  금현물시세정보 ──────────────────────────
@@ -1412,7 +1382,7 @@ def gold_price(stk_cd):
     """금현물 시세정보."""
     with KiwoomClient() as c:
         data, _ = c.request("ka50100", {"stk_cd": stk_cd})
-        _output(data, "금현물시세정보")
+        print_api_response(data, "금현물시세정보")
 
 
 # ── ka50101  금현물호가 ──────────────────────────────
@@ -1427,7 +1397,7 @@ def gold_orderbook(stk_cd, tic_scope):
         data, _ = c.request("ka50101", {
             "stk_cd": stk_cd, "tic_scope": tic_scope,
         })
-        _output(data, "금현물호가")
+        print_api_response(data, "금현물호가")
 
 
 # ── ka52301  금현물투자자현황 ─────────────────────────
@@ -1438,7 +1408,7 @@ def gold_investors():
     """금현물 투자자 현황."""
     with KiwoomClient() as c:
         data, _ = c.request("ka52301", {})
-        _output(data, "금현물투자자현황")
+        print_api_response(data, "금현물투자자현황")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1463,14 +1433,14 @@ def program():
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def program_time_trend(date, amt_qty_tp, mrkt_tp, min_tic_tp, stex_tp):
     """프로그램매매 추이 (시간대별)."""
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka90005", {
             "date": date, "amt_qty_tp": amt_qty_tp,
             "mrkt_tp": mrkt_tp, "min_tic_tp": min_tic_tp,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "프로그램매매추이(시간대별)")
+        print_api_response(data, "프로그램매매추이(시간대별)")
 
 
 # ── ka90006  프로그램매매차익잔고추이 ─────────────────
@@ -1481,12 +1451,12 @@ def program_time_trend(date, amt_qty_tp, mrkt_tp, min_tic_tp, stex_tp):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def program_arbitrage_balance(date, stex_tp):
     """프로그램매매 차익잔고 추이."""
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka90006", {
-            "date": date, "stex_tp": _exchange_map[stex_tp],
+            "date": date, "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "프로그램매매차익잔고추이")
+        print_api_response(data, "프로그램매매차익잔고추이")
 
 
 # ── ka90007  프로그램매매누적추이 ─────────────────────
@@ -1499,14 +1469,13 @@ def program_arbitrage_balance(date, stex_tp):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def program_cumulative(date, amt_qty_tp, mrkt_tp, stex_tp):
     """프로그램매매 누적 추이."""
-    _market_map = {"kospi": "0", "kosdaq": "1"}
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka90007", {
             "date": date, "amt_qty_tp": amt_qty_tp,
-            "mrkt_tp": _market_map[mrkt_tp], "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_KOSPI_KOSDAQ[mrkt_tp], "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "프로그램매매누적추이")
+        print_api_response(data, "프로그램매매누적추이")
 
 
 # ── ka90008  종목시간별프로그램매매추이 ────────────────
@@ -1522,7 +1491,7 @@ def program_stock_time(code, amt_qty_tp, date):
         data, _ = c.request("ka90008", {
             "amt_qty_tp": amt_qty_tp, "stk_cd": code, "date": date,
         })
-        _output(data, f"종목시간별프로그램매매추이 ({code})")
+        print_api_response(data, f"종목시간별프로그램매매추이 ({code})")
 
 
 # ── ka90010  프로그램매매추이 일자별 ──────────────────
@@ -1536,14 +1505,14 @@ def program_stock_time(code, amt_qty_tp, date):
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def program_daily_trend(date, amt_qty_tp, mrkt_tp, min_tic_tp, stex_tp):
     """프로그램매매 추이 (일자별)."""
-    _exchange_map = {"KRX": "1", "NXT": "2"}
+
     with KiwoomClient() as c:
         data, _ = c.request("ka90010", {
             "date": date, "amt_qty_tp": amt_qty_tp,
             "mrkt_tp": mrkt_tp, "min_tic_tp": min_tic_tp,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_TWO[stex_tp],
         })
-        _output(data, "프로그램매매추이(일자별)")
+        print_api_response(data, "프로그램매매추이(일자별)")
 
 
 # ── ka90013  종목일별프로그램매매추이 ─────────────────
@@ -1559,4 +1528,4 @@ def program_stock_daily(code, amt_qty_tp, date):
         data, _ = c.request("ka90013", {
             "amt_qty_tp": amt_qty_tp, "stk_cd": code, "date": date,
         })
-        _output(data, f"종목일별프로그램매매추이 ({code})")
+        print_api_response(data, f"종목일별프로그램매매추이 ({code})")

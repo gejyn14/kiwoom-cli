@@ -122,6 +122,41 @@ def _smart_fmt(value: str, field_key: str) -> str:
     return _fmt_number(value)
 
 
+def _find_list(data: dict) -> list | None:
+    """Find the first list value in API response."""
+    for k, v in data.items():
+        if isinstance(v, list) and k not in ("return_code", "return_msg"):
+            return v
+    return None
+
+
+def print_api_response(data: dict | list, title: str = "결과") -> None:
+    """Print API response, extracting list if present."""
+    if isinstance(data, dict):
+        items = _find_list(data)
+        if items is not None:
+            print_generic_table(items, title=title)
+            return
+    print_generic_table(data, title=title)
+
+
+def _calc_eval_pl(data: dict) -> tuple[int, str, str, str]:
+    """Calculate evaluation P&L. Returns (amount, amount_str, rate_str, color)."""
+    try:
+        evlt = int(data.get("tot_est_amt", "0").lstrip("0") or "0")
+        pur = int(data.get("tot_pur_amt", "0").lstrip("0") or "0")
+        eval_pl = evlt - pur
+        eval_pl_rt = (eval_pl / pur * 100) if pur else 0
+        eval_pl_str = f"+{eval_pl:,}" if eval_pl > 0 else f"{eval_pl:,}"
+        eval_pl_rt_str = f"{eval_pl_rt:+.2f}"
+    except (ValueError, ZeroDivisionError):
+        eval_pl = 0
+        eval_pl_str = "-"
+        eval_pl_rt_str = "0.00"
+    color = "red" if eval_pl > 0 else ("blue" if eval_pl < 0 else "white")
+    return eval_pl, eval_pl_str, eval_pl_rt_str, color
+
+
 def print_stock_info(data: dict[str, Any]) -> None:
     """Format stock basic info (ka10001)."""
     fmt = _get_format()
@@ -241,18 +276,7 @@ def print_account_eval(data: dict[str, Any]) -> None:
     summary.add_row("추정예탁자산", _fmt_number(data.get("prsm_dpst_aset_amt", "")))
 
     # 평가손익 = 유가잔고평가액 - 총매입금액
-    try:
-        evlt = int(data.get("tot_est_amt", "0").lstrip("0") or "0")
-        pur = int(data.get("tot_pur_amt", "0").lstrip("0") or "0")
-        eval_pl = evlt - pur
-        eval_pl_rt = (eval_pl / pur * 100) if pur else 0
-        eval_pl_str = f"+{eval_pl:,}" if eval_pl > 0 else f"{eval_pl:,}"
-        eval_pl_rt_str = f"{eval_pl_rt:+.2f}"
-    except (ValueError, ZeroDivisionError):
-        eval_pl_str = "-"
-        eval_pl_rt_str = "0.00"
-        eval_pl = 0
-    eval_color = "red" if eval_pl > 0 else ("blue" if eval_pl < 0 else "white")
+    _, eval_pl_str, eval_pl_rt_str, eval_color = _calc_eval_pl(data)
     summary.add_row("평가손익", Text(eval_pl_str, style=eval_color))
     summary.add_row("평가손익율", Text(eval_pl_rt_str + "%", style=eval_color))
     pl_color = _sign_color(data.get("tdy_lspft", "0"))

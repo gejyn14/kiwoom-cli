@@ -8,6 +8,7 @@ import click
 
 from ..client import KiwoomClient
 from ..formatters import (
+    _find_list,
     print_account_eval,
     print_deposit,
     print_generic_table,
@@ -18,14 +19,6 @@ from ..formatters import (
 def _today() -> str:
     """Return today's date as YYYYMMDD."""
     return datetime.now().strftime("%Y%m%d")
-
-
-def _find_list(data: dict) -> list | None:
-    """Find the first list value in API response."""
-    for k, v in data.items():
-        if isinstance(v, list) and k not in ("return_code", "return_msg"):
-            return v
-    return None
 
 
 @click.group("account")

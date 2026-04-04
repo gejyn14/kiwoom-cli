@@ -6,6 +6,7 @@ import click
 
 from ..client import KiwoomClient
 from ..formatters import (
+    _find_list,
     _fmt_number,
     _get_format,
     _output_csv,
@@ -17,14 +18,7 @@ from ..formatters import (
     print_stock_info,
 )
 from ..output import console
-
-
-def _find_list(data: dict) -> list | None:
-    """Find the first list value in API response (skipping return_code/return_msg)."""
-    for k, v in data.items():
-        if isinstance(v, list) and k not in ("return_code", "return_msg"):
-            return v
-    return None
+from ._constants import EXCHANGE_ALL, MARKET_ALL, MARKET_PROGRAM, MARKET_TWO
 
 
 @click.group("stock")
@@ -491,14 +485,12 @@ def daily_detail(code: str, strt_dt: str):
 )
 def volume_renewal(mrkt_tp: str, cycle_tp: str, trde_qty_tp: str, stex_tp: str):
     """거래량갱신 조회. (ka10024)"""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10024", {
-            "mrkt_tp": _market_map[mrkt_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp],
             "cycle_tp": cycle_tp,
             "trde_qty_tp": trde_qty_tp,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title="거래량갱신")
 
@@ -539,16 +531,14 @@ def price_cluster(
     stex_tp: str,
 ):
     """매물대집중 조회. (ka10025)"""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10025", {
-            "mrkt_tp": _market_map[mrkt_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp],
             "prps_cnctr_rt": prps_cnctr_rt,
             "cur_prc_entry": cur_prc_entry,
             "prpscnt": prpscnt,
             "cycle_tp": cycle_tp,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title="매물대집중")
 
@@ -569,11 +559,10 @@ def price_cluster(
 def per_rank(pertp: str, stex_tp: str):
     """고저PER 조회. (ka10026)"""
     _type_map = {"low-pbr": "1", "high-pbr": "2", "low-per": "3", "high-per": "4", "low-roe": "5", "high-roe": "6"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10026", {
             "pertp": _type_map[pertp],
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title="고저PER")
 
@@ -625,19 +614,17 @@ def open_change(
     stex_tp: str,
 ):
     """시가대비등락률 조회. (ka10028)"""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10028", {
             "sort_tp": sort_tp,
             "trde_qty_cnd": trde_qty_cnd,
-            "mrkt_tp": _market_map[mrkt_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp],
             "updown_incls": updown_incls,
             "stk_cnd": stk_cnd,
             "crd_cnd": crd_cnd,
             "trde_prica_cnd": trde_prica_cnd,
             "flu_cnd": flu_cnd,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title="시가대비등락률")
 
@@ -689,7 +676,6 @@ def trader_analysis(
     stex_tp: str,
 ):
     """거래원매물대분석 조회. (ka10043)"""
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10043", {
             "stk_cd": code,
@@ -700,7 +686,7 @@ def trader_analysis(
             "dt": dt,
             "sort_base": sort_base,
             "mmcm_cd": mmcm_cd,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title=f"{code} 거래원매물대분석")
 
@@ -731,13 +717,12 @@ def instant_volume(
     stex_tp: str,
 ):
     """거래원순간거래량 조회. (ka10052)"""
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     body: dict = {
         "mmcm_cd": mmcm_cd,
         "mrkt_tp": mrkt_tp,
         "qty_tp": qty_tp,
         "pric_tp": pric_tp,
-        "stex_tp": _exchange_map[stex_tp],
+        "stex_tp": EXCHANGE_ALL[stex_tp],
     }
     if stk_cd:
         body["stk_cd"] = stk_cd
@@ -801,17 +786,15 @@ def vi_trigger(
     stex_tp: str,
 ):
     """변동성완화장치(VI) 발동종목 조회. (ka10054)"""
-    _market_map = {"all": "000", "kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     body: dict = {
-        "mrkt_tp": _market_map[mrkt_tp],
+        "mrkt_tp": MARKET_ALL[mrkt_tp],
         "bf_mkrt_tp": bf_mkrt_tp,
         "motn_tp": motn_tp,
         "skip_stk": skip_stk,
         "trde_qty_tp": trde_qty_tp,
         "trde_prica_tp": trde_prica_tp,
         "motn_drc": motn_drc,
-        "stex_tp": _exchange_map[stex_tp],
+        "stex_tp": EXCHANGE_ALL[stex_tp],
     }
     if stk_cd:
         body["stk_cd"] = stk_cd
@@ -895,15 +878,13 @@ def investor():
 )
 def investor_daily_trade(strt_dt: str, end_dt: str, trde_tp: str, mrkt_tp: str, stex_tp: str):
     """일별기관매매종목 조회. (ka10044)"""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10044", {
             "strt_dt": strt_dt,
             "end_dt": end_dt,
             "trde_tp": trde_tp,
-            "mrkt_tp": _market_map[mrkt_tp],
-            "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_TWO[mrkt_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title="일별기관매매종목")
 
@@ -978,16 +959,14 @@ def daily_by_investor(
     stex_tp: str,
 ):
     """투자자별일별매매종목 조회. (ka10058)"""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10058", {
             "strt_dt": strt_dt,
             "end_dt": end_dt,
             "trde_tp": trde_tp,
-            "mrkt_tp": _market_map[mrkt_tp],
+            "mrkt_tp": MARKET_TWO[mrkt_tp],
             "invsr_tp": invsr_tp,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title="투자자별일별매매종목")
 
@@ -1109,16 +1088,14 @@ def intraday(
     stex_tp: str,
 ):
     """장중투자자별매매 조회. (ka10063)"""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10063", {
-            "mrkt_tp": _market_map[mrkt_tp],
+            "mrkt_tp": MARKET_TWO[mrkt_tp],
             "amt_qty_tp": amt_qty_tp,
             "invsr": invsr,
             "frgn_all": frgn_all,
             "smtm_netprps_tp": smtm_netprps_tp,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title="장중투자자별매매")
 
@@ -1150,14 +1127,12 @@ def intraday(
 )
 def after_close(mrkt_tp: str, amt_qty_tp: str, trde_tp: str, stex_tp: str):
     """장마감후투자자별매매 조회. (ka10066)"""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10066", {
-            "mrkt_tp": _market_map[mrkt_tp],
+            "mrkt_tp": MARKET_TWO[mrkt_tp],
             "amt_qty_tp": amt_qty_tp,
             "trde_tp": trde_tp,
-            "stex_tp": _exchange_map[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title="장마감후투자자별매매")
 
@@ -1206,15 +1181,13 @@ def consecutive(
     stex_tp: str,
 ):
     """기관/외국인 연속매매현황 조회. (ka10131)"""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     body: dict = {
         "dt": dt,
-        "mrkt_tp": _market_map[mrkt_tp],
+        "mrkt_tp": MARKET_TWO[mrkt_tp],
         "netslmt_tp": netslmt_tp,
         "stk_inds_tp": stk_inds_tp,
         "amt_qty_tp": amt_qty_tp,
-        "stex_tp": _exchange_map[stex_tp],
+        "stex_tp": EXCHANGE_ALL[stex_tp],
     }
     if strt_dt:
         body["strt_dt"] = strt_dt
@@ -1252,14 +1225,12 @@ def consecutive(
 )
 def program_top(trde_upper_tp: str, amt_qty_tp: str, mrkt_tp: str, stex_tp: str):
     """프로그램순매수상위50 조회. (ka90003)"""
-    _market_map = {"kospi": "P00101", "kosdaq": "P10102"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka90003", {
             "trde_upper_tp": trde_upper_tp,
             "amt_qty_tp": amt_qty_tp,
-            "mrkt_tp": _market_map[mrkt_tp],
-            "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_PROGRAM[mrkt_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title="프로그램순매수상위50")
 
@@ -1280,13 +1251,11 @@ def program_top(trde_upper_tp: str, amt_qty_tp: str, mrkt_tp: str, stex_tp: str)
 )
 def program_by_stock(dt: str, mrkt_tp: str, stex_tp: str):
     """종목별프로그램매매현황 조회. (ka90004)"""
-    _market_map = {"kospi": "P00101", "kosdaq": "P10102"}
-    _exchange_map = {"KRX": "1", "NXT": "2", "all": "3"}
     with KiwoomClient() as c:
         data, _ = c.request("ka90004", {
             "dt": dt,
-            "mrkt_tp": _market_map[mrkt_tp],
-            "stex_tp": _exchange_map[stex_tp],
+            "mrkt_tp": MARKET_PROGRAM[mrkt_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_generic_table(data, title="종목별프로그램매매현황")
 
@@ -1516,10 +1485,9 @@ def chart_investor(code: str, dt: str, amt_qty_tp: str, trde_tp: str, unit_tp: s
 )
 def chart_intraday_investor(code: str, mrkt_tp: str, amt_qty_tp: str, trde_tp: str):
     """장중투자자별매매 차트 조회. (ka10064)"""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
     with KiwoomClient() as c:
         data, _ = c.request("ka10064", {
-            "mrkt_tp": _market_map[mrkt_tp],
+            "mrkt_tp": MARKET_TWO[mrkt_tp],
             "amt_qty_tp": amt_qty_tp,
             "trde_tp": trde_tp,
             "stk_cd": code,
@@ -1569,10 +1537,9 @@ def lending_trend(strt_dt: str, end_dt: str, all_tp: str):
 )
 def lending_top10(strt_dt: str, end_dt: str, mrkt_tp: str):
     """대차거래상위10종목 조회. (ka10069)"""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
     body: dict = {
         "strt_dt": strt_dt,
-        "mrkt_tp": _market_map[mrkt_tp],
+        "mrkt_tp": MARKET_TWO[mrkt_tp],
     }
     if end_dt:
         body["end_dt"] = end_dt
@@ -1616,11 +1583,10 @@ def lending_by_stock(code: str, strt_dt: str, end_dt: str, all_tp: str):
 )
 def lending_detail(dt: str, mrkt_tp: str):
     """대차거래내역 조회. (ka90012)"""
-    _market_map = {"kospi": "001", "kosdaq": "101"}
     with KiwoomClient() as c:
         data, _ = c.request("ka90012", {
             "dt": dt,
-            "mrkt_tp": _market_map[mrkt_tp],
+            "mrkt_tp": MARKET_TWO[mrkt_tp],
         })
         print_generic_table(data, title="대차거래내역")
 
