@@ -31,13 +31,21 @@ def _build_account_panel(data: dict[str, Any]) -> Panel:
     t.add_row("유가잔고평가액", _fmt_number(data.get("tot_est_amt", "")))
     t.add_row("예탁자산평가액", _fmt_number(data.get("aset_evlt_amt", "")))
 
-    pl_color = _sign_color(data.get("tdy_lspft", "0"))
-    t.add_row("당일손익", Text(_fmt_number(data.get("tdy_lspft", "")), style=pl_color))
-    t.add_row("당일손익율", Text(data.get("tdy_lspft_rt", "0") + "%", style=pl_color))
-
-    cum_color = _sign_color(data.get("lspft", "0"))
-    t.add_row("누적손익", Text(_fmt_number(data.get("lspft", "")), style=cum_color))
-    t.add_row("누적손익율", Text(data.get("lspft_rt", "0") + "%", style=cum_color))
+    # 평가손익 = 유가잔고평가액 - 총매입금액
+    try:
+        evlt = int(data.get("tot_est_amt", "0").lstrip("0") or "0")
+        pur = int(data.get("tot_pur_amt", "0").lstrip("0") or "0")
+        eval_pl = evlt - pur
+        eval_pl_rt = (eval_pl / pur * 100) if pur else 0
+        eval_pl_str = f"+{eval_pl:,}" if eval_pl > 0 else f"{eval_pl:,}"
+        eval_pl_rt_str = f"{eval_pl_rt:+.2f}"
+    except (ValueError, ZeroDivisionError):
+        eval_pl_str = "-"
+        eval_pl_rt_str = "0.00"
+        eval_pl = 0
+    eval_color = "red" if eval_pl > 0 else ("blue" if eval_pl < 0 else "white")
+    t.add_row("평가손익", Text(eval_pl_str, style=eval_color))
+    t.add_row("평가손익율", Text(eval_pl_rt_str + "%", style=eval_color))
 
     return Panel(t, title="계좌 요약", border_style="green")
 
