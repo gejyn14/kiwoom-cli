@@ -196,14 +196,22 @@ def search(keyword: str | None, mrkt_tp: str):
             items = _find_list(data) or []
             if isinstance(items, list):
                 all_items.extend(items)
+    # Normalize field names (API returns "code"/"name" not "stk_cd"/"stk_nm")
+    for item in all_items:
+        if "code" in item and "stk_cd" not in item:
+            item["stk_cd"] = item.pop("code")
+        if "name" in item and "stk_nm" not in item:
+            item["stk_nm"] = item.pop("name")
     if keyword and all_items:
         kw = keyword.lower()
         all_items = [
             i for i in all_items
-            if kw in i.get("stk_nm", "").lower() or kw in i.get("stk_cd", "").lower()
+            if kw in i.get("stk_nm", "").lower()
+            or kw in i.get("stk_cd", "").lower()
         ]
     if all_items:
-        print_generic_table(all_items, title=f"종목 리스트 ({len(all_items)}개)")
+        slim = [{"stk_cd": i["stk_cd"], "stk_nm": i["stk_nm"]} for i in all_items]
+        print_generic_table(slim, title=f"종목 리스트 ({len(slim)}개)")
     else:
         click.echo("검색 결과가 없습니다.")
 
