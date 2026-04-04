@@ -1,10 +1,12 @@
 """Configuration management for Kiwoom CLI.
 
-Priority: environment variables > keychain > ~/.kiwoom/config.toml
+Priority: environment variables > secure store (encrypted keychain) > config.toml
 
-Sensitive credentials (appkey, secretkey, token) are stored in the
-OS keychain via the `keyring` library. Non-sensitive settings (domain,
-account) remain in config.toml.
+Sensitive credentials (appkey, secretkey, token) are encrypted with a
+password-derived key and stored in the OS keychain via SecureStore.
+Even direct keychain access (keyring.get_password) returns encrypted data.
+
+Non-sensitive settings (domain, account) remain in config.toml.
 
 Environment variables:
   KIWOOM_APPKEY       앱키
@@ -29,6 +31,8 @@ else:
 import keyring
 import tomli_w
 
+from .secure_store import SecureStore
+
 CONFIG_DIR = Path.home() / ".kiwoom"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 CACHE_DIR = CONFIG_DIR / "cache"
@@ -43,6 +47,9 @@ DOMAINS = {
 DEFAULT_CONFIG = {
     "general": {"domain": "mock", "account": ""},
 }
+
+# Shared SecureStore instance
+store = SecureStore(KEYRING_SERVICE)
 
 
 def ensure_config_dir() -> None:
@@ -76,42 +83,51 @@ def get_domain() -> str:
 
 
 def get_appkey() -> str:
-    return os.environ.get("KIWOOM_APPKEY") or keyring.get_password(KEYRING_SERVICE, "appkey") or ""
+    return os.environ.get("KIWOOM_APPKEY") or store.get("appkey") or ""
 
 
 def get_secretkey() -> str:
-    return os.environ.get("KIWOOM_SECRETKEY") or keyring.get_password(KEYRING_SERVICE, "secretkey") or ""
+    return os.environ.get("KIWOOM_SECRETKEY") or store.get("secretkey") or ""
 
 
 def set_appkey(value: str) -> None:
-    keyring.set_password(KEYRING_SERVICE, "appkey", value)
+    store.set("appkey", value)
 
 
 def set_secretkey(value: str) -> None:
-    keyring.set_password(KEYRING_SERVICE, "secretkey", value)
+    store.set("secretkey", value)
 
 
 def get_account() -> str:
     return os.environ.get("KIWOOM_ACCOUNT") or load_config().get("general", {}).get("account", "")
 
 
-def migrate_from_config_file() -> bool:
-    """Migrate appkey/secretkey from config.toml and token file to keychain."""
+def migrate_from_plaintext() -> bool:
+    """Migrate plaintext credentials to encrypted secure store."""
     migrated = False
-    # Migrate appkey/secretkey from config.toml
+    # Migrate from config.toml
     cfg = load_config()
     auth_section = cfg.get("auth", {})
     ak = auth_section.get("appkey", "")
     sk = auth_section.get("secretkey", "")
     if ak or sk:
         if ak:
-            set_appkey(ak)
+            store.set("appkey", ak)
         if sk:
-            set_secretkey(sk)
+            store.set("secretkey", sk)
         cfg.pop("auth", None)
         save_config(cfg)
         migrated = True
-    # Migrate token from file to keychain
+    # Migrate from plain keyring (v0.4.0 format)
+    plain_ak = keyring.get_password(KEYRING_SERVICE, "appkey")
+    if plain_ak and not plain_ak.startswith("ey"):  # not already encrypted (base64 JSON)
+        store.set("appkey", plain_ak)
+        migrated = True
+    plain_sk = keyring.get_password(KEYRING_SERVICE, "secretkey")
+    if plain_sk and not plain_sk.startswith("ey"):
+        store.set("secretkey", plain_sk)
+        migrated = True
+    # Migrate token file to plain keyring
     token_file = CONFIG_DIR / "token"
     if token_file.exists():
         token = token_file.read_text().strip()

@@ -1,6 +1,8 @@
 """OAuth token management for Kiwoom REST API.
 
-Tokens are stored in the OS keychain via the `keyring` library.
+Tokens are stored in the OS keychain (plain, not encrypted).
+Tokens are short-lived and can be re-issued, so the security risk
+of plain keychain storage is low compared to appkey/secretkey.
 """
 
 from __future__ import annotations
