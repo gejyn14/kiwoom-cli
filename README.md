@@ -83,9 +83,8 @@ kiwoom stock trader 005930            # 거래원
 kiwoom stock foreign 005930           # 외국인 매매동향
 kiwoom stock institution 005930       # 기관 매매동향
 kiwoom stock short 005930 --from 20260101 --to 20260330  # 공매도 추이
-kiwoom stock search --market kospi     # 코스피 종목 리스트
-kiwoom stock list                      # KRX 전체 상장종목 (pykrx)
-kiwoom stock list --market kospi --search "삼성"  # 삼성 계열사 검색
+kiwoom stock search 삼성                # 코스피+코스닥 전체에서 검색
+kiwoom stock search 삼성 --market kospi  # 코스피에서만 검색
 kiwoom stock watchlist "005930|000660" # 관심종목
 ```
 

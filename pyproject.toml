@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kiwoom-cli"
-version = "0.2.7"
+version = "0.2.8"
 description = "User-friendly CLI for the Kiwoom Securities REST API (키움증권)"
 readme = "README.md"
 license = {text = "MIT"}
@@ -28,7 +28,6 @@ dependencies = [
     "tomli>=2.0;python_version<'3.11'",
     "tomli-w>=1.0",
     "websockets>=12.0",
-    "pykrx>=1.0",
 ]
 
 [project.optional-dependencies]
