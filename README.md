@@ -57,18 +57,18 @@ appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 
 
 ```bash
 # 프로필별 설정
-kiwoom config setup --profile personal   # 개인계좌
-kiwoom config setup --profile company    # 회사계좌
+kiwoom config setup --profile default   # 메인계좌
+kiwoom config setup --profile isa    # ISA계좌
 
-# 기본 프로필 전환
-kiwoom config use personal
+# ISA 프로필 전환
+kiwoom config use isa
 
 # 프로필 목록 확인
 kiwoom config profiles
 
 # 특정 프로필로 사용
-kiwoom -p company account balance
-kiwoom -p company auth login
+kiwoom -p default account balance
+kiwoom -p isa auth login
 ```
 
 ## 명령어 구조
@@ -405,17 +405,17 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 
 ## 참고
 
-| 항목            | 값                           |
-| --------------- | ---------------------------- |
-| 항목            | 값                           |
-| --------------- | ---------------------------- |
-| 설정 파일       | `~/.kiwoom/config.toml` (도메인, 계좌만) |
-| appkey/secretkey | OS 키체인 (암호화 저장)      |
-| 토큰            | OS 키체인                     |
-| 캐시 디렉터리   | `~/.kiwoom/cache/`           |
-| 운영 도메인     | `https://api.kiwoom.com`     |
-| 모의투자 도메인 | `https://mockapi.kiwoom.com` |
-| WebSocket       | `wss://api.kiwoom.com:10000` |
+| 항목             | 값                                       |
+| ---------------- | ---------------------------------------- |
+| 항목             | 값                                       |
+| ---------------  | ----------------------------             |
+| 설정 파일        | `~/.kiwoom/config.toml` (도메인, 계좌만) |
+| appkey/secretkey | OS 키체인 (암호화 저장)                  |
+| 토큰             | OS 키체인                                |
+| 캐시 디렉터리    | `~/.kiwoom/cache/`                       |
+| 운영 도메인      | `https://api.kiwoom.com`                 |
+| 모의투자 도메인  | `https://mockapi.kiwoom.com`             |
+| WebSocket        | `wss://api.kiwoom.com:10000`             |
 
 - `kiwoom <명령> --help`로 상세 옵션 확인
 - 모의투자 먼저 테스트: `kiwoom config domain mock`
@@ -427,11 +427,11 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 
 인증정보(appkey, secretkey)는 **OS 키체인에 암호화되어 저장**됩니다. 파일로 존재하지 않으며, 비밀번호 없이는 복호화할 수 없습니다.
 
-| 항목 | 저장 방식 | 비밀번호 필요 |
-|------|----------|:---:|
+| 항목               | 저장 방식          |            비밀번호 필요            |
+| ------------------ | ------------------ | :---------------------------------: |
 | appkey / secretkey | 암호화 + OS 키체인 | O (`config setup`, `auth login` 시) |
-| 토큰 | OS 키체인 (평문) | X (만료되는 값) |
-| config.toml | 도메인, 계좌번호만 | X |
+| 토큰               | OS 키체인 (평문)   |           X (만료되는 값)           |
+| config.toml        | 도메인, 계좌번호만 |                  X                  |
 
 - `config setup` 시 설정한 비밀번호로 appkey/secretkey를 암호화
 - `auth login/logout` 시 비밀번호 확인 후 키체인 접근

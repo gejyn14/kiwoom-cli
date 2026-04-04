@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kiwoom-cli"
-version = "0.6.0"
+version = "0.6.1"
 description = "User-friendly CLI for the Kiwoom Securities REST API (키움증권)"
 readme = "README.md"
 license = {text = "MIT"}
