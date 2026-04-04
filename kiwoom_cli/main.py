@@ -77,6 +77,11 @@ def cli(ctx, output_format, no_color):
     ctx.ensure_object(dict)
     ctx.obj["format"] = output_format
 
+    # Auto-migrate plaintext credentials to keychain
+    if config.migrate_from_config_file():
+        from .output import err_console
+        err_console.print("[yellow]appkey/secretkey를 키체인으로 이전했습니다. config.toml에서 제거됨.[/]")
+
     if no_color:
         from rich.console import Console as RichConsole
         from . import output
@@ -99,14 +104,16 @@ def config_cmd():
 @click.option("--account", default="", help="기본 계좌번호")
 def config_setup(appkey: str, secretkey: str, domain: str, account: str):
     """초기 설정 (App Key, Secret Key, 도메인)."""
+    config.set_appkey(appkey)
+    config.set_secretkey(secretkey)
     cfg = config.load_config()
-    cfg.setdefault("auth", {})["appkey"] = appkey
-    cfg["auth"]["secretkey"] = secretkey
     cfg.setdefault("general", {})["domain"] = domain
     if account:
         cfg["general"]["account"] = account
+    cfg.pop("auth", None)  # Remove plaintext credentials if present
     config.save_config(cfg)
-    console.print(f"[green]설정 완료![/] ({config.CONFIG_FILE})")
+    console.print("[green]설정 완료![/]")
+    console.print("  App Key/Secret Key: [bold]키체인에 저장됨[/]")
     console.print(f"  도메인: [bold]{config.DOMAINS[domain]}[/]")
 
 
@@ -114,11 +121,12 @@ def config_setup(appkey: str, secretkey: str, domain: str, account: str):
 def config_show():
     """현재 설정 확인."""
     cfg = config.load_config()
+    ak = config.get_appkey()
     console.print(f"  설정 파일: {config.CONFIG_FILE}")
     console.print(f"  도메인: {cfg.get('general', {}).get('domain', 'mock')}")
-    console.print(f"  App Key: {'***' + cfg.get('auth', {}).get('appkey', '')[-4:] if cfg.get('auth', {}).get('appkey') else '(미설정)'}")
+    console.print(f"  App Key: {'***' + ak[-4:] if ak else '(미설정)'} [dim](키체인)[/]")
     console.print(f"  계좌번호: {cfg.get('general', {}).get('account', '(미설정)')}")
-    console.print(f"  토큰: {'있음' if auth.load_token() else '없음'}")
+    console.print(f"  토큰: {'있음 [dim](키체인)[/]' if auth.load_token() else '없음'}")
 
 
 @config_cmd.command("domain")
@@ -148,7 +156,7 @@ def auth_login():
             masked = token[:10] + "..." + token[-4:] if len(token) > 14 else token
             console.print("[green]토큰 발급 완료![/]")
             console.print(f"  토큰: {masked}")
-            console.print(f"  저장 위치: {auth.TOKEN_FILE}")
+            console.print("  저장 위치: [bold]키체인[/]")
         except KiwoomAPIError as e:
             console.print(f"[red]토큰 발급 실패:[/] {e}")
 

@@ -1,6 +1,10 @@
 """Configuration management for Kiwoom CLI.
 
-Priority: environment variables > ~/.kiwoom/config.toml
+Priority: environment variables > keychain > ~/.kiwoom/config.toml
+
+Sensitive credentials (appkey, secretkey, token) are stored in the
+OS keychain via the `keyring` library. Non-sensitive settings (domain,
+account) remain in config.toml.
 
 Environment variables:
   KIWOOM_APPKEY       앱키
@@ -22,11 +26,14 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
+import keyring
 import tomli_w
 
 CONFIG_DIR = Path.home() / ".kiwoom"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 CACHE_DIR = CONFIG_DIR / "cache"
+
+KEYRING_SERVICE = "kiwoom-cli"
 
 DOMAINS = {
     "prod": "https://api.kiwoom.com",
@@ -34,7 +41,6 @@ DOMAINS = {
 }
 
 DEFAULT_CONFIG = {
-    "auth": {"appkey": "", "secretkey": ""},
     "general": {"domain": "mock", "account": ""},
 }
 
@@ -70,12 +76,47 @@ def get_domain() -> str:
 
 
 def get_appkey() -> str:
-    return os.environ.get("KIWOOM_APPKEY") or load_config().get("auth", {}).get("appkey", "")
+    return os.environ.get("KIWOOM_APPKEY") or keyring.get_password(KEYRING_SERVICE, "appkey") or ""
 
 
 def get_secretkey() -> str:
-    return os.environ.get("KIWOOM_SECRETKEY") or load_config().get("auth", {}).get("secretkey", "")
+    return os.environ.get("KIWOOM_SECRETKEY") or keyring.get_password(KEYRING_SERVICE, "secretkey") or ""
+
+
+def set_appkey(value: str) -> None:
+    keyring.set_password(KEYRING_SERVICE, "appkey", value)
+
+
+def set_secretkey(value: str) -> None:
+    keyring.set_password(KEYRING_SERVICE, "secretkey", value)
 
 
 def get_account() -> str:
     return os.environ.get("KIWOOM_ACCOUNT") or load_config().get("general", {}).get("account", "")
+
+
+def migrate_from_config_file() -> bool:
+    """Migrate appkey/secretkey from config.toml and token file to keychain."""
+    migrated = False
+    # Migrate appkey/secretkey from config.toml
+    cfg = load_config()
+    auth_section = cfg.get("auth", {})
+    ak = auth_section.get("appkey", "")
+    sk = auth_section.get("secretkey", "")
+    if ak or sk:
+        if ak:
+            set_appkey(ak)
+        if sk:
+            set_secretkey(sk)
+        cfg.pop("auth", None)
+        save_config(cfg)
+        migrated = True
+    # Migrate token from file to keychain
+    token_file = CONFIG_DIR / "token"
+    if token_file.exists():
+        token = token_file.read_text().strip()
+        if token:
+            keyring.set_password(KEYRING_SERVICE, "token", token)
+        token_file.unlink()
+        migrated = True
+    return migrated

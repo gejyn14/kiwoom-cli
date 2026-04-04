@@ -1,31 +1,27 @@
 """OAuth token management for Kiwoom REST API.
 
-Tokens are stored in ~/.kiwoom/token and loaded automatically by the client.
+Tokens are stored in the OS keychain via the `keyring` library.
 """
 
 from __future__ import annotations
 
-import os
+import keyring
 
 from . import config
 
-TOKEN_FILE = config.CONFIG_DIR / "token"
+KEYRING_SERVICE = config.KEYRING_SERVICE
 
 
 def save_token(token: str) -> None:
-    config.ensure_config_dir()
-    TOKEN_FILE.write_text(token)
-    if os.name != "nt":
-        TOKEN_FILE.chmod(0o600)
+    keyring.set_password(KEYRING_SERVICE, "token", token)
 
 
 def load_token() -> str | None:
-    if TOKEN_FILE.exists():
-        t = TOKEN_FILE.read_text().strip()
-        return t if t else None
-    return None
+    return keyring.get_password(KEYRING_SERVICE, "token")
 
 
 def delete_token() -> None:
-    if TOKEN_FILE.exists():
-        TOKEN_FILE.unlink()
+    try:
+        keyring.delete_password(KEYRING_SERVICE, "token")
+    except keyring.errors.PasswordDeleteError:
+        pass
