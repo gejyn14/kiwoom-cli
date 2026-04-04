@@ -113,12 +113,15 @@ def config_cmd():
 def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account: str):
     """초기 설정 (App Key, Secret Key, 도메인)."""
     password = click.prompt("시스템 비밀번호 (인증정보 암호화에 사용)", hide_input=True)
-    if not config.store.is_initialized:
-        config.store.setup(password)
-    else:
+    if config.store.is_initialized:
         if not config.store.unlock(password):
-            console.print("[red]비밀번호가 일치하지 않습니다.[/]")
-            raise SystemExit(1)
+            # Unlock failed — possibly old encryption format. Offer re-init.
+            if click.confirm("비밀번호 검증 실패. 암호화 저장소를 재설정하시겠습니까?"):
+                config.store.setup(password)
+            else:
+                raise SystemExit(1)
+    else:
+        config.store.setup(password)
     config.set_appkey(appkey, profile=profile)
     config.set_secretkey(secretkey, profile=profile)
     cfg = config.load_config()
