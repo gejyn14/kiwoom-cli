@@ -423,16 +423,25 @@ _FIELD_LABELS: dict[str, str] = {
     "acnt_nm": "계좌명", "rmnd_qty": "보유수량", "avg_prc": "평균단가",
     "evlt_amt": "평가금액", "pl_amt": "손익금액", "pl_rt": "손익율",
     "evltv_prft": "평가손익", "prft_rt": "수익률", "tot_prft_rt": "수익률",
-    "dt_prft_rt": "기간수익률",
+    "tot_evlt_pl": "총평가손익", "dt_prft_rt": "기간수익률",
     "entr": "예수금", "d2_entra": "D+2추정예수금",
     "tot_pur_amt": "총매입금액", "tot_est_amt": "유가잔고평가액",
     "prsm_dpst_aset_amt": "추정예탁자산", "tot_evlt_amt": "총평가금액",
     "pur_amt": "매입금액", "pur_pric": "매입가", "buy_uv": "매입단가",
+    "pur_cmsn": "매입수수료", "sell_cmsn": "매도수수료", "sum_cmsn": "총수수료",
     "repl_amt": "대용금", "pymn_alow_amt": "출금가능금액",
     "rmnd": "잔고주수", "remn_amt": "잔고금액", "setl_remn": "결제잔고",
+    "trde_able_qty": "매매가능수량", "poss_rt": "보유비중",
     "cmsn": "수수료", "tax": "세금",
     "tdy_trde_cmsn": "당일매매수수료", "tdy_trde_tax": "당일매매세금",
     "tdy_sel_pl": "당일매도손익", "profa_ch": "증거금현금",
+    "tot_loan_amt": "총대출금액", "tot_crd_loan_amt": "총신용대출금액",
+    "tot_crd_ls_amt": "총신용이자금액",
+    "crd_tp_nm": "신용구분명", "crd_loan_dt": "신용대출일",
+    "pred_buyq": "전일매수수량", "pred_sellq": "전일매도수량",
+    "tdy_buyq": "당일매수수량", "tdy_sellq": "당일매도수량",
+    "aset_evlt_amt": "예탁자산평가액", "acnt_evlt_remn_indv_tot": "계좌평가잔고상세",
+    "stk_acnt_evlt_prst": "보유종목",
     # 매수/매도
     "buy_qty": "매수수량", "sell_qty": "매도수량",
     "buy_amt": "매수금액", "sell_amt": "매도금액",
@@ -556,7 +565,8 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             console.print(t)
 
         for list_key, list_val in lists.items():
-            print_generic_table(list_val, title=list_key)
+            list_title = _FIELD_LABELS.get(list_key, list_key)
+            print_generic_table(list_val, title=list_title)
 
 
 def print_deposit(data: dict[str, Any]) -> None:
