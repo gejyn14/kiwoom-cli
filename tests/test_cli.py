@@ -17,7 +17,7 @@ def runner():
 def test_version(runner):
     result = runner.invoke(cli, ["--version"])
     assert result.exit_code == 0
-    assert "0.5.2" in result.output
+    assert "0.6.0" in result.output
 
 
 def test_help(runner):
@@ -43,6 +43,17 @@ def test_stock_help(runner):
 
 def test_config_show(runner):
     result = runner.invoke(cli, ["config", "show"])
+    assert result.exit_code == 0
+
+
+def test_config_show_with_profile(runner):
+    result = runner.invoke(cli, ["-p", "test", "config", "show"])
+    assert result.exit_code == 0
+    assert "test" in result.output
+
+
+def test_config_profiles(runner):
+    result = runner.invoke(cli, ["config", "profiles"])
     assert result.exit_code == 0
 
 

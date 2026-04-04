@@ -51,6 +51,26 @@ export KIWOOM_ACCOUNT="1234567"   # 선택
 
 appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 반드시 `kiwoom config setup`으로 암호화 저장하세요.
 
+### 멀티 프로필
+
+계좌별로 다른 appkey/secretkey를 사용할 수 있습니다.
+
+```bash
+# 프로필별 설정
+kiwoom config setup --profile personal   # 개인계좌
+kiwoom config setup --profile company    # 회사계좌
+
+# 기본 프로필 전환
+kiwoom config use personal
+
+# 프로필 목록 확인
+kiwoom config profiles
+
+# 특정 프로필로 사용
+kiwoom -p company account balance
+kiwoom -p company auth login
+```
+
 ## 명령어 구조
 
 ```

@@ -27,9 +27,14 @@ class KiwoomAPIError(Exception):
 class KiwoomClient:
     """Synchronous client for the Kiwoom REST API."""
 
-    def __init__(self, domain: str | None = None, token: str | None = None):
-        self.domain = domain or config.get_domain()
-        self.token = token or auth.load_token()
+    def __init__(self, domain: str | None = None, token: str | None = None, profile: str | None = None):
+        if profile is None:
+            ctx = click.get_current_context(silent=True)
+            if ctx and ctx.obj:
+                profile = ctx.obj.get("profile")
+        self.profile = profile
+        self.domain = domain or config.get_domain(profile=profile)
+        self.token = token or auth.load_token(profile=profile)
         self._http = httpx.Client(
             base_url=self.domain,
             timeout=30.0,
@@ -123,8 +128,8 @@ class KiwoomClient:
 
     def issue_token(self, appkey: str | None = None, secretkey: str | None = None) -> str:
         """Issue an access token via au10001."""
-        ak = appkey or config.get_appkey()
-        sk = secretkey or config.get_secretkey()
+        ak = appkey or config.get_appkey(profile=self.profile)
+        sk = secretkey or config.get_secretkey(profile=self.profile)
         if not ak or not sk:
             raise click.ClickException(
                 "appkey/secretkey not set. Run: kiwoom config setup"
@@ -155,15 +160,15 @@ class KiwoomClient:
                     break
 
         if token:
-            auth.save_token(token)
+            auth.save_token(token, profile=self.profile)
             self.token = token
         return token
 
     def revoke_token(self) -> None:
         """Revoke the current access token via au10002."""
-        ak = config.get_appkey()
-        sk = config.get_secretkey()
-        token = self.token or auth.load_token()
+        ak = config.get_appkey(profile=self.profile)
+        sk = config.get_secretkey(profile=self.profile)
+        token = self.token or auth.load_token(profile=self.profile)
         if not token:
             raise click.ClickException("No token to revoke.")
 
@@ -172,5 +177,5 @@ class KiwoomClient:
             headers={"content-type": CONTENT_TYPE, "api-id": "au10002"},
             json={"appkey": ak, "secretkey": sk, "token": token},
         )
-        auth.delete_token()
+        auth.delete_token(profile=self.profile)
         self.token = None

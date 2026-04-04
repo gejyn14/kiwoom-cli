@@ -11,6 +11,7 @@ Non-sensitive settings (domain, account) remain in config.toml.
 Environment variables (non-sensitive only):
   KIWOOM_DOMAIN       도메인 (prod / mock)
   KIWOOM_ACCOUNT      계좌번호
+  KIWOOM_PROFILE      활성 프로필 이름
 
 Config file: ~/.kiwoom/config.toml
 """
@@ -43,7 +44,8 @@ DOMAINS = {
 }
 
 DEFAULT_CONFIG = {
-    "general": {"domain": "mock", "account": ""},
+    "general": {"default_profile": "default"},
+    "profiles": {"default": {"domain": "mock", "account": ""}},
 }
 
 # Shared SecureStore instance
@@ -71,33 +73,76 @@ def save_config(cfg: dict) -> None:
         tomli_w.dump(cfg, f)
 
 
-def get_domain() -> str:
+def resolve_profile(profile: str | None = None) -> str:
+    """Resolve the active profile name.
+
+    Priority: explicit arg > KIWOOM_PROFILE env > general.default_profile > "default"
+    """
+    if profile:
+        return profile
+    env = os.environ.get("KIWOOM_PROFILE")
+    if env:
+        return env
+    cfg = load_config()
+    return cfg.get("general", {}).get("default_profile", "default")
+
+
+def get_domain(profile: str | None = None) -> str:
     env = os.environ.get("KIWOOM_DOMAIN")
     if env:
         return DOMAINS.get(env, DOMAINS["mock"])
+    p = resolve_profile(profile)
     cfg = load_config()
-    key = cfg.get("general", {}).get("domain", "mock")
+    key = cfg.get("profiles", {}).get(p, {}).get("domain", "mock")
     return DOMAINS.get(key, DOMAINS["mock"])
 
 
-def get_appkey() -> str:
-    return store.get("appkey") or ""
+def get_appkey(profile: str | None = None) -> str:
+    p = resolve_profile(profile)
+    return store.get(f"{p}:appkey") or ""
 
 
-def get_secretkey() -> str:
-    return store.get("secretkey") or ""
+def get_secretkey(profile: str | None = None) -> str:
+    p = resolve_profile(profile)
+    return store.get(f"{p}:secretkey") or ""
 
 
-def set_appkey(value: str) -> None:
-    store.set("appkey", value)
+def set_appkey(value: str, profile: str | None = None) -> None:
+    p = resolve_profile(profile)
+    store.set(f"{p}:appkey", value)
 
 
-def set_secretkey(value: str) -> None:
-    store.set("secretkey", value)
+def set_secretkey(value: str, profile: str | None = None) -> None:
+    p = resolve_profile(profile)
+    store.set(f"{p}:secretkey", value)
 
 
-def get_account() -> str:
-    return os.environ.get("KIWOOM_ACCOUNT") or load_config().get("general", {}).get("account", "")
+def get_account(profile: str | None = None) -> str:
+    env = os.environ.get("KIWOOM_ACCOUNT")
+    if env:
+        return env
+    p = resolve_profile(profile)
+    cfg = load_config()
+    return cfg.get("profiles", {}).get(p, {}).get("account", "")
+
+
+def get_profiles() -> list[str]:
+    """Return list of configured profile names."""
+    cfg = load_config()
+    return list(cfg.get("profiles", {}).keys())
+
+
+def get_default_profile() -> str:
+    """Return the default profile name."""
+    cfg = load_config()
+    return cfg.get("general", {}).get("default_profile", "default")
+
+
+def set_default_profile(name: str) -> None:
+    """Set the default profile."""
+    cfg = load_config()
+    cfg.setdefault("general", {})["default_profile"] = name
+    save_config(cfg)
 
 
 def migrate_from_plaintext() -> bool:
@@ -110,27 +155,61 @@ def migrate_from_plaintext() -> bool:
     sk = auth_section.get("secretkey", "")
     if ak or sk:
         if ak:
-            store.set("appkey", ak)
+            store.set("default:appkey", ak)
         if sk:
-            store.set("secretkey", sk)
+            store.set("default:secretkey", sk)
         cfg.pop("auth", None)
         save_config(cfg)
         migrated = True
     # Migrate from plain keyring (v0.4.0 format)
     plain_ak = keyring.get_password(KEYRING_SERVICE, "appkey")
     if plain_ak and not plain_ak.startswith("ey"):  # not already encrypted (base64 JSON)
-        store.set("appkey", plain_ak)
+        store.set("default:appkey", plain_ak)
         migrated = True
     plain_sk = keyring.get_password(KEYRING_SERVICE, "secretkey")
     if plain_sk and not plain_sk.startswith("ey"):
-        store.set("secretkey", plain_sk)
+        store.set("default:secretkey", plain_sk)
         migrated = True
     # Migrate token file to plain keyring
     token_file = CONFIG_DIR / "token"
     if token_file.exists():
         token = token_file.read_text().strip()
         if token:
-            keyring.set_password(KEYRING_SERVICE, "token", token)
+            keyring.set_password(KEYRING_SERVICE, "default:token", token)
         token_file.unlink()
+        migrated = True
+    return migrated
+
+
+def migrate_to_profiles() -> bool:
+    """Migrate pre-profile config and keyring keys to profile-aware format."""
+    cfg = load_config()
+    if "profiles" in cfg:
+        return False
+    migrated = False
+    general = cfg.get("general", {})
+    # config.toml: general.domain/account -> profiles.default
+    profile_data: dict[str, str] = {}
+    if "domain" in general:
+        profile_data["domain"] = general.pop("domain")
+    if "account" in general:
+        profile_data["account"] = general.pop("account")
+    if profile_data:
+        cfg.setdefault("profiles", {})["default"] = profile_data
+        general["default_profile"] = "default"
+        cfg["general"] = general
+        save_config(cfg)
+        migrated = True
+    # keyring: bare keys -> default:-prefixed
+    for key in ("appkey", "secretkey"):
+        raw = keyring.get_password(KEYRING_SERVICE, key)
+        if raw is not None:
+            keyring.set_password(KEYRING_SERVICE, f"default:{key}", raw)
+            keyring.delete_password(KEYRING_SERVICE, key)
+            migrated = True
+    raw_token = keyring.get_password(KEYRING_SERVICE, "token")
+    if raw_token is not None:
+        keyring.set_password(KEYRING_SERVICE, "default:token", raw_token)
+        keyring.delete_password(KEYRING_SERVICE, "token")
         migrated = True
     return migrated

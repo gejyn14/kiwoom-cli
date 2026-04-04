@@ -92,10 +92,11 @@ def watch(codes: tuple[str, ...]):
             except Exception:
                 stock_state[code] = {"_name": code}
 
+    profile = config.resolve_profile(None)
     cfg = config.load_config()
-    domain_key = cfg.get("general", {}).get("domain", "mock")
+    domain_key = cfg.get("profiles", {}).get(profile, {}).get("domain", "mock")
     ws_url = WS_DOMAINS.get(domain_key, WS_DOMAINS["mock"])
-    token = auth.load_token()
+    token = auth.load_token(profile=profile)
 
     if not token:
         console.print("[red]토큰이 없습니다. 'kiwoom auth login'으로 발급하세요.[/]")

@@ -56,9 +56,10 @@ class KiwoomGroup(click.Group):
 @click.option("-f", "--format", "output_format",
               type=click.Choice(["table", "json", "csv"]),
               default="table", help="출력 형식")
+@click.option("-p", "--profile", default=None, help="사용할 프로필")
 @click.option("--no-color", is_flag=True, help="색상 없이 출력")
 @click.pass_context
-def cli(ctx, output_format, no_color):
+def cli(ctx, output_format, profile, no_color):
     """키움증권 REST API CLI.
 
     사용법:
@@ -76,11 +77,17 @@ def cli(ctx, output_format, no_color):
     """
     ctx.ensure_object(dict)
     ctx.obj["format"] = output_format
+    ctx.obj["profile"] = profile
 
     # Auto-migrate plaintext credentials to encrypted store
     if config.store.is_initialized and config.migrate_from_plaintext():
         from .output import err_console
         err_console.print("[yellow]인증정보를 암호화된 키체인으로 이전했습니다.[/]")
+
+    # Auto-migrate pre-profile config to profile-aware format
+    if config.store.is_initialized and config.migrate_to_profiles():
+        from .output import err_console
+        err_console.print("[yellow]프로필 형식으로 마이그레이션 완료.[/]")
 
     if no_color:
         from rich.console import Console as RichConsole
@@ -98,11 +105,12 @@ def config_cmd():
 
 
 @config_cmd.command("setup")
+@click.option("--profile", default="default", help="프로필 이름")
 @click.option("--appkey", prompt="App Key", help="키움 API App Key")
 @click.option("--secretkey", prompt="Secret Key", hide_input=True, help="키움 API Secret Key")
 @click.option("--domain", type=click.Choice(["prod", "mock"]), default="mock", help="도메인 (prod: 실거래, mock: 모의투자)")
 @click.option("--account", default="", help="기본 계좌번호")
-def config_setup(appkey: str, secretkey: str, domain: str, account: str):
+def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account: str):
     """초기 설정 (App Key, Secret Key, 도메인)."""
     password = click.prompt("시스템 비밀번호 (인증정보 암호화에 사용)", hide_input=True)
     if not config.store.is_initialized:
@@ -111,40 +119,75 @@ def config_setup(appkey: str, secretkey: str, domain: str, account: str):
         if not config.store.unlock(password):
             console.print("[red]비밀번호가 일치하지 않습니다.[/]")
             raise SystemExit(1)
-    config.set_appkey(appkey)
-    config.set_secretkey(secretkey)
+    config.set_appkey(appkey, profile=profile)
+    config.set_secretkey(secretkey, profile=profile)
     cfg = config.load_config()
-    cfg.setdefault("general", {})["domain"] = domain
+    cfg.setdefault("profiles", {}).setdefault(profile, {})["domain"] = domain
     if account:
-        cfg["general"]["account"] = account
+        cfg["profiles"][profile]["account"] = account
+    if "default_profile" not in cfg.get("general", {}):
+        cfg.setdefault("general", {})["default_profile"] = profile
     cfg.pop("auth", None)
     config.save_config(cfg)
-    console.print("[green]설정 완료![/]")
+    console.print(f"[green]설정 완료![/] (프로필: {profile})")
     console.print("  App Key/Secret Key: [bold]암호화되어 키체인에 저장됨[/]")
     console.print(f"  도메인: [bold]{config.DOMAINS[domain]}[/]")
 
 
 @config_cmd.command("show")
-def config_show():
+@click.pass_context
+def config_show(ctx):
     """현재 설정 확인."""
+    profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     cfg = config.load_config()
     initialized = config.store.is_initialized
+    profile_cfg = cfg.get("profiles", {}).get(profile, {})
+    console.print(f"  프로필: [bold]{profile}[/]")
     console.print(f"  설정 파일: {config.CONFIG_FILE}")
-    console.print(f"  도메인: {cfg.get('general', {}).get('domain', 'mock')}")
+    console.print(f"  도메인: {profile_cfg.get('domain', 'mock')}")
     console.print(f"  App Key: {'[dim]설정됨 (암호화)[/]' if initialized else '(미설정)'}")
-    console.print(f"  계좌번호: {cfg.get('general', {}).get('account', '(미설정)')}")
-    console.print(f"  토큰: {'[dim]설정됨 (암호화)[/]' if initialized else '없음'}")
+    console.print(f"  계좌번호: {profile_cfg.get('account', '(미설정)')}")
     console.print(f"  보안: [bold]{'SecureStore 활성' if initialized else '미초기화'}[/]")
 
 
 @config_cmd.command("domain")
 @click.argument("domain", type=click.Choice(["prod", "mock"]))
-def config_domain(domain: str):
+@click.pass_context
+def config_domain(ctx, domain: str):
     """도메인 변경 (prod/mock)."""
+    profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     cfg = config.load_config()
-    cfg.setdefault("general", {})["domain"] = domain
+    cfg.setdefault("profiles", {}).setdefault(profile, {})["domain"] = domain
     config.save_config(cfg)
-    console.print(f"[green]도메인 변경:[/] {config.DOMAINS[domain]}")
+    console.print(f"[green]도메인 변경:[/] {config.DOMAINS[domain]} (프로필: {profile})")
+
+
+@config_cmd.command("use")
+@click.argument("profile_name")
+def config_use(profile_name: str):
+    """기본 프로필 변경."""
+    profiles = config.get_profiles()
+    if profile_name not in profiles:
+        console.print(f"[red]프로필 '{profile_name}'을(를) 찾을 수 없습니다.[/]")
+        raise SystemExit(1)
+    config.set_default_profile(profile_name)
+    console.print(f"[green]기본 프로필 변경:[/] {profile_name}")
+
+
+@config_cmd.command("profiles")
+def config_profiles():
+    """등록된 프로필 목록."""
+    cfg = config.load_config()
+    profiles = cfg.get("profiles", {})
+    default = config.get_default_profile()
+    if not profiles:
+        console.print("[yellow]등록된 프로필이 없습니다.[/]")
+        return
+    for name, settings in profiles.items():
+        marker = " [green](기본)[/]" if name == default else ""
+        domain = settings.get("domain", "mock")
+        account = settings.get("account", "(미설정)")
+        console.print(f"  {name}{marker}  도메인={domain}  계좌={account}")
 
 
 # ── Auth ──────────────────────────────────────────────
@@ -197,15 +240,18 @@ def auth_logout():
 
 
 @auth_cmd.command("status")
-def auth_status():
+@click.pass_context
+def auth_status(ctx):
     """토큰 상태 확인."""
     if not config.store.is_initialized:
         console.print("[yellow]설정 필요.[/] 'kiwoom config setup' 으로 설정하세요.")
         return
+    profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     import keyring as _kr
-    has_token = _kr.get_password(config.KEYRING_SERVICE, "token") is not None
+    has_token = _kr.get_password(config.KEYRING_SERVICE, f"{profile}:token") is not None
+    console.print(f"  프로필: [bold]{profile}[/]")
     if has_token:
-        console.print("[green]토큰 있음[/] [dim](암호화 저장됨)[/]")
+        console.print("[green]토큰 있음[/] [dim](키체인 저장됨)[/]")
     else:
         console.print("[yellow]토큰 없음.[/] 'kiwoom auth login' 으로 발급하세요.")
 
