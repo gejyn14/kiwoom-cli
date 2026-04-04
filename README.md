@@ -42,16 +42,14 @@ kiwoom config show          # 현재 설정 확인
 
 ### 환경변수 설정
 
-`config.toml` 대신 환경변수로도 설정 가능합니다. 환경변수가 우선합니다.
+도메인과 계좌번호는 환경변수로도 설정 가능합니다.
 
 ```bash
-export KIWOOM_APPKEY="your-app-key"
-export KIWOOM_SECRETKEY="your-secret-key"
 export KIWOOM_DOMAIN="prod"       # prod 또는 mock
 export KIWOOM_ACCOUNT="1234567"   # 선택
 ```
 
-Docker, CI, 클라우드 환경에서 `config setup` 없이 바로 사용 가능합니다.
+appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 반드시 `kiwoom config setup`으로 암호화 저장하세요.
 
 ## 명령어 구조
 

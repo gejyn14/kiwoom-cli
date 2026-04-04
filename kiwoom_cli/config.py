@@ -8,9 +8,7 @@ Even direct keychain access (keyring.get_password) returns encrypted data.
 
 Non-sensitive settings (domain, account) remain in config.toml.
 
-Environment variables:
-  KIWOOM_APPKEY       앱키
-  KIWOOM_SECRETKEY    시크릿키
+Environment variables (non-sensitive only):
   KIWOOM_DOMAIN       도메인 (prod / mock)
   KIWOOM_ACCOUNT      계좌번호
 
@@ -83,11 +81,11 @@ def get_domain() -> str:
 
 
 def get_appkey() -> str:
-    return os.environ.get("KIWOOM_APPKEY") or store.get("appkey") or ""
+    return store.get("appkey") or ""
 
 
 def get_secretkey() -> str:
-    return os.environ.get("KIWOOM_SECRETKEY") or store.get("secretkey") or ""
+    return store.get("secretkey") or ""
 
 
 def set_appkey(value: str) -> None:
