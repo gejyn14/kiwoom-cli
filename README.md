@@ -58,16 +58,19 @@ appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 
 ```bash
 # 프로필별 설정
 kiwoom config setup --profile default   # 메인계좌
-kiwoom config setup --profile isa    # ISA계좌
+kiwoom config setup --profile isa       # ISA계좌
 
-# ISA 프로필 전환
+# 프로필 설정 변경
+kiwoom config set domain prod           # 도메인 변경
+kiwoom config set account 1234567       # 계좌번호 설정
+kiwoom -p isa config set domain mock    # 특정 프로필
+
+# 프로필 전환 / 목록
 kiwoom config use isa
-
-# 프로필 목록 확인
 kiwoom config profiles
 
 # 특정 프로필로 사용
-kiwoom -p default account balance
+kiwoom -p isa account balance
 kiwoom -p isa auth login
 ```
 
