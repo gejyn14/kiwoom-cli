@@ -108,8 +108,8 @@ def config_cmd():
 @click.option("--profile", default="default", help="프로필 이름")
 @click.option("--appkey", prompt="App Key", help="키움 API App Key")
 @click.option("--secretkey", prompt="Secret Key", hide_input=True, help="키움 API Secret Key")
-@click.option("--domain", type=click.Choice(["prod", "mock"]), default="mock", help="도메인 (prod: 실거래, mock: 모의투자)")
-@click.option("--account", default="", help="기본 계좌번호")
+@click.option("--domain", prompt="도메인 (prod=실거래, mock=모의투자)", type=click.Choice(["prod", "mock"]), default="mock", help="도메인")
+@click.option("--account", prompt="계좌번호 (없으면 Enter)", default="", help="계좌번호")
 def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account: str):
     """초기 설정 (App Key, Secret Key, 도메인)."""
     password = click.prompt("시스템 비밀번호 (인증정보 암호화에 사용)", hide_input=True)
