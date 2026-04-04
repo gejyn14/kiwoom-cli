@@ -145,6 +145,12 @@ def set_default_profile(name: str) -> None:
     save_config(cfg)
 
 
+def is_dangerous_mode() -> bool:
+    """Check if dangerous mode is enabled (skip system auth for orders)."""
+    cfg = load_config()
+    return cfg.get("general", {}).get("dangerous_mode", "off") == "on"
+
+
 def migrate_from_plaintext() -> bool:
     """Migrate plaintext credentials to encrypted secure store."""
     migrated = False
