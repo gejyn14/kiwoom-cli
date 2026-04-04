@@ -83,8 +83,9 @@ kiwoom stock trader 005930            # 거래원
 kiwoom stock foreign 005930           # 외국인 매매동향
 kiwoom stock institution 005930       # 기관 매매동향
 kiwoom stock short 005930 --from 20260101 --to 20260330  # 공매도 추이
-kiwoom stock search 삼성                # 코스피+코스닥 전체에서 검색
-kiwoom stock search 삼성 --market kospi  # 코스피에서만 검색
+kiwoom stock sync                        # 전 시장 종목 리스트 다운로드 (캐시)
+kiwoom stock search 삼성                 # 캐시에서 종목 검색
+kiwoom stock search 삼성 --market kospi  # 코스피만 필터
 kiwoom stock watchlist "005930|000660" # 관심종목
 ```
 
@@ -134,7 +135,8 @@ kiwoom stock credit trend 005930 --date 20260301 --type loan
 | `foreign`        | 외국인 매매동향                                       |
 | `institution`    | 기관 매매동향                                         |
 | `short`          | 공매도 추이                                           |
-| `search`         | 종목 검색 (--market all로 코스피+코스닥 동시 검색)    |
+| `sync`           | 전 시장 종목 리스트 다운로드 (캐시 저장)              |
+| `search`         | 종목 검색 (캐시 기반, 시장/유형 필터)                 |
 | `watchlist`      | 관심종목                                              |
 | `brokers`        | 회원사 리스트                                         |
 | `chart *`        | 틱/분봉/일봉/주봉/월봉/년봉, 투자자별 차트            |

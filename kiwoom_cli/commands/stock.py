@@ -178,18 +178,14 @@ def watchlist(codes: str):
 
 
 def _load_stock_cache() -> list[dict] | None:
-    """Load cached stock list if fresh (< 24h)."""
+    """Load cached stock list."""
     import json
-    from datetime import datetime, timedelta
     from ..config import CACHE_DIR
     path = CACHE_DIR / "stocks.json"
     if not path.exists():
         return None
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        fetched_at = datetime.fromisoformat(raw["fetched_at"])
-        if datetime.now() - fetched_at > timedelta(hours=24):
-            return None
         return raw["data"]
     except (json.JSONDecodeError, KeyError, ValueError):
         return None
@@ -201,14 +197,14 @@ def _save_stock_cache(data: list[dict]) -> None:
     from datetime import datetime
     from ..config import CACHE_DIR, ensure_cache_dir
     ensure_cache_dir()
-    payload = {"fetched_at": datetime.now().isoformat(), "data": data}
+    payload = {"fetched_at": datetime.now().isoformat(), "count": len(data), "data": data}
     (CACHE_DIR / "stocks.json").write_text(
         json.dumps(payload, ensure_ascii=False), encoding="utf-8",
     )
 
 
-def _fetch_all_stocks() -> list[dict]:
-    """Fetch all stocks from Kiwoom API across all markets."""
+def _sync_stocks() -> list[dict]:
+    """Fetch all stocks from Kiwoom API across all markets and save to cache."""
     _api_map = {"0": "코스피", "10": "코스닥", "8": "ETF", "3": "ELW"}
     _market_label = {"거래소": "코스피", "코스닥": "코스닥", "ETF": "ETF", "ELW": "ELW"}
     _kind_label = {"A": "주식", "Q": "ETN", "J": "ELW"}
@@ -220,7 +216,6 @@ def _fetch_all_stocks() -> list[dict]:
             for item in items:
                 market_name = item.get("marketName", "")
                 kind = item.get("kind", "A")
-                # ETF는 코스피(mrkt_tp=0) 응답에 섞여 오므로 marketName으로 구분
                 market = _market_label.get(market_name, _api_map.get(mrkt_code, ""))
                 kind_str = "ETF" if market_name == "ETF" else _kind_label.get(kind, "주식")
                 all_items.append({
@@ -229,7 +224,17 @@ def _fetch_all_stocks() -> list[dict]:
                     "market": market,
                     "type": kind_str,
                 })
+    _save_stock_cache(all_items)
     return all_items
+
+
+@stock.command("sync")
+def sync():
+    """전 시장 종목 리스트를 다운받아 캐시에 저장. (ka10099)"""
+    from ..output import err_console
+    with err_console.status("[dim]종목 리스트 동기화 중...[/]", spinner="dots"):
+        items = _sync_stocks()
+    click.echo(f"동기화 완료: {len(items)}개 종목 저장 (~/.kiwoom/cache/stocks.json)")
 
 
 @stock.command("search")
@@ -240,16 +245,15 @@ def _fetch_all_stocks() -> list[dict]:
     default="all",
     help="시장/유형 필터 (all/kospi/kosdaq/etf/elw/etn)",
 )
-@click.option("--refresh", is_flag=True, help="캐시 무시하고 새로 조회")
-def search(keyword: str | None, mrkt_tp: str, refresh: bool):
-    """종목 검색. 첫 조회 시 캐시 저장, 이후 캐시에서 검색. (ka10099)"""
+def search(keyword: str | None, mrkt_tp: str):
+    """캐시에서 종목 검색. 캐시가 없으면 자동으로 sync 실행."""
     from ..output import err_console
-    items = None if refresh else _load_stock_cache()
+    items = _load_stock_cache()
     if items is None:
-        with err_console.status("[dim]종목 리스트 조회 중...[/]", spinner="dots"):
-            items = _fetch_all_stocks()
-        _save_stock_cache(items)
-        err_console.print(f"[dim]캐시 저장 완료 ({len(items)}개)[/]")
+        err_console.print("[dim]캐시가 없습니다. 종목 리스트를 다운받습니다...[/]")
+        with err_console.status("[dim]동기화 중...[/]", spinner="dots"):
+            items = _sync_stocks()
+        err_console.print(f"[dim]동기화 완료 ({len(items)}개)[/]")
     # Filter by market/type
     _filter_map = {"kospi": "코스피", "kosdaq": "코스닥", "etf": "ETF", "elw": "ELW", "etn": "ETN"}
     if mrkt_tp != "all":
