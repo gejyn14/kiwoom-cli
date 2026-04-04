@@ -13,9 +13,12 @@ Subgroups:
 
 from __future__ import annotations
 
+import sys
+
 import click
 from rich.panel import Panel
 
+from .. import config
 from ..client import KiwoomClient
 from ..formatters import print_order_result, print_generic_table
 from ..output import console
@@ -63,6 +66,74 @@ def _show_order_preview(action: str, code: str, qty: int, price: int, order_type
     ))
 
 
+def _verify_touch_id() -> bool:
+    """macOS Touch ID / system password authentication."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["swift", "-e",
+             'import LocalAuthentication; import Foundation; '
+             'let c = LAContext(); let s = DispatchSemaphore(value: 0); var ok = false; '
+             'c.evaluatePolicy(.deviceOwnerAuthentication, '
+             'localizedReason: "kiwoom-cli 주문 인증") { r, _ in ok = r; s.signal() }; '
+             's.wait(); exit(ok ? 0 : 1)'],
+            capture_output=True, timeout=30,
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def _verify_system_auth() -> None:
+    """Verify system identity before order execution."""
+    import os
+    import subprocess
+    if sys.platform == "darwin":
+        if not _verify_touch_id():
+            # Fallback to password
+            password = click.prompt("시스템 비밀번호", hide_input=True)
+            user = os.environ.get("USER") or os.getlogin()
+            result = subprocess.run(
+                ["dscl", "/Local/Default", "-authonly", user, password],
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                click.echo("인증 실패.")
+                raise SystemExit(1)
+    elif sys.platform == "win32":
+        import ctypes
+        password = click.prompt("시스템 비밀번호", hide_input=True)
+        user = os.environ.get("USERNAME") or os.getlogin()
+        advapi32 = ctypes.windll.advapi32
+        handle = ctypes.c_void_p()
+        ok = advapi32.LogonUserW(user, None, password, 2, 0, ctypes.byref(handle))
+        if ok:
+            ctypes.windll.kernel32.CloseHandle(handle)
+        if not ok:
+            click.echo("인증 실패.")
+            raise SystemExit(1)
+    else:
+        password = click.prompt("시스템 비밀번호", hide_input=True)
+        user = os.environ.get("USER") or os.getlogin()
+        result = subprocess.run(
+            ["su", user, "-c", "true"],
+            input=password + "\n", capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            click.echo("인증 실패.")
+            raise SystemExit(1)
+
+
+def _verify_order(confirm: bool) -> None:
+    """Verify order intent. In safe mode, requires system auth."""
+    if config.is_dangerous_mode():
+        if not confirm:
+            click.confirm("주문을 실행하시겠습니까?", abort=True)
+        return
+    # Safe mode: always require system authentication
+    _verify_system_auth()
+
+
 # ════════════════════════════════════════════════════════
 #  Top-level order group
 # ════════════════════════════════════════════════════════
@@ -90,8 +161,7 @@ def buy(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: in
 
     예: kiwoom order buy 005930 10 --price 70000 --type limit --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     _show_order_preview("매수", code, qty, price, order_type, stex)
 
@@ -120,8 +190,7 @@ def sell(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: i
 
     예: kiwoom order sell 005930 10 --type market --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     _show_order_preview("매도", code, qty, price, order_type, stex)
 
@@ -150,8 +219,7 @@ def modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, mdfy_
 
     예: kiwoom order modify 0000139 005930 1 70000 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     console.print(f"[yellow]정정 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty} 가격={price:,}")
 
@@ -178,8 +246,7 @@ def cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: bool):
 
     예: kiwoom order cancel 0000140 005930 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     console.print(f"[yellow]취소 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty or '전량'}")
 
@@ -216,8 +283,7 @@ def credit_buy(code: str, qty: int, price: int, order_type: str, stex: str, cond
 
     예: kiwoom order credit buy 005930 10 --type limit --price 70000 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     _show_order_preview("신용 매수", code, qty, price, order_type, stex)
 
@@ -246,8 +312,7 @@ def credit_sell(code: str, qty: int, price: int, order_type: str, stex: str, con
 
     예: kiwoom order credit sell 005930 10 --type market --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     _show_order_preview("신용 매도", code, qty, price, order_type, stex)
 
@@ -276,8 +341,7 @@ def credit_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str
 
     예: kiwoom order credit modify 0000139 005930 1 70000 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     console.print(f"[yellow]신용 정정 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty} 가격={price:,}")
 
@@ -304,8 +368,7 @@ def credit_cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: b
 
     예: kiwoom order credit cancel 0000140 005930 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     console.print(f"[yellow]신용 취소 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty or '전량'}")
 
@@ -341,8 +404,7 @@ def gold_buy(code: str, qty: int, price: int, order_type: str, stex: str, confir
 
     예: kiwoom order gold buy 730060 10 --type limit --price 90000 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     _show_order_preview("금현물 매수", code, qty, price, order_type, stex)
 
@@ -369,8 +431,7 @@ def gold_sell(code: str, qty: int, price: int, order_type: str, stex: str, confi
 
     예: kiwoom order gold sell 730060 10 --type market --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     _show_order_preview("금현물 매도", code, qty, price, order_type, stex)
 
@@ -397,8 +458,7 @@ def gold_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, 
 
     예: kiwoom order gold modify 0000139 730060 1 90000 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     console.print(f"[yellow]금현물 정정 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty} 가격={price:,}")
 
@@ -424,8 +484,7 @@ def gold_cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: boo
 
     예: kiwoom order gold cancel 0000140 730060 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     console.print(f"[yellow]금현물 취소 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty or '전량'}")
 
@@ -541,8 +600,7 @@ def condition_search(seq: str, stex_tp: str, cont_yn: str, next_key: str, confir
 
     예: kiwoom order condition search 001 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     body = {
         "trnm": "CNSRREQ",
@@ -569,8 +627,7 @@ def condition_realtime(seq: str, stex_tp: str, confirm: bool):
 
     예: kiwoom order condition realtime 001 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10173", {
@@ -590,8 +647,7 @@ def condition_stop(seq: str, confirm: bool):
 
     예: kiwoom order condition stop 001 --confirm
     """
-    if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+    _verify_order(confirm)
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10174", {

@@ -154,11 +154,24 @@ def config_show(ctx):
 
 
 @config_cmd.command("set")
-@click.argument("key", type=click.Choice(["domain", "account"]))
+@click.argument("key", type=click.Choice(["domain", "account", "dangerous-mode"]))
 @click.argument("value")
 @click.pass_context
 def config_set(ctx, key: str, value: str):
     """프로필 설정 변경. (예: kiwoom config set domain prod)"""
+    if key == "dangerous-mode" and value not in ("on", "off"):
+        console.print("[red]dangerous-mode는 on 또는 off만 가능합니다.[/]")
+        raise SystemExit(1)
+    if key == "dangerous-mode":
+        key = "dangerous_mode"  # TOML-compatible key name
+
+    if key in ("dangerous_mode",):
+        cfg = config.load_config()
+        cfg.setdefault("general", {})[key] = value
+        config.save_config(cfg)
+        console.print(f"[green]{key} 변경:[/] {value}")
+        return
+
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     if key == "domain" and value not in ("prod", "mock"):
         console.print("[red]domain은 prod 또는 mock만 가능합니다.[/]")
