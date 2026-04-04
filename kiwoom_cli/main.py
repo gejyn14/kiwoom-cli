@@ -150,16 +150,30 @@ def config_show(ctx):
     console.print(f"  보안: [bold]{'SecureStore 활성' if initialized else '미초기화'}[/]")
 
 
-@config_cmd.command("domain")
+@config_cmd.command("set")
+@click.argument("key", type=click.Choice(["domain", "account"]))
+@click.argument("value")
+@click.pass_context
+def config_set(ctx, key: str, value: str):
+    """프로필 설정 변경. (예: kiwoom config set domain prod)"""
+    profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
+    if key == "domain" and value not in ("prod", "mock"):
+        console.print("[red]domain은 prod 또는 mock만 가능합니다.[/]")
+        raise SystemExit(1)
+    cfg = config.load_config()
+    cfg.setdefault("profiles", {}).setdefault(profile, {})[key] = value
+    config.save_config(cfg)
+    display = config.DOMAINS[value] if key == "domain" else value
+    console.print(f"[green]{key} 변경:[/] {display} (프로필: {profile})")
+
+
+# Backward compatibility: keep 'domain' as alias
+@config_cmd.command("domain", hidden=True)
 @click.argument("domain", type=click.Choice(["prod", "mock"]))
 @click.pass_context
 def config_domain(ctx, domain: str):
-    """도메인 변경 (prod/mock)."""
-    profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
-    cfg = config.load_config()
-    cfg.setdefault("profiles", {}).setdefault(profile, {})["domain"] = domain
-    config.save_config(cfg)
-    console.print(f"[green]도메인 변경:[/] {config.DOMAINS[domain]} (프로필: {profile})")
+    """도메인 변경 (config set domain의 별칭)."""
+    ctx.invoke(config_set, key="domain", value=domain)
 
 
 @config_cmd.command("use")
