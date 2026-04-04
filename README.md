@@ -134,8 +134,7 @@ kiwoom stock credit trend 005930 --date 20260301 --type loan
 | `foreign`        | 외국인 매매동향                                       |
 | `institution`    | 기관 매매동향                                         |
 | `short`          | 공매도 추이                                           |
-| `search`         | 종목 리스트/검색                                      |
-| `list`           | KRX 전체 상장종목 (pykrx, 캐시, 검색)                 |
+| `search`         | 종목 검색 (--market all로 코스피+코스닥 동시 검색)    |
 | `watchlist`      | 관심종목                                              |
 | `brokers`        | 회원사 리스트                                         |
 | `chart *`        | 틱/분봉/일봉/주봉/월봉/년봉, 투자자별 차트            |
