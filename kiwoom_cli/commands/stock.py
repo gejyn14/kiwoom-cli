@@ -181,25 +181,31 @@ def watchlist(codes: str):
 @click.argument("keyword", required=False)
 @click.option(
     "--market", "mrkt_tp",
-    type=click.Choice(["kospi", "kosdaq", "k-otc", "konex", "etf", "elw"]),
-    default="kospi",
-    help="시장구분 (kospi/kosdaq/k-otc/konex/etf/elw)",
+    type=click.Choice(["all", "kospi", "kosdaq", "k-otc", "konex", "etf", "elw"]),
+    default="all",
+    help="시장구분 (all/kospi/kosdaq/k-otc/konex/etf/elw)",
 )
 def search(keyword: str | None, mrkt_tp: str):
     """종목 리스트 / 검색. (ka10099)"""
     _market_map = {"kospi": "0", "kosdaq": "10", "k-otc": "30", "konex": "50", "etf": "8", "elw": "3"}
+    markets = ["kospi", "kosdaq"] if mrkt_tp == "all" else [mrkt_tp]
+    all_items: list[dict] = []
     with KiwoomClient() as c:
-        data, _ = c.request("ka10099", {"mrkt_tp": _market_map[mrkt_tp]})
-        items = _find_list(data) or []
-        if keyword and isinstance(items, list):
-            items = [
-                i for i in items
-                if keyword in i.get("stk_nm", "") or keyword in i.get("stk_cd", "")
-            ]
-        if isinstance(items, list):
-            print_generic_table(items[:30], title="종목 리스트")
-        else:
-            print_generic_table(data, title="종목 리스트")
+        for mkt in markets:
+            data, _ = c.request("ka10099", {"mrkt_tp": _market_map[mkt]})
+            items = _find_list(data) or []
+            if isinstance(items, list):
+                all_items.extend(items)
+    if keyword and all_items:
+        kw = keyword.lower()
+        all_items = [
+            i for i in all_items
+            if kw in i.get("stk_nm", "").lower() or kw in i.get("stk_cd", "").lower()
+        ]
+    if all_items:
+        print_generic_table(all_items, title=f"종목 리스트 ({len(all_items)}개)")
+    else:
+        click.echo("검색 결과가 없습니다.")
 
 
 @stock.command("list")
