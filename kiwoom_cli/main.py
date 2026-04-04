@@ -147,9 +147,28 @@ def auth_cmd():
     pass
 
 
+def _verify_system_password() -> bool:
+    """Verify macOS login password before accessing credentials."""
+    import os
+    import subprocess
+    import sys as _sys
+    if _sys.platform != "darwin":
+        return True
+    password = click.prompt("시스템 비밀번호", hide_input=True)
+    user = os.environ.get("USER") or os.getlogin()
+    result = subprocess.run(
+        ["dscl", "/Local/Default", "-authonly", user, password],
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
 @auth_cmd.command("login")
 def auth_login():
-    """접근토큰 발급."""
+    """접근토큰 발급 (시스템 비밀번호 확인 후 키체인에서 인증정보 사용)."""
+    if not _verify_system_password():
+        console.print("[red]비밀번호가 일치하지 않습니다.[/]")
+        raise SystemExit(1)
     with KiwoomClient() as c:
         try:
             token = c.issue_token()
