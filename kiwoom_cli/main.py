@@ -183,11 +183,13 @@ def config_profiles():
     if not profiles:
         console.print("[yellow]등록된 프로필이 없습니다.[/]")
         return
+    console.print(f"  현재 프로필: [bold green]{default}[/]")
+    console.print()
     for name, settings in profiles.items():
-        marker = " [green](기본)[/]" if name == default else ""
+        marker = " [green]*[/]" if name == default else "  "
         domain = settings.get("domain", "mock")
-        account = settings.get("account", "(미설정)")
-        console.print(f"  {name}{marker}  도메인={domain}  계좌={account}")
+        account = settings.get("account", "") or "(미설정)"
+        console.print(f"  {marker} {name:15s} 도메인={domain:5s} 계좌={account}")
 
 
 # ── Auth ──────────────────────────────────────────────
