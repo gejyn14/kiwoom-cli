@@ -26,6 +26,7 @@ import tomli_w
 
 CONFIG_DIR = Path.home() / ".kiwoom"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
+CACHE_DIR = CONFIG_DIR / "cache"
 
 DOMAINS = {
     "prod": "https://api.kiwoom.com",
@@ -40,6 +41,10 @@ DEFAULT_CONFIG = {
 
 def ensure_config_dir() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_cache_dir() -> None:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def load_config() -> dict:

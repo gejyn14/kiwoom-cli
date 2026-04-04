@@ -202,6 +202,39 @@ def search(keyword: str | None, mrkt_tp: str):
             print_generic_table(data, title="종목 리스트")
 
 
+@stock.command("list")
+@click.option(
+    "--market", "-m",
+    type=click.Choice(["all", "kospi", "kosdaq", "konex"], case_sensitive=False),
+    default="all",
+    help="시장구분 (all/kospi/kosdaq/konex)",
+)
+@click.option("--search", "-s", default=None, help="종목명/코드 검색 키워드")
+@click.option("--refresh", is_flag=True, help="캐시 무시하고 새로 조회")
+def list_stocks(market: str, search: str | None, refresh: bool):
+    """KRX 전체 상장종목 리스트 (pykrx)."""
+    from ..krx_data import get_stock_list
+    from ..output import err_console
+
+    with err_console.status("[dim]종목 리스트 조회 중...[/]", spinner="dots"):
+        items = get_stock_list(market.upper(), refresh=refresh)
+
+    if search:
+        kw = search.lower()
+        items = [
+            i for i in items
+            if kw in i["stk_nm"].lower() or kw in i["stk_cd"].lower()
+        ]
+
+    fmt = _get_format()
+    if fmt == "json":
+        _output_json({"stocks": items, "total": len(items)})
+    elif fmt == "csv":
+        _output_csv(items)
+    else:
+        print_generic_table(items, title=f"상장종목 ({len(items)}개)")
+
+
 @stock.command("brokers")
 def brokers():
     """회원사(증권사) 리스트 조회. (ka10102)"""

@@ -84,6 +84,8 @@ kiwoom stock foreign 005930           # 외국인 매매동향
 kiwoom stock institution 005930       # 기관 매매동향
 kiwoom stock short 005930 --from 20260101 --to 20260330  # 공매도 추이
 kiwoom stock search --market kospi     # 코스피 종목 리스트
+kiwoom stock list                      # KRX 전체 상장종목 (pykrx)
+kiwoom stock list --market kospi --search "삼성"  # 삼성 계열사 검색
 kiwoom stock watchlist "005930|000660" # 관심종목
 ```
 
@@ -134,6 +136,7 @@ kiwoom stock credit trend 005930 --date 20260301 --type loan
 | `institution`    | 기관 매매동향                                         |
 | `short`          | 공매도 추이                                           |
 | `search`         | 종목 리스트/검색                                      |
+| `list`           | KRX 전체 상장종목 (pykrx, 캐시, 검색)                 |
 | `watchlist`      | 관심종목                                              |
 | `brokers`        | 회원사 리스트                                         |
 | `chart *`        | 틱/분봉/일봉/주봉/월봉/년봉, 투자자별 차트            |
@@ -388,6 +391,7 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 | --------------- | ---------------------------- |
 | 설정 파일       | `~/.kiwoom/config.toml`      |
 | 토큰 파일       | `~/.kiwoom/token`            |
+| 캐시 디렉터리   | `~/.kiwoom/cache/`           |
 | 운영 도메인     | `https://api.kiwoom.com`     |
 | 모의투자 도메인 | `https://mockapi.kiwoom.com` |
 | WebSocket       | `wss://api.kiwoom.com:10000` |
