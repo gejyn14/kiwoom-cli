@@ -17,13 +17,13 @@ pip install kiwoom-cli
 ## 시작하기
 
 ```bash
-# 1. 초기 설정 (키움 Open API에서 발급받은 appkey, secretkey 입력)
+# 1. 초기 설정 (appkey, secretkey 입력 + 암호화 비밀번호 설정)
 kiwoom config setup
 
-# 2. 토큰 발급
+# 2. 토큰 발급 (비밀번호 확인 후 발급)
 kiwoom auth login
 
-# 3. 사용
+# 3. 사용 (토큰 발급 후에는 비밀번호 불필요)
 kiwoom stock info 005930
 ```
 
@@ -389,8 +389,11 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 
 | 항목            | 값                           |
 | --------------- | ---------------------------- |
-| 설정 파일       | `~/.kiwoom/config.toml`      |
-| 토큰 파일       | `~/.kiwoom/token`            |
+| 항목            | 값                           |
+| --------------- | ---------------------------- |
+| 설정 파일       | `~/.kiwoom/config.toml` (도메인, 계좌만) |
+| appkey/secretkey | OS 키체인 (암호화 저장)      |
+| 토큰            | OS 키체인                     |
 | 캐시 디렉터리   | `~/.kiwoom/cache/`           |
 | 운영 도메인     | `https://api.kiwoom.com`     |
 | 모의투자 도메인 | `https://mockapi.kiwoom.com` |
@@ -401,6 +404,21 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 - 연속조회(페이지네이션) 자동 처리
 - 종목코드 6자리: `005930` (삼성전자)
 - 금현물: `M04020000` (1kg), `M04020100` (미니 100g)
+
+## 보안
+
+인증정보(appkey, secretkey)는 **OS 키체인에 암호화되어 저장**됩니다. 파일로 존재하지 않으며, 비밀번호 없이는 복호화할 수 없습니다.
+
+| 항목 | 저장 방식 | 비밀번호 필요 |
+|------|----------|:---:|
+| appkey / secretkey | 암호화 + OS 키체인 | O (`config setup`, `auth login` 시) |
+| 토큰 | OS 키체인 (평문) | X (만료되는 값) |
+| config.toml | 도메인, 계좌번호만 | X |
+
+- `config setup` 시 설정한 비밀번호로 appkey/secretkey를 암호화
+- `auth login/logout` 시 비밀번호 확인 후 키체인 접근
+- 토큰 발급 후 일반 명령어는 비밀번호 없이 사용
+- `keyring.get_password()`로 직접 접근해도 암호화된 값만 반환
 
 ## License
 
