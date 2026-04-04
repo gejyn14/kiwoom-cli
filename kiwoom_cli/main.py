@@ -148,17 +148,40 @@ def auth_cmd():
 
 
 def _verify_system_password() -> bool:
-    """Verify macOS login password before accessing credentials."""
+    """Verify OS login password before accessing credentials.
+
+    macOS: dscl, Windows: LogonUser, Linux: PAM (su fallback).
+    """
     import os
     import subprocess
     import sys as _sys
-    if _sys.platform != "darwin":
-        return True
     password = click.prompt("시스템 비밀번호", hide_input=True)
     user = os.environ.get("USER") or os.getlogin()
+    if _sys.platform == "darwin":
+        result = subprocess.run(
+            ["dscl", "/Local/Default", "-authonly", user, password],
+            capture_output=True,
+        )
+        return result.returncode == 0
+    if _sys.platform == "win32":
+        import ctypes
+        advapi32 = ctypes.windll.advapi32  # type: ignore[attr-defined]
+        handle = ctypes.c_void_p()
+        ok = advapi32.LogonUserW(
+            user, None, password,
+            2,  # LOGON32_LOGON_INTERACTIVE
+            0,  # LOGON32_PROVIDER_DEFAULT
+            ctypes.byref(handle),
+        )
+        if ok:
+            ctypes.windll.kernel32.CloseHandle(handle)  # type: ignore[attr-defined]
+        return bool(ok)
+    # Linux: use PAM via su
     result = subprocess.run(
-        ["dscl", "/Local/Default", "-authonly", user, password],
+        ["su", user, "-c", "true"],
+        input=password + "\n",
         capture_output=True,
+        text=True,
     )
     return result.returncode == 0
 
