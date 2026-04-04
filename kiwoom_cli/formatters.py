@@ -369,6 +369,7 @@ _FIELD_LABELS: dict[str, str] = {
     "flu_rt": "등락율", "flu_sig": "등락기호", "pre_rt": "대비율",
     "pred_rt": "전일비", "stk_cnd": "종목조건", "stk_cls": "종목분류",
     "stk_infr": "종목정보", "state": "종목상태", "rank": "순위",
+    "market": "시장", "type": "종류",
     # 가격
     "open_pric": "시가", "high_pric": "고가", "low_pric": "저가",
     "close_pric": "종가", "base_pric": "기준가", "upl_pric": "상한가",
