@@ -188,7 +188,9 @@ def config_profiles():
     for name, settings in profiles.items():
         marker = " [green]*[/]" if name == default else "  "
         domain = settings.get("domain", "mock")
-        console.print(f"  {marker} {name:15s} 도메인={domain}")
+        account = settings.get("account", "")
+        account_str = f"  계좌={account}" if account else ""
+        console.print(f"  {marker} {name:15s} 도메인={domain}{account_str}")
 
 
 # ── Auth ──────────────────────────────────────────────
