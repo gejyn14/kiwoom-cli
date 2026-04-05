@@ -89,3 +89,17 @@ def test_request_all_paginates(mock_client):
     assert len(results) == 2
     assert results[0]["page"] == 1
     assert results[1]["page"] == 2
+
+
+def test_request_all_respects_max_pages(mock_client):
+    client, httpx_mock = mock_client
+    for i in range(2):
+        httpx_mock.add_response(
+            url="https://mock.test/api/dostk/stkinfo",
+            json={"page": i, "return_code": 0},
+            headers={"cont-yn": "Y", "next-key": f"key{i+1}"},
+        )
+    results = client.request_all("ka10001", {"stk_cd": "005930"}, max_pages=2)
+    assert len(results) == 2
+    assert results[0]["page"] == 0
+    assert results[1]["page"] == 1
