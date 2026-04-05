@@ -103,3 +103,15 @@ def test_request_all_respects_max_pages(mock_client):
     assert len(results) == 2
     assert results[0]["page"] == 0
     assert results[1]["page"] == 1
+
+
+def test_client_init_loads_from_config_and_auth(monkeypatch):
+    from kiwoom_cli import client as client_mod
+    monkeypatch.setattr(client_mod.config, "get_domain", lambda profile=None: "https://mock.test")
+    monkeypatch.setattr(client_mod.auth, "load_token", lambda profile=None: "stored-token")
+    c = client_mod.KiwoomClient()
+    try:
+        assert c.domain == "https://mock.test"
+        assert c.token == "stored-token"
+    finally:
+        c.close()
