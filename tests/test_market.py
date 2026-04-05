@@ -16,6 +16,7 @@ from kiwoom_cli.commands._constants import (
     EXCHANGE_TWO,
     MARKET_ALL,
     MARKET_KOSPI_KOSDAQ,
+    MARKET_TWO,
 )
 from kiwoom_cli.main import cli
 from tests.fakes import FakeKiwoomClient
@@ -86,6 +87,19 @@ def test_rank_volume_exchange_enum_parametrized(
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["stex_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(MARKET_TWO.items()))
+def test_rank_orderbook_top_market_two_enum(
+    runner, fake_client, cli_value, api_value
+):
+    """Each MARKET_TWO key maps to correct API value in mrkt_tp field."""
+    result = runner.invoke(
+        cli, ["market", "rank", "orderbook-top", "--market", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mrkt_tp"] == api_value
 
 
 # ============================================================
