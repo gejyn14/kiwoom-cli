@@ -14,6 +14,7 @@ from ..formatters import (
     print_generic_table,
     print_pending_orders,
 )
+from ._constants import MARKET_ZERO_BASED
 
 
 def _today() -> str:
@@ -97,11 +98,11 @@ def returns():
 
 
 @returns.command("summary")
-@click.option("--exchange", "stex", default="0", type=click.Choice(["0", "1", "2"]), help="거래소구분 (0=통합, 1=KRX, 2=NXT)")
+@click.option("--exchange", "stex", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="거래소구분")
 def returns_summary(stex: str):
     """계좌 수익률 조회. (ka10085)"""
     with KiwoomClient() as c:
-        data, _ = c.request("ka10085", {"stex_tp": stex})
+        data, _ = c.request("ka10085", {"stex_tp": MARKET_ZERO_BASED[stex]})
         print_generic_table(data, title="계좌 수익률")
 
 
@@ -206,14 +207,14 @@ def orders():
 @click.option("--all-stocks", "all_stk_tp", default="0", type=click.Choice(["0", "1"]), help="전체종목구분 (0=전체, 1=종목)")
 @click.option("--trade", "trde_tp", default="0", type=click.Choice(["0", "1", "2"]), help="매매구분 (0=전체, 1=매도, 2=매수)")
 @click.option("--code", "stk_cd", default="", help="종목코드 (미입력시 전체)")
-@click.option("--exchange", "stex_tp", default="0", type=click.Choice(["0", "1", "2"]), help="거래소구분 (0=통합, 1=KRX, 2=NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="거래소구분")
 def orders_pending(all_stk_tp: str, trde_tp: str, stk_cd: str, stex_tp: str):
     """미체결 주문 조회. (ka10075)"""
     with KiwoomClient() as c:
         body: dict = {
             "all_stk_tp": all_stk_tp,
             "trde_tp": trde_tp,
-            "stex_tp": stex_tp,
+            "stex_tp": MARKET_ZERO_BASED[stex_tp],
         }
         if stk_cd:
             body["stk_cd"] = stk_cd
@@ -230,14 +231,14 @@ def orders_pending(all_stk_tp: str, trde_tp: str, stk_cd: str, stex_tp: str):
 @click.option("--qry-type", "qry_tp", default="0", type=click.Choice(["0", "1"]), help="조회구분 (0=전체, 1=종목)")
 @click.option("--side", "sell_tp", default="0", type=click.Choice(["0", "1", "2"]), help="매도수구분 (0=전체, 1=매도, 2=매수)")
 @click.option("--order-no", "ord_no", default="", help="주문번호")
-@click.option("--exchange", "stex_tp", default="0", type=click.Choice(["0", "1", "2"]), help="거래소구분 (0=통합, 1=KRX, 2=NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="거래소구분")
 def orders_executed(stk_cd: str, qry_tp: str, sell_tp: str, ord_no: str, stex_tp: str):
     """체결 내역 조회. (ka10076)"""
     with KiwoomClient() as c:
         body: dict = {
             "qry_tp": qry_tp,
             "sell_tp": sell_tp,
-            "stex_tp": stex_tp,
+            "stex_tp": MARKET_ZERO_BASED[stex_tp],
         }
         if stk_cd:
             body["stk_cd"] = stk_cd
