@@ -14,7 +14,7 @@ from ..formatters import (
     print_generic_table,
     print_pending_orders,
 )
-from ._constants import MARKET_ZERO_BASED
+from ._constants import EXCHANGE_ALL_ZERO
 
 
 def _today() -> str:
@@ -102,7 +102,7 @@ def returns():
 def returns_summary(stex: str):
     """계좌 수익률 조회. (ka10085)"""
     with KiwoomClient() as c:
-        data, _ = c.request("ka10085", {"stex_tp": MARKET_ZERO_BASED[stex]})
+        data, _ = c.request("ka10085", {"stex_tp": EXCHANGE_ALL_ZERO[stex]})
         print_generic_table(data, title="계좌 수익률")
 
 
@@ -214,7 +214,7 @@ def orders_pending(all_stk_tp: str, trde_tp: str, stk_cd: str, stex_tp: str):
         body: dict = {
             "all_stk_tp": all_stk_tp,
             "trde_tp": trde_tp,
-            "stex_tp": MARKET_ZERO_BASED[stex_tp],
+            "stex_tp": EXCHANGE_ALL_ZERO[stex_tp],
         }
         if stk_cd:
             body["stk_cd"] = stk_cd
@@ -238,7 +238,7 @@ def orders_executed(stk_cd: str, qry_tp: str, sell_tp: str, ord_no: str, stex_tp
         body: dict = {
             "qry_tp": qry_tp,
             "sell_tp": sell_tp,
-            "stex_tp": MARKET_ZERO_BASED[stex_tp],
+            "stex_tp": EXCHANGE_ALL_ZERO[stex_tp],
         }
         if stk_cd:
             body["stk_cd"] = stk_cd
