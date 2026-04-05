@@ -13,10 +13,21 @@ pip install -e ".[dev]"
 ## Development Workflow
 
 1. `main` 브랜치에서 새 브랜치 생성: `git checkout -b feature/my-feature`
-2. 코드 작성
-3. 테스트 실행: `pytest tests/ -v`
-4. 린트 확인: `ruff check kiwoom_cli/`
-5. 커밋 후 PR 생성
+2. **설계 필요 시**: `kiwoom-feature-planner` subagent가 자동 호출되어 요구사항 수집
+3. 코드 작성
+4. **자동 검사**: 커맨드 파일 변경 시 `kiwoom-convention-linter` 자동 실행
+5. 테스트 실행: `pytest tests/ -v`
+6. 린트 확인: `ruff check kiwoom_cli/`
+7. 커밋 후 PR 생성
+
+### Subagents
+
+프로젝트에는 2개의 자동 dispatch subagent가 있습니다:
+
+- **kiwoom-feature-planner**: 새 기능/명령어 요청 시 자동 호출 (설계 질문 → 플랜 생성)
+- **kiwoom-convention-linter**: `kiwoom_cli/commands/*.py` 수정 후 자동 호출 (4개 컨벤션 검사)
+
+자세한 내용은 `CLAUDE.md`의 Subagents 섹션 참고.
 
 ## Code Style
 
