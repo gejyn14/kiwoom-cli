@@ -115,3 +115,25 @@ def test_client_init_loads_from_config_and_auth(monkeypatch):
         assert c.token == "stored-token"
     finally:
         c.close()
+
+
+def test_issue_token_saves_and_returns(mock_client, monkeypatch):
+    client, httpx_mock = mock_client
+    from kiwoom_cli import client as client_mod
+    saved = {}
+    monkeypatch.setattr(
+        client_mod.auth, "save_token",
+        lambda t, profile=None: saved.update({"token": t, "profile": profile}),
+    )
+    httpx_mock.add_response(
+        url="https://mock.test/oauth2/token",
+        json={"token": "new-token-xyz", "return_code": 0},
+    )
+    token = client.issue_token(appkey="ak123", secretkey="sk456")
+    assert token == "new-token-xyz"
+    assert client.token == "new-token-xyz"
+    assert saved["token"] == "new-token-xyz"
+    req = httpx_mock.get_request()
+    body = req.content.decode()
+    assert "ak123" in body and "sk456" in body
+    assert "client_credentials" in body
