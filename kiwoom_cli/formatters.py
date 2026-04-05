@@ -84,7 +84,7 @@ def _fmt_number(value: str, strip_sign: bool = False) -> str:
         try:
             return sign + f"{float(v):,.2f}"
         except ValueError:
-            return value
+            return v if strip_sign else value
 
 
 # Fields where +/- is a direction indicator, not the actual sign.

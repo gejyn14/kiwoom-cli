@@ -29,6 +29,14 @@ def test_fmt_number_small():
     assert _fmt_number("42") == "42"
 
 
+def test_fmt_number_strip_sign_on_fallback():
+    """_fmt_number strips the sign even when input can't be parsed numerically."""
+    assert _fmt_number("+abc", strip_sign=True) == "abc"
+    assert _fmt_number("-abc", strip_sign=True) == "abc"
+    # Without strip_sign, the original value is returned unchanged
+    assert _fmt_number("+abc") == "+abc"
+
+
 def test_sign_color_positive():
     assert _sign_color("+100") == "red"
     assert _sign_color("+0.5") == "red"
