@@ -144,29 +144,7 @@ def test_api_error_handling(runner):
         assert "오류" in result.output
 
 
-# Test order --confirm behavior
-@patch("kiwoom_cli.commands.order.KiwoomClient")
-def test_order_buy_without_confirm_prompts(mock_cls, runner):
-    """Order without --confirm should prompt for confirmation."""
-    mock_client = MagicMock()
-    mock_client.__enter__ = lambda s: s
-    mock_client.__exit__ = MagicMock(return_value=False)
-    mock_cls.return_value = mock_client
-    # Without --confirm, answering 'n' should abort
-    result = runner.invoke(cli, ["order", "buy", "005930", "10", "--type", "market"], input="n\n")
-    assert result.exit_code != 0 or "Aborted" in result.output
-
-
-@patch("kiwoom_cli.commands.order.KiwoomClient")
-def test_order_buy_with_confirm_skips_prompt(mock_cls, runner):
-    """Order with --confirm should skip prompt."""
-    mock_client = MagicMock()
-    mock_client.request.return_value = ({"return_code": 0, "ord_no": "001", "return_msg": "OK"}, {})
-    mock_client.__enter__ = lambda s: s
-    mock_client.__exit__ = MagicMock(return_value=False)
-    mock_cls.return_value = mock_client
-    result = runner.invoke(cli, ["order", "buy", "005930", "10", "--type", "market", "--confirm"])
-    assert result.exit_code == 0
+# Note: Order command tests moved to tests/test_order.py for strict coverage.
 
 
 def test_config_profiles_command(runner):

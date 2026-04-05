@@ -1,12 +1,8 @@
 """Tests for formatters."""
 
 import json
-import sys
-from io import StringIO
-from unittest.mock import patch
 
 import click
-import pytest
 
 from kiwoom_cli.formatters import (
     _fmt_number,
@@ -85,7 +81,7 @@ class TestGenericTableCsv:
         with _make_ctx("csv"):
             print_generic_table(data, title="test")
         out = capsys.readouterr().out
-        lines = [l.rstrip("\r") for l in out.strip().split("\n")]
+        lines = [line.rstrip("\r") for line in out.strip().split("\n")]
         assert lines[0] == "a,b"
         assert lines[1] == "1,2"
         assert lines[2] == "3,4"

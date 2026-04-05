@@ -1,6 +1,5 @@
 """Tests for KiwoomClient."""
 
-import json
 
 import httpx
 import pytest

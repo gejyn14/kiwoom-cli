@@ -30,4 +30,4 @@ jobs:
         run: ruff check kiwoom_cli/
 
       - name: Test
-        run: pytest tests/ -v
+        run: pytest tests/ -v --cov=kiwoom_cli --cov-report=term-missing

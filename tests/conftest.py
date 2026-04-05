@@ -5,6 +5,7 @@ where no system keyring is available.
 """
 
 import keyring
+import pytest
 from keyring.backend import KeyringBackend
 
 
@@ -27,3 +28,15 @@ class InMemoryKeyring(KeyringBackend):
 
 # Set as default backend before any test runs
 keyring.set_keyring(InMemoryKeyring())
+
+
+@pytest.fixture(autouse=True)
+def keyring_reset():
+    """Clear InMemoryKeyring state before and after each test.
+
+    InMemoryKeyring._data is class-level and persists across tests.
+    This fixture prevents state bleed between tests.
+    """
+    InMemoryKeyring._data.clear()
+    yield
+    InMemoryKeyring._data.clear()
