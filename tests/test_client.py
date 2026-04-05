@@ -4,6 +4,7 @@
 import httpx
 import pytest
 
+from kiwoom_cli import client as client_mod
 from kiwoom_cli.client import KiwoomClient, KiwoomAPIError
 
 
@@ -106,7 +107,6 @@ def test_request_all_respects_max_pages(mock_client):
 
 
 def test_client_init_loads_from_config_and_auth(monkeypatch):
-    from kiwoom_cli import client as client_mod
     monkeypatch.setattr(client_mod.config, "get_domain", lambda profile=None: "https://mock.test")
     monkeypatch.setattr(client_mod.auth, "load_token", lambda profile=None: "stored-token")
     c = client_mod.KiwoomClient()
@@ -119,7 +119,6 @@ def test_client_init_loads_from_config_and_auth(monkeypatch):
 
 def test_issue_token_saves_and_returns(mock_client, monkeypatch):
     client, httpx_mock = mock_client
-    from kiwoom_cli import client as client_mod
     saved = {}
     monkeypatch.setattr(
         client_mod.auth, "save_token",
@@ -141,7 +140,6 @@ def test_issue_token_saves_and_returns(mock_client, monkeypatch):
 
 def test_revoke_token_clears_state(mock_client, monkeypatch):
     client, httpx_mock = mock_client
-    from kiwoom_cli import client as client_mod
     monkeypatch.setattr(client_mod.config, "get_appkey", lambda profile=None: "ak123")
     monkeypatch.setattr(client_mod.config, "get_secretkey", lambda profile=None: "sk456")
     deleted = {}
@@ -156,3 +154,4 @@ def test_revoke_token_clears_state(mock_client, monkeypatch):
     client.revoke_token()
     assert client.token is None
     assert deleted["called"] is True
+    assert deleted["profile"] is None
