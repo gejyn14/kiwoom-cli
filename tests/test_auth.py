@@ -17,3 +17,14 @@ def test_load_token_returns_stored_value():
 
 def test_load_token_returns_none_when_missing():
     assert auth.load_token(profile="nonexistent") is None
+
+
+def test_delete_token_removes_stored_value():
+    auth.save_token("to-delete", profile="test-profile")
+    assert auth.load_token(profile="test-profile") == "to-delete"
+    auth.delete_token(profile="test-profile")
+    assert auth.load_token(profile="test-profile") is None
+
+
+def test_delete_token_missing_key_is_noop():
+    auth.delete_token(profile="never-existed")  # must not raise
