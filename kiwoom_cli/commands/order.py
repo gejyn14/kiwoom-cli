@@ -67,6 +67,38 @@ def _show_order_preview(action: str, code: str, qty: int, price: int, order_type
     ))
 
 
+def _show_modify_preview(action: str, orig_ord_no: str, code: str, qty: int, price: int, stex: str | None = None) -> None:
+    lines = [
+        f"  원주문번호: {orig_ord_no}",
+        f"  종목코드: {code}",
+        f"  수량: {qty:,}",
+        f"  가격: {price:,}원",
+    ]
+    if stex is not None:
+        lines.append(f"  거래소: {stex}")
+    console.print(Panel(
+        f"[bold]{action} 주문[/]\n\n" + "\n".join(lines),
+        title="주문 확인",
+        border_style="yellow",
+    ))
+
+
+def _show_cancel_preview(action: str, orig_ord_no: str, code: str, qty: int, stex: str | None = None) -> None:
+    qty_str = f"{qty:,}" if qty else "전량"
+    lines = [
+        f"  원주문번호: {orig_ord_no}",
+        f"  종목코드: {code}",
+        f"  수량: {qty_str}",
+    ]
+    if stex is not None:
+        lines.append(f"  거래소: {stex}")
+    console.print(Panel(
+        f"[bold]{action} 주문[/]\n\n" + "\n".join(lines),
+        title="주문 확인",
+        border_style="yellow",
+    ))
+
+
 # ════════════════════════════════════════════════════════
 #  Top-level order group
 # ════════════════════════════════════════════════════════
@@ -157,7 +189,7 @@ def modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, mdfy_
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    console.print(f"[yellow]정정 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty} 가격={price:,}")
+    _show_modify_preview("정정", orig_order_no, code, qty, price, stex)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10002", {
@@ -185,7 +217,7 @@ def cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: bool):
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    console.print(f"[yellow]취소 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty or '전량'}")
+    _show_cancel_preview("취소", orig_order_no, code, qty, stex)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10003", {
@@ -283,7 +315,7 @@ def credit_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    console.print(f"[yellow]신용 정정 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty} 가격={price:,}")
+    _show_modify_preview("신용 정정", orig_order_no, code, qty, price, stex)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10008", {
@@ -311,7 +343,7 @@ def credit_cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: b
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    console.print(f"[yellow]신용 취소 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty or '전량'}")
+    _show_cancel_preview("신용 취소", orig_order_no, code, qty, stex)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10009", {
@@ -399,7 +431,7 @@ def gold_modify(orig_order_no: str, code: str, qty: int, price: int, confirm: bo
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    console.print(f"[yellow]금현물 정정 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty} 가격={price:,}")
+    _show_modify_preview("금현물 정정", orig_order_no, code, qty, price)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt50002", {
@@ -424,7 +456,7 @@ def gold_cancel(orig_order_no: str, code: str, qty: int, confirm: bool):
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    console.print(f"[yellow]금현물 취소 주문:[/] 원주문번호={orig_order_no} 종목={code} 수량={qty or '전량'}")
+    _show_cancel_preview("금현물 취소", orig_order_no, code, qty)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt50003", {
