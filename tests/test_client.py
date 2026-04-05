@@ -137,3 +137,22 @@ def test_issue_token_saves_and_returns(mock_client, monkeypatch):
     body = req.content.decode()
     assert "ak123" in body and "sk456" in body
     assert "client_credentials" in body
+
+
+def test_revoke_token_clears_state(mock_client, monkeypatch):
+    client, httpx_mock = mock_client
+    from kiwoom_cli import client as client_mod
+    monkeypatch.setattr(client_mod.config, "get_appkey", lambda profile=None: "ak123")
+    monkeypatch.setattr(client_mod.config, "get_secretkey", lambda profile=None: "sk456")
+    deleted = {}
+    monkeypatch.setattr(
+        client_mod.auth, "delete_token",
+        lambda profile=None: deleted.update({"called": True, "profile": profile}),
+    )
+    httpx_mock.add_response(
+        url="https://mock.test/oauth2/revoke",
+        json={"return_code": 0},
+    )
+    client.revoke_token()
+    assert client.token is None
+    assert deleted["called"] is True
