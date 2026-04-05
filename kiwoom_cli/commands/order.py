@@ -49,15 +49,19 @@ def _order_type_help() -> str:
     return "주문유형:\n" + "\n".join(lines)
 
 
-def _show_order_preview(action: str, code: str, qty: int, price: int, order_type: str, stex: str) -> None:
+def _show_order_preview(action: str, code: str, qty: int, price: int, order_type: str, stex: str | None = None) -> None:
     price_str = f"{price:,}원" if price else "시장가"
-    console.print(Panel(
+    body = (
         f"[bold]{action} 주문[/]\n\n"
         f"  종목코드: {code}\n"
         f"  수량: {qty:,}\n"
         f"  가격: {price_str}\n"
-        f"  유형: {order_type}\n"
-        f"  거래소: {stex}",
+        f"  유형: {order_type}"
+    )
+    if stex is not None:
+        body += f"\n  거래소: {stex}"
+    console.print(Panel(
+        body,
         title="주문 확인",
         border_style="yellow",
     ))
@@ -343,7 +347,7 @@ def gold_buy(code: str, qty: int, price: int, order_type: str, confirm: bool):
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_order_preview("금현물 매수", code, qty, price, order_type, "-")
+    _show_order_preview("금현물 매수", code, qty, price, order_type)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt50000", {
@@ -369,7 +373,7 @@ def gold_sell(code: str, qty: int, price: int, order_type: str, confirm: bool):
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_order_preview("금현물 매도", code, qty, price, order_type, "-")
+    _show_order_preview("금현물 매도", code, qty, price, order_type)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt50001", {
