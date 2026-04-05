@@ -12,7 +12,11 @@ from __future__ import annotations
 import pytest
 from click.testing import CliRunner
 
-from kiwoom_cli.commands._constants import EXCHANGE_TWO, MARKET_ALL
+from kiwoom_cli.commands._constants import (
+    EXCHANGE_TWO,
+    MARKET_ALL,
+    MARKET_KOSPI_KOSDAQ,
+)
 from kiwoom_cli.main import cli
 from tests.fakes import FakeKiwoomClient
 
@@ -107,3 +111,18 @@ def test_sector_chart_tick(runner, fake_client):
     assert fake_client.calls == [
         ("ka20004", {"inds_cd": "001", "tic_scope": "1"})
     ]
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value", list(MARKET_KOSPI_KOSDAQ.items())
+)
+def test_sector_investor_market_kospi_kosdaq_enum(
+    runner, fake_client, cli_value, api_value
+):
+    """Each MARKET_KOSPI_KOSDAQ key maps to correct API value in mrkt_tp field."""
+    result = runner.invoke(
+        cli, ["market", "sector", "investor", "--market", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mrkt_tp"] == api_value
