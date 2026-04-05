@@ -59,8 +59,7 @@ def test_price_echoes_name_and_cur_prc(runner, fake_client):
     result = runner.invoke(cli, ["stock", "price", "005930"])
 
     assert result.exit_code == 0
-    assert "삼성전자" in result.output
-    assert "70000" in result.output
+    assert "삼성전자 (005930): 70000원 (+500, +0.71%)" in result.output
 
 
 def test_orderbook_sends_to_ka10004(runner, fake_client):
@@ -144,3 +143,4 @@ def test_analysis_volume_renewal_market_enum(
     assert result.exit_code == 0
     assert fake_client.calls[0][0] == "ka10024"
     assert fake_client.calls[0][1]["mrkt_tp"] == api_value
+    assert fake_client.calls[0][1]["stex_tp"] == "3"  # EXCHANGE_ALL["all"] default

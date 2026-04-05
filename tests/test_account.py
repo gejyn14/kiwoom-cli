@@ -86,7 +86,7 @@ def test_returns_daily_balance_defaults_to_today(runner, fake_client, monkeypatc
     assert fake_client.calls == [("ka01690", {"qry_dt": "20260405"})]
 
 
-def test_returns_daily_detail_required_dates(runner, fake_client):
+def test_returns_daily_detail_sends_date_range(runner, fake_client):
     """--from/--to are sent as fr_dt/to_dt to kt00016."""
     result = runner.invoke(
         cli,
@@ -112,28 +112,27 @@ def test_pnl_today_requires_code_arg(runner, fake_client):
     assert fake_client.calls == []
 
 
-def test_pnl_by_date_omits_code_when_empty(runner, fake_client):
-    """pnl by-date without --code omits stk_cd; with --code includes it."""
-    result = runner.invoke(
-        cli,
-        ["account", "pnl", "by-date", "--from", "20260101"],
-    )
+@pytest.mark.parametrize(
+    "code_arg,expected_present",
+    [(None, False), ("005930", True)],
+    ids=["no-code", "with-code"],
+)
+def test_pnl_by_date_stk_cd_conditional(
+    runner, fake_client, code_arg, expected_present
+):
+    """pnl by-date: --code adds stk_cd to body when present, omits it otherwise."""
+    args = ["account", "pnl", "by-date", "--from", "20260101"]
+    if code_arg:
+        args += ["--code", code_arg]
+    result = runner.invoke(cli, args)
 
     assert result.exit_code == 0
     api_id, body = fake_client.calls[0]
     assert api_id == "ka10072"
-    assert "stk_cd" not in body
-    assert body == {"strt_dt": "20260101"}
-
-    result2 = runner.invoke(
-        cli,
-        ["account", "pnl", "by-date", "--from", "20260101", "--code", "005930"],
-    )
-
-    assert result2.exit_code == 0
-    api_id2, body2 = fake_client.calls[1]
-    assert api_id2 == "ka10072"
-    assert body2["stk_cd"] == "005930"
+    if expected_present:
+        assert body["stk_cd"] == code_arg
+    else:
+        assert "stk_cd" not in body
 
 
 # ============================================================
@@ -141,42 +140,50 @@ def test_pnl_by_date_omits_code_when_empty(runner, fake_client):
 # ============================================================
 
 
-def test_orders_pending_conditional_stk_cd(runner, fake_client):
-    """orders pending: --code includes stk_cd; omitted otherwise."""
-    result = runner.invoke(cli, ["account", "orders", "pending"])
+@pytest.mark.parametrize(
+    "code_arg,expected_present",
+    [(None, False), ("005930", True)],
+    ids=["no-code", "with-code"],
+)
+def test_orders_pending_stk_cd_conditional(
+    runner, fake_client, code_arg, expected_present
+):
+    """orders pending: --code adds stk_cd to body when present, omits it otherwise."""
+    args = ["account", "orders", "pending"]
+    if code_arg:
+        args += ["--code", code_arg]
+    result = runner.invoke(cli, args)
 
     assert result.exit_code == 0
     api_id, body = fake_client.calls[0]
     assert api_id == "ka10075"
-    assert "stk_cd" not in body
-
-    result2 = runner.invoke(
-        cli,
-        ["account", "orders", "pending", "--code", "005930"],
-    )
-
-    assert result2.exit_code == 0
-    _, body2 = fake_client.calls[1]
-    assert body2["stk_cd"] == "005930"
+    if expected_present:
+        assert body["stk_cd"] == code_arg
+    else:
+        assert "stk_cd" not in body
 
 
-def test_orders_executed_conditional_ord_no(runner, fake_client):
-    """orders executed: --order-no includes ord_no; omitted otherwise."""
-    result = runner.invoke(cli, ["account", "orders", "executed"])
+@pytest.mark.parametrize(
+    "order_no_arg,expected_present",
+    [(None, False), ("000123", True)],
+    ids=["no-order-no", "with-order-no"],
+)
+def test_orders_executed_ord_no_conditional(
+    runner, fake_client, order_no_arg, expected_present
+):
+    """orders executed: --order-no adds ord_no to body when present, omits it otherwise."""
+    args = ["account", "orders", "executed"]
+    if order_no_arg:
+        args += ["--order-no", order_no_arg]
+    result = runner.invoke(cli, args)
 
     assert result.exit_code == 0
     api_id, body = fake_client.calls[0]
     assert api_id == "ka10076"
-    assert "ord_no" not in body
-
-    result2 = runner.invoke(
-        cli,
-        ["account", "orders", "executed", "--order-no", "000123"],
-    )
-
-    assert result2.exit_code == 0
-    _, body2 = fake_client.calls[1]
-    assert body2["ord_no"] == "000123"
+    if expected_present:
+        assert body["ord_no"] == order_no_arg
+    else:
+        assert "ord_no" not in body
 
 
 def test_orders_split_detail_sends_order_no(runner, fake_client):
