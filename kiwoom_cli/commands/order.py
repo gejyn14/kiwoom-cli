@@ -334,9 +334,8 @@ def gold():
 @click.argument("qty", type=int)
 @click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def gold_buy(code: str, qty: int, price: int, order_type: str, stex: str, confirm: bool):
+def gold_buy(code: str, qty: int, price: int, order_type: str, confirm: bool):
     """금현물 매수주문 (kt50000).
 
     예: kiwoom order gold buy 730060 10 --type limit --price 90000 --confirm
@@ -344,11 +343,10 @@ def gold_buy(code: str, qty: int, price: int, order_type: str, stex: str, confir
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_order_preview("금현물 매수", code, qty, price, order_type, stex)
+    _show_order_preview("금현물 매수", code, qty, price, order_type, "-")
 
     with KiwoomClient() as c:
         data, _ = c.request("kt50000", {
-            "dmst_stex_tp": stex,
             "stk_cd": code,
             "ord_qty": str(qty),
             "ord_uv": str(price) if price else "",
@@ -362,9 +360,8 @@ def gold_buy(code: str, qty: int, price: int, order_type: str, stex: str, confir
 @click.argument("qty", type=int)
 @click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def gold_sell(code: str, qty: int, price: int, order_type: str, stex: str, confirm: bool):
+def gold_sell(code: str, qty: int, price: int, order_type: str, confirm: bool):
     """금현물 매도주문 (kt50001).
 
     예: kiwoom order gold sell 730060 10 --type market --confirm
@@ -372,11 +369,10 @@ def gold_sell(code: str, qty: int, price: int, order_type: str, stex: str, confi
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_order_preview("금현물 매도", code, qty, price, order_type, stex)
+    _show_order_preview("금현물 매도", code, qty, price, order_type, "-")
 
     with KiwoomClient() as c:
         data, _ = c.request("kt50001", {
-            "dmst_stex_tp": stex,
             "stk_cd": code,
             "ord_qty": str(qty),
             "ord_uv": str(price) if price else "",
@@ -390,9 +386,8 @@ def gold_sell(code: str, qty: int, price: int, order_type: str, stex: str, confi
 @click.argument("code")
 @click.argument("qty", type=int)
 @click.argument("price", type=int)
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def gold_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, confirm: bool):
+def gold_modify(orig_order_no: str, code: str, qty: int, price: int, confirm: bool):
     """금현물 정정주문 (kt50002).
 
     예: kiwoom order gold modify 0000139 730060 1 90000 --confirm
@@ -404,7 +399,6 @@ def gold_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, 
 
     with KiwoomClient() as c:
         data, _ = c.request("kt50002", {
-            "dmst_stex_tp": stex,
             "orig_ord_no": orig_order_no,
             "stk_cd": code,
             "mdfy_qty": str(qty),
@@ -417,9 +411,8 @@ def gold_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, 
 @click.argument("orig_order_no")
 @click.argument("code")
 @click.option("--qty", type=int, default=0, help="취소수량 (0=전량취소)")
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def gold_cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: bool):
+def gold_cancel(orig_order_no: str, code: str, qty: int, confirm: bool):
     """금현물 취소주문 (kt50003).
 
     예: kiwoom order gold cancel 0000140 730060 --confirm
@@ -431,7 +424,6 @@ def gold_cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: boo
 
     with KiwoomClient() as c:
         data, _ = c.request("kt50003", {
-            "dmst_stex_tp": stex,
             "orig_ord_no": orig_order_no,
             "stk_cd": code,
             "cncl_qty": str(qty),

@@ -256,7 +256,6 @@ def test_gold_buy_sends_to_kt50000_without_cond_uv(runner, fake_client):
         (
             "kt50000",
             {
-                "dmst_stex_tp": "KRX",
                 "stk_cd": "730060",
                 "ord_qty": "1",
                 "ord_uv": "90000",
