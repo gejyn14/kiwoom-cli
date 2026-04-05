@@ -44,12 +44,12 @@ def account_list():
 
 
 @account.command("balance")
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 구분")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 구분")
 @click.option("--delist", "qry_tp", default="0", type=click.Choice(["0", "1"]), help="상장폐지조회구분 (0=전체, 1=제외)")
-def balance(stex: str, qry_tp: str):
+def balance(dmst_stex_tp: str, qry_tp: str):
     """계좌 평가현황 (잔고, 보유종목, 손익). (kt00004)"""
     with KiwoomClient() as c:
-        data, _ = c.request("kt00004", {"qry_tp": qry_tp, "dmst_stex_tp": stex})
+        data, _ = c.request("kt00004", {"qry_tp": qry_tp, "dmst_stex_tp": dmst_stex_tp})
         print_account_eval(data)
 
 
