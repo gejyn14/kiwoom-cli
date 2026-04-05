@@ -58,7 +58,7 @@ def test_balance_exchange_enum_maps_to_api_value(runner, fake_client):
     "type_name,expected_qry_tp",
     [("estimate", "3"), ("normal", "2")],
 )
-def test_deposit_estimate_maps_to_qry_tp_3(
+def test_deposit_type_maps_to_qry_tp(
     runner, fake_client, type_name, expected_qry_tp
 ):
     """--type estimate -> qry_tp=3, --type normal -> qry_tp=2."""
