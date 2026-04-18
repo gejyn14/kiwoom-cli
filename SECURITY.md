@@ -9,10 +9,11 @@
 
 ## Security Architecture
 
-- **appkey/secretkey**: Fernet (AES-128-CBC + HMAC-SHA256) 암호화 후 OS 키체인 저장
-- **토큰**: OS 키체인 저장 (만료되는 값)
-- **config.toml**: 도메인, 계좌번호 등 비민감 정보만 저장
-- **주문**: 시스템 비밀번호 또는 Touch ID 인증 필요 (dangerous-mode off 시)
+- **appkey/secretkey**: SecureStore(Fernet AES-128-CBC + HMAC-SHA256)로 암호화 → `keyring` 라이브러리를 통해 OS 키체인(macOS Keychain, Windows Credential Locker, Linux SecretService)에 저장. 파일에 평문 없음
+- **토큰**: `keyring`에 평문 저장 (만료되는 값이므로 별도 암호화 불필요). 키 형식: `{profile}:token`
+- **비밀번호**: SecureStore 잠금 해제용. PBKDF2로 키 유도 후 Fernet 복호화에 사용. 저장되지 않음
+- **config.toml**: 도메인, 계좌번호, 프로필 설정 등 비민감 정보만 저장
+- **주문**: 시스템 인증 필수 (macOS: Touch ID, Windows: LogonUser, Linux: PAM). `dangerous-mode on` 시 비활성화
 
 ## Reporting a Vulnerability
 
