@@ -49,7 +49,7 @@ def _order_type_help() -> str:
     return "주문유형:\n" + "\n".join(lines)
 
 
-def _show_order_preview(action: str, code: str, qty: int, price: int, order_type: str, stex: str | None = None) -> None:
+def _show_order_preview(action: str, code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str | None = None) -> None:
     price_str = f"{price:,}원" if price else "시장가"
     body = (
         f"[bold]{action} 주문[/]\n\n"
@@ -58,8 +58,8 @@ def _show_order_preview(action: str, code: str, qty: int, price: int, order_type
         f"  가격: {price_str}\n"
         f"  유형: {order_type}"
     )
-    if stex is not None:
-        body += f"\n  거래소: {stex}"
+    if dmst_stex_tp is not None:
+        body += f"\n  거래소: {dmst_stex_tp}"
     console.print(Panel(
         body,
         title="주문 확인",
@@ -67,15 +67,15 @@ def _show_order_preview(action: str, code: str, qty: int, price: int, order_type
     ))
 
 
-def _show_modify_preview(action: str, orig_ord_no: str, code: str, qty: int, price: int, stex: str | None = None) -> None:
+def _show_modify_preview(action: str, orig_ord_no: str, code: str, qty: int, price: int, dmst_stex_tp: str | None = None) -> None:
     lines = [
         f"  원주문번호: {orig_ord_no}",
         f"  종목코드: {code}",
         f"  수량: {qty:,}",
         f"  가격: {price:,}원",
     ]
-    if stex is not None:
-        lines.append(f"  거래소: {stex}")
+    if dmst_stex_tp is not None:
+        lines.append(f"  거래소: {dmst_stex_tp}")
     console.print(Panel(
         f"[bold]{action} 주문[/]\n\n" + "\n".join(lines),
         title="주문 확인",
@@ -83,15 +83,15 @@ def _show_modify_preview(action: str, orig_ord_no: str, code: str, qty: int, pri
     ))
 
 
-def _show_cancel_preview(action: str, orig_ord_no: str, code: str, qty: int, stex: str | None = None) -> None:
+def _show_cancel_preview(action: str, orig_ord_no: str, code: str, qty: int, dmst_stex_tp: str | None = None) -> None:
     qty_str = f"{qty:,}" if qty else "전량"
     lines = [
         f"  원주문번호: {orig_ord_no}",
         f"  종목코드: {code}",
         f"  수량: {qty_str}",
     ]
-    if stex is not None:
-        lines.append(f"  거래소: {stex}")
+    if dmst_stex_tp is not None:
+        lines.append(f"  거래소: {dmst_stex_tp}")
     console.print(Panel(
         f"[bold]{action} 주문[/]\n\n" + "\n".join(lines),
         title="주문 확인",
@@ -118,10 +118,10 @@ def order():
 @click.argument("qty", type=int)
 @click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (스톱지정가 등)")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def buy(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: int, confirm: bool):
+def buy(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str, cond_uv: int, confirm: bool):
     """주식 매수주문 (kt10000).
 
     예: kiwoom order buy 005930 10 --price 70000 --type limit --confirm
@@ -129,11 +129,11 @@ def buy(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: in
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_order_preview("매수", code, qty, price, order_type, stex)
+    _show_order_preview("매수", code, qty, price, order_type, dmst_stex_tp)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10000", {
-            "dmst_stex_tp": stex,
+            "dmst_stex_tp": dmst_stex_tp,
             "stk_cd": code,
             "ord_qty": str(qty),
             "ord_uv": str(price) if price else "",
@@ -148,10 +148,10 @@ def buy(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: in
 @click.argument("qty", type=int)
 @click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (스톱지정가 등)")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def sell(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: int, confirm: bool):
+def sell(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str, cond_uv: int, confirm: bool):
     """주식 매도주문 (kt10001).
 
     예: kiwoom order sell 005930 10 --type market --confirm
@@ -159,11 +159,11 @@ def sell(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: i
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_order_preview("매도", code, qty, price, order_type, stex)
+    _show_order_preview("매도", code, qty, price, order_type, dmst_stex_tp)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10001", {
-            "dmst_stex_tp": stex,
+            "dmst_stex_tp": dmst_stex_tp,
             "stk_cd": code,
             "ord_qty": str(qty),
             "ord_uv": str(price) if price else "",
@@ -178,10 +178,10 @@ def sell(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: i
 @click.argument("code")
 @click.argument("qty", type=int)
 @click.argument("price", type=int)
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "mdfy_cond_uv", type=int, default=0, help="정정 조건부가격")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, mdfy_cond_uv: int, confirm: bool):
+def modify(orig_order_no: str, code: str, qty: int, price: int, dmst_stex_tp: str, mdfy_cond_uv: int, confirm: bool):
     """주식 정정주문 (kt10002).
 
     예: kiwoom order modify 0000139 005930 1 70000 --confirm
@@ -189,11 +189,11 @@ def modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, mdfy_
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_modify_preview("정정", orig_order_no, code, qty, price, stex)
+    _show_modify_preview("정정", orig_order_no, code, qty, price, dmst_stex_tp)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10002", {
-            "dmst_stex_tp": stex,
+            "dmst_stex_tp": dmst_stex_tp,
             "orig_ord_no": orig_order_no,
             "stk_cd": code,
             "mdfy_qty": str(qty),
@@ -207,9 +207,9 @@ def modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, mdfy_
 @click.argument("orig_order_no")
 @click.argument("code")
 @click.option("--qty", type=int, default=0, help="취소수량 (0=전량취소)")
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: bool):
+def cancel(orig_order_no: str, code: str, qty: int, dmst_stex_tp: str, confirm: bool):
     """주식 취소주문 (kt10003).
 
     예: kiwoom order cancel 0000140 005930 --confirm
@@ -217,11 +217,11 @@ def cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: bool):
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_cancel_preview("취소", orig_order_no, code, qty, stex)
+    _show_cancel_preview("취소", orig_order_no, code, qty, dmst_stex_tp)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10003", {
-            "dmst_stex_tp": stex,
+            "dmst_stex_tp": dmst_stex_tp,
             "orig_ord_no": orig_order_no,
             "stk_cd": code,
             "cncl_qty": str(qty),
@@ -244,10 +244,10 @@ def credit():
 @click.argument("qty", type=int)
 @click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def credit_buy(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: int, confirm: bool):
+def credit_buy(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str, cond_uv: int, confirm: bool):
     """신용 매수주문 (kt10006).
 
     예: kiwoom order credit buy 005930 10 --type limit --price 70000 --confirm
@@ -255,11 +255,11 @@ def credit_buy(code: str, qty: int, price: int, order_type: str, stex: str, cond
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_order_preview("신용 매수", code, qty, price, order_type, stex)
+    _show_order_preview("신용 매수", code, qty, price, order_type, dmst_stex_tp)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10006", {
-            "dmst_stex_tp": stex,
+            "dmst_stex_tp": dmst_stex_tp,
             "stk_cd": code,
             "ord_qty": str(qty),
             "ord_uv": str(price) if price else "",
@@ -274,10 +274,10 @@ def credit_buy(code: str, qty: int, price: int, order_type: str, stex: str, cond
 @click.argument("qty", type=int)
 @click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
 @click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def credit_sell(code: str, qty: int, price: int, order_type: str, stex: str, cond_uv: int, confirm: bool):
+def credit_sell(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str, cond_uv: int, confirm: bool):
     """신용 매도주문 (kt10007).
 
     예: kiwoom order credit sell 005930 10 --type market --confirm
@@ -285,11 +285,11 @@ def credit_sell(code: str, qty: int, price: int, order_type: str, stex: str, con
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_order_preview("신용 매도", code, qty, price, order_type, stex)
+    _show_order_preview("신용 매도", code, qty, price, order_type, dmst_stex_tp)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10007", {
-            "dmst_stex_tp": stex,
+            "dmst_stex_tp": dmst_stex_tp,
             "stk_cd": code,
             "ord_qty": str(qty),
             "ord_uv": str(price) if price else "",
@@ -304,10 +304,10 @@ def credit_sell(code: str, qty: int, price: int, order_type: str, stex: str, con
 @click.argument("code")
 @click.argument("qty", type=int)
 @click.argument("price", type=int)
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "mdfy_cond_uv", type=int, default=0, help="정정 조건부가격")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def credit_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str, mdfy_cond_uv: int, confirm: bool):
+def credit_modify(orig_order_no: str, code: str, qty: int, price: int, dmst_stex_tp: str, mdfy_cond_uv: int, confirm: bool):
     """신용 정정주문 (kt10008).
 
     예: kiwoom order credit modify 0000139 005930 1 70000 --confirm
@@ -315,11 +315,11 @@ def credit_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_modify_preview("신용 정정", orig_order_no, code, qty, price, stex)
+    _show_modify_preview("신용 정정", orig_order_no, code, qty, price, dmst_stex_tp)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10008", {
-            "dmst_stex_tp": stex,
+            "dmst_stex_tp": dmst_stex_tp,
             "orig_ord_no": orig_order_no,
             "stk_cd": code,
             "mdfy_qty": str(qty),
@@ -333,9 +333,9 @@ def credit_modify(orig_order_no: str, code: str, qty: int, price: int, stex: str
 @click.argument("orig_order_no")
 @click.argument("code")
 @click.option("--qty", type=int, default=0, help="취소수량 (0=전량취소)")
-@click.option("--exchange", "stex", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def credit_cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: bool):
+def credit_cancel(orig_order_no: str, code: str, qty: int, dmst_stex_tp: str, confirm: bool):
     """신용 취소주문 (kt10009).
 
     예: kiwoom order credit cancel 0000140 005930 --confirm
@@ -343,11 +343,11 @@ def credit_cancel(orig_order_no: str, code: str, qty: int, stex: str, confirm: b
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_cancel_preview("신용 취소", orig_order_no, code, qty, stex)
+    _show_cancel_preview("신용 취소", orig_order_no, code, qty, dmst_stex_tp)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10009", {
-            "dmst_stex_tp": stex,
+            "dmst_stex_tp": dmst_stex_tp,
             "orig_ord_no": orig_order_no,
             "stk_cd": code,
             "cncl_qty": str(qty),

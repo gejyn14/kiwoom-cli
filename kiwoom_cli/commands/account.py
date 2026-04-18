@@ -98,11 +98,11 @@ def returns():
 
 
 @returns.command("summary")
-@click.option("--exchange", "stex", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="거래소구분")
-def returns_summary(stex: str):
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="거래소구분")
+def returns_summary(stex_tp: str):
     """계좌 수익률 조회. (ka10085)"""
     with KiwoomClient() as c:
-        data, _ = c.request("ka10085", {"stex_tp": EXCHANGE_ALL_ZERO[stex]})
+        data, _ = c.request("ka10085", {"stex_tp": EXCHANGE_ALL_ZERO[stex_tp]})
         print_generic_table(data, title="계좌 수익률")
 
 
