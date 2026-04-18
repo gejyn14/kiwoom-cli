@@ -516,7 +516,77 @@ _FIELD_LABELS: dict[str, str] = {
     # 날짜/시간
     "dt": "일자", "date": "일자", "tm": "시간",
     "qry_dt": "조회일자", "trde_dt": "매매일자",
+    # 업종 추가
+    "inds_nm": "업종명", "upl": "상한", "lst": "하한",
+    "flo_stk_num": "유통주식수", "wght": "비중", "kospi200": "KOSPI200",
+    "pre_smbol": "대비부호",
+    # 순위
+    "now_rank": "현재순위", "pred_rank": "전일순위", "bigd_rank": "대형주순위",
+    "rank_chg": "순위변동", "rank_chg_sign": "순위변동기호",
+    "cnt": "건수", "tot": "합계", "drng": "기간",
+    # 전일/기준 대비
+    "pred_pre_1": "전일대비1", "pred_pre_2": "전일대비2", "pred_pre_3": "전일대비3",
+    "pred_dvida": "전일거래대금",
+    "prev_base_chgr": "전일기준변동율", "prev_base_sign": "전일기준기호",
+    "base_comp_chgr": "기준대비변동율", "base_comp_sign": "기준대비기호",
+    "past_curr_prc": "과거현재가",
+    # 장구분별 시세
+    "opmr_pred_rt": "장중전일비", "opmr_trde_amt": "장중거래대금",
+    "opmr_trde_rt": "장중거래비율",
+    "af_mkrt_pred_rt": "장후전일비", "af_mkrt_trde_amt": "장후거래대금",
+    "af_mkrt_trde_rt": "장후거래비율",
+    "bf_mkrt_pred_rt": "장전전일비", "bf_mkrt_trde_amt": "장전거래대금",
+    "bf_mkrt_trde_rt": "장전거래비율",
+    # 투자자 순매수
+    "frgnr_netprps": "외국인순매수", "insrnc_netprps": "보험순매수",
+    "invtrt_netprps": "투신순매수", "bank_netprps": "은행순매수",
+    "samo_fund_netprps": "사모펀드순매수", "endw_netprps": "기금순매수",
+    "etc_corp_netprps": "기타법인순매수", "sc_netprps": "증권순매수",
+    "natn_netprps": "국가순매수", "jnsinkm_netprps": "연기금순매수",
+    "native_trmt_frgnr_netprps": "내국인대우외인순매수",
+    # 외인/기관 상세
+    "for_netprps_amt": "외인순매수금액",
+    "for_netprps_stk_cd": "외인순매수종목코드", "for_netprps_stk_nm": "외인순매수종목명",
+    "for_netslmt_amt": "외인순매도금액", "for_netslmt_qty": "외인순매도수량",
+    "for_netslmt_stk_cd": "외인순매도종목코드", "for_netslmt_stk_nm": "외인순매도종목명",
+    "orgn_netprps_amt": "기관순매수금액",
+    "orgn_netprps_stk_cd": "기관순매수종목코드", "orgn_netprps_stk_nm": "기관순매수종목명",
+    "orgn_netslmt_amt": "기관순매도금액", "orgn_netslmt_qty": "기관순매도수량",
+    "orgn_netslmt_stk_cd": "기관순매도종목코드", "orgn_netslmt_stk_nm": "기관순매도종목명",
+    # 프로그램매매 추가
+    "dfrt_trde_acc": "차익거래누적", "dfrt_trde_tdy": "차익거래당일",
+    "ndiffpro_trde_acc": "비차익거래누적", "ndiffpro_trde_tdy": "비차익거래당일",
+    "all_acc": "전체누적", "all_tdy": "전체당일",
+    # ETF 추가
+    "trace_flu_rt": "추적등락율", "trace_idex": "추적지수",
+    "trace_idex_cd": "추적지수코드", "trace_idex_nm": "추적지수명",
+    "basis": "베이시스", "dvid_bf_base": "배당전기준가", "txbs": "세전",
+    # 순위/테마 추가
+    "base_limit_exh_rt": "기준한도소진율", "base_pre": "기준대비",
+    "buy_tot_req": "매수총잔량", "sel_tot_req": "매도총잔량",
+    "exh_rt_incrs": "소진율증가", "fall_stk_num": "하락종목수",
+    "rising_stk_num": "상승종목수", "stk_num": "종목수",
+    "gain_pos_stkcnt": "보유종목수", "poss_stkcnt": "보유종목수",
+    "jmp_rt": "급등률", "main_stk": "주력종목",
+    "netslmt": "순매도", "sel_qty": "매도수량",
+    "pred_trde_qty_pre_rt": "전일거래량대비율", "prev_trde_qty": "전일거래량",
+    "tdy_close_pric": "당일종가", "tdy_close_pric_flu_rt": "당일종가등락율",
+    "tdy_high_pric": "당일고가", "tdy_low_pric": "당일저가",
+    "thema_grp_cd": "테마그룹코드", "thema_nm": "테마명",
+    # 기타
+    "dm1": "연속일1", "dm2": "연속일2", "dm3": "연속일3",
+    "pipe1": "구분1", "pipe2": "구분2", "pipe3": "구분3",
 }
+
+
+def _get_label(key: str) -> str:
+    """Get Korean label for an API field key, with _n suffix fallback."""
+    label = _FIELD_LABELS.get(key)
+    if label:
+        return label
+    if key.endswith("_n") and len(key) > 2:
+        return _FIELD_LABELS.get(key[:-2], key)
+    return key
 
 
 def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> None:
@@ -554,7 +624,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
 
         t = Table(title=title, border_style="dim", show_lines=False)
         for k in keys:
-            label = _FIELD_LABELS.get(k, k)
+            label = _get_label(k)
             justify = "right" if k in (
                 "cur_prc", "pred_pre", "flu_rt", "trde_qty", "trde_amt",
                 "open_pric", "high_pric", "low_pric", "close_pric",
@@ -582,7 +652,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             t.add_column("항목", style="cyan", width=25)
             t.add_column("값", width=35)
             for k, v in scalar.items():
-                label = _FIELD_LABELS.get(k, k)
+                label = _get_label(k)
                 sv = str(v)
                 if k not in _CODE_FIELDS and sv.lstrip("+-").isdigit() and len(sv) > 4:
                     sv = _smart_fmt(sv, k)
@@ -590,7 +660,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             console.print(t)
 
         for list_key, list_val in lists.items():
-            list_title = _FIELD_LABELS.get(list_key, list_key)
+            list_title = _get_label(list_key)
             print_generic_table(list_val, title=list_title)
 
 
