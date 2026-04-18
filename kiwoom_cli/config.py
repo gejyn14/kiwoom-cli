@@ -16,8 +16,6 @@ Environment variables (non-sensitive only):
 Config file: ~/.kiwoom/config.toml
 """
 
-# Comment
-
 from __future__ import annotations
 
 import os
