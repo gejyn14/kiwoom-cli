@@ -6,8 +6,8 @@ import click
 from rich.panel import Panel
 
 from ...client import KiwoomClient
-from ...formatters import print_generic_table, print_order_result
-from ...output import console, err_console
+from ...formatters import human, print_generic_table, print_order_result
+from ...output import err_console
 from ._constants import (
     US_ORDER_TYPES,
     US_SELL_ONLY_TYPES,
@@ -38,7 +38,7 @@ def _validate_us_type(order_type: str, side: str) -> str:
 
 def _confirm_gate(confirm: bool) -> None:
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
 
 def _show_us_preview(action: str, code: str, qty: int, price: float,
@@ -55,7 +55,7 @@ def _show_us_preview(action: str, code: str, qty: int, price: float,
     )
     if stop:
         body += f"\n  STOP가격: ${fmt_us_price(stop)}"
-    console.print(Panel(body, title="주문 확인", border_style="yellow"))
+    human(Panel(body, title="주문 확인", border_style="yellow"))
 
 
 def _resolve_or_exit(client, code: str, exchange: str | None) -> str:
@@ -114,7 +114,7 @@ def sell(code: str, qty: int, price: float, order_type: str,
 def modify(orig_order_no: str, code: str, qty: int, price: float,
            exchange: str | None, stop: float, confirm: bool) -> None:
     """미국주식 정정 (ust20002) — 가격 정정만 지원, 항상 잔량 전체."""
-    console.print("[yellow]미국주식 정정은 수량 변경 미지원 — 전량 가격정정으로 처리됩니다.[/]")
+    human("[yellow]미국주식 정정은 수량 변경 미지원 — 전량 가격정정으로 처리됩니다.[/]")
     _confirm_gate(confirm)
     with KiwoomClient() as c:
         stex_tp = _resolve_or_exit(c, code, exchange)

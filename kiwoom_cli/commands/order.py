@@ -17,8 +17,8 @@ import click
 from rich.panel import Panel
 
 from ..client import KiwoomClient
-from ..formatters import print_order_result, print_generic_table
-from ..output import console, err_console
+from ..formatters import human, print_order_result, print_generic_table
+from ..output import err_console
 from .us import order_ops as us_order_ops
 from .us._constants import US_ORDER_TYPES
 from .us.detect import is_us_symbol
@@ -83,7 +83,7 @@ def _show_order_preview(action: str, code: str, qty: int, price: int, order_type
     )
     if dmst_stex_tp is not None:
         body += f"\n  거래소: {dmst_stex_tp}"
-    console.print(Panel(
+    human(Panel(
         body,
         title="주문 확인",
         border_style="yellow",
@@ -99,7 +99,7 @@ def _show_modify_preview(action: str, orig_ord_no: str, code: str, qty: int, pri
     ]
     if dmst_stex_tp is not None:
         lines.append(f"  거래소: {dmst_stex_tp}")
-    console.print(Panel(
+    human(Panel(
         f"[bold]{action} 주문[/]\n\n" + "\n".join(lines),
         title="주문 확인",
         border_style="yellow",
@@ -115,7 +115,7 @@ def _show_cancel_preview(action: str, orig_ord_no: str, code: str, qty: int, dms
     ]
     if dmst_stex_tp is not None:
         lines.append(f"  거래소: {dmst_stex_tp}")
-    console.print(Panel(
+    human(Panel(
         f"[bold]{action} 주문[/]\n\n" + "\n".join(lines),
         title="주문 확인",
         border_style="yellow",
@@ -160,7 +160,7 @@ def buy(code: str, qty: int, price: float, order_type: str, exchange: str | None
     trde_tp = _kr_type_or_exit(order_type)
     kr_price = _kr_price_or_exit(price)
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_order_preview("매수", code, qty, kr_price, order_type, dmst_stex_tp)
 
@@ -204,7 +204,7 @@ def sell(code: str, qty: int, price: float, order_type: str, exchange: str | Non
     trde_tp = _kr_type_or_exit(order_type)
     kr_price = _kr_price_or_exit(price)
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_order_preview("매도", code, qty, kr_price, order_type, dmst_stex_tp)
 
@@ -247,7 +247,7 @@ def modify(orig_order_no: str, code: str, qty: int, price: float, exchange: str 
     dmst_stex_tp = exchange or "KRX"
     kr_price = _kr_price_or_exit(price)
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_modify_preview("정정", orig_order_no, code, qty, kr_price, dmst_stex_tp)
 
@@ -280,7 +280,7 @@ def cancel(orig_order_no: str, code: str, qty: int, exchange: str | None, confir
 
     dmst_stex_tp = exchange or "KRX"
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_cancel_preview("취소", orig_order_no, code, qty, dmst_stex_tp)
 
@@ -318,7 +318,7 @@ def credit_buy(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: s
     예: kiwoom order credit buy 005930 10 --type limit --price 70000 --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_order_preview("신용 매수", code, qty, price, order_type, dmst_stex_tp)
 
@@ -348,7 +348,7 @@ def credit_sell(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: 
     예: kiwoom order credit sell 005930 10 --type market --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_order_preview("신용 매도", code, qty, price, order_type, dmst_stex_tp)
 
@@ -378,7 +378,7 @@ def credit_modify(orig_order_no: str, code: str, qty: int, price: int, dmst_stex
     예: kiwoom order credit modify 0000139 005930 1 70000 --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_modify_preview("신용 정정", orig_order_no, code, qty, price, dmst_stex_tp)
 
@@ -406,7 +406,7 @@ def credit_cancel(orig_order_no: str, code: str, qty: int, dmst_stex_tp: str, co
     예: kiwoom order credit cancel 0000140 005930 --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_cancel_preview("신용 취소", orig_order_no, code, qty, dmst_stex_tp)
 
@@ -442,7 +442,7 @@ def gold_buy(code: str, qty: int, price: int, order_type: str, confirm: bool):
     예: kiwoom order gold buy 730060 10 --type limit --price 90000 --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_order_preview("금현물 매수", code, qty, price, order_type)
 
@@ -468,7 +468,7 @@ def gold_sell(code: str, qty: int, price: int, order_type: str, confirm: bool):
     예: kiwoom order gold sell 730060 10 --type market --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_order_preview("금현물 매도", code, qty, price, order_type)
 
@@ -494,7 +494,7 @@ def gold_modify(orig_order_no: str, code: str, qty: int, price: int, confirm: bo
     예: kiwoom order gold modify 0000139 730060 1 90000 --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_modify_preview("금현물 정정", orig_order_no, code, qty, price)
 
@@ -519,7 +519,7 @@ def gold_cancel(orig_order_no: str, code: str, qty: int, confirm: bool):
     예: kiwoom order gold cancel 0000140 730060 --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     _show_cancel_preview("금현물 취소", orig_order_no, code, qty)
 
@@ -635,7 +635,7 @@ def condition_search(seq: str, stex_tp: str, cont_yn: str, next_key: str, confir
     예: kiwoom order condition search 001 --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     body = {
         "trnm": "CNSRREQ",
@@ -663,7 +663,7 @@ def condition_realtime(seq: str, stex_tp: str, confirm: bool):
     예: kiwoom order condition realtime 001 --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10173", {
@@ -684,7 +684,7 @@ def condition_stop(seq: str, confirm: bool):
     예: kiwoom order condition stop 001 --confirm
     """
     if not confirm:
-        click.confirm("주문을 실행하시겠습니까?", abort=True)
+        click.confirm("주문을 실행하시겠습니까?", abort=True, err=True)
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10174", {

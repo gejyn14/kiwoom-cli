@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 from . import auth, config
-from .output import console
+from .output import console, err_console
 
 # Real-time type codes -> (name, description)
 REALTIME_TYPES: dict[str, tuple[str, str]] = {
@@ -166,9 +166,9 @@ def run_stream(
         f"{t}({REALTIME_TYPES.get(t, ('?', ''))[0]})" for t in types
     )
     item_str = ", ".join(items) if items else "(계좌)"
-    console.print(f"[dim]실시간 스트리밍 시작: {type_names}[/]")
-    console.print(f"[dim]종목: {item_str}[/]")
-    console.print("[dim]Ctrl+C로 종료[/]\n")
+    err_console.print(f"[dim]실시간 스트리밍 시작: {type_names}[/]")
+    err_console.print(f"[dim]종목: {item_str}[/]")
+    err_console.print("[dim]Ctrl+C로 종료[/]\n")
 
     async def _stream():
         url = f"{ws_url}/api/dostk/websocket"
@@ -189,7 +189,7 @@ def run_stream(
                     "token": token,
                 }
                 await ws.send(json.dumps(auth_msg))
-                console.print("[dim]토큰 인증 요청...[/]")
+                err_console.print("[dim]토큰 인증 요청...[/]")
 
                 # Wait for auth response
                 auth_resp = await ws.recv()
@@ -198,14 +198,14 @@ def run_stream(
                     if auth_data.get("code") and auth_data["code"] != "0":
                         console.print(f"[red]인증 실패: {auth_data.get('message', auth_resp)}[/]")
                         return
-                    console.print("[green]인증 성공[/]")
+                    err_console.print("[green]인증 성공[/]")
                 except json.JSONDecodeError:
                     pass
 
                 # Step 2: Send registration
                 reg_msg = _build_register_msg(types, items)
                 await ws.send(json.dumps(reg_msg))
-                console.print("[dim]종목 등록 요청...[/]")
+                err_console.print("[dim]종목 등록 요청...[/]")
 
                 # Receive loop
                 async for message in ws:
@@ -241,7 +241,7 @@ def run_stream(
                     rc = data.get("return_code")
                     if rc is not None:
                         if str(rc) == "0":
-                            console.print("[green]등록 성공[/]")
+                            err_console.print("[green]등록 성공[/]")
                         else:
                             console.print(f"[red]오류: {data.get('return_msg', '')}[/]")
                         continue
