@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.1.0 (2026-07-15) — 비밀번호 프롬프트 제거
+
+### Changed
+- **인증정보 저장 방식 변경 (breaking)**: 앱 자체 비밀번호/Fernet 암호화 계층을 제거하고 appkey/secretkey를 OS 키체인에 직접 저장합니다. `config setup`, `auth login`, `auth logout`에서 더 이상 비밀번호를 묻지 않습니다 — 모든 명령이 프롬프트 없이 동작합니다 (AI 에이전트/자동화 친화).
+- 기존 사용자는 업그레이드 후 `kiwoom config setup`을 한 번 다시 실행해야 합니다 (이전 암호화 형식 자동 감지 + 안내 메시지 표시).
+
+### Removed
+- `cryptography` 의존성 제거.
+
 ## v2.0.0 (2026-07-15) — 미국주식 지원
 
 키움 REST API의 미국주식 29개 엔드포인트를 기존 명령 체계에 그대로 통합한 메이저 릴리스입니다.
