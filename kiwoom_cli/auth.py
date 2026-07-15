@@ -21,7 +21,7 @@ def save_token(token: str, profile: str | None = None) -> None:
 
 def load_token(profile: str | None = None) -> str | None:
     p = config.resolve_profile(profile)
-    return keyring.get_password(KEYRING_SERVICE, f"{p}:token")
+    return config._keyring_get(f"{p}:token")
 
 
 def delete_token(profile: str | None = None) -> None:

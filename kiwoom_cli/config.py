@@ -92,16 +92,25 @@ def get_domain(profile: str | None = None) -> str:
     return DOMAINS.get(key, DOMAINS["mock"])
 
 
+def _keyring_get(key: str) -> str | None:
+    """keyring.get_password, treating keyring errors as "not stored".
+
+    Locked/absent keychains (headless, CI, sandboxed shells) must degrade to
+    "미설정" instead of crashing read-only commands like config show.
+    """
+    try:
+        return keyring.get_password(KEYRING_SERVICE, key)
+    except Exception:
+        return None
+
+
 def is_legacy_encrypted() -> bool:
     """True if the pre-v2.1 password-encrypted format is present in the keychain.
 
     Keyring errors (locked/absent keychain in headless or CI environments) are
     treated as "not legacy" so commands like --help never crash.
     """
-    try:
-        return keyring.get_password(KEYRING_SERVICE, "_salt") is not None
-    except Exception:
-        return False
+    return _keyring_get("_salt") is not None
 
 
 def clear_legacy_sentinels() -> None:
@@ -131,21 +140,21 @@ def is_configured(profile: str | None = None) -> bool:
     if is_legacy_encrypted():
         return False
     p = resolve_profile(profile)
-    return keyring.get_password(KEYRING_SERVICE, f"{p}:appkey") is not None
+    return _keyring_get(f"{p}:appkey") is not None
 
 
 def get_appkey(profile: str | None = None) -> str:
     if is_legacy_encrypted():
         return ""
     p = resolve_profile(profile)
-    return keyring.get_password(KEYRING_SERVICE, f"{p}:appkey") or ""
+    return _keyring_get(f"{p}:appkey") or ""
 
 
 def get_secretkey(profile: str | None = None) -> str:
     if is_legacy_encrypted():
         return ""
     p = resolve_profile(profile)
-    return keyring.get_password(KEYRING_SERVICE, f"{p}:secretkey") or ""
+    return _keyring_get(f"{p}:secretkey") or ""
 
 
 def set_appkey(value: str, profile: str | None = None) -> None:

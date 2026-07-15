@@ -7,7 +7,7 @@ import json
 import click
 import httpx
 
-from . import __version__, config
+from . import __version__, auth, config
 from .client import KiwoomClient, KiwoomAPIError
 from .commands.account import account
 from .commands.dashboard import dashboard
@@ -268,8 +268,7 @@ def auth_status(ctx):
     """토큰 상태 확인."""
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     configured = config.is_configured(profile)
-    import keyring as _kr
-    has_token = configured and _kr.get_password(config.KEYRING_SERVICE, f"{profile}:token") is not None
+    has_token = configured and auth.load_token(profile=profile) is not None
     if _get_format() == "json":
         cfg = config.load_config()
         _output_json({

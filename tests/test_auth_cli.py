@@ -95,3 +95,18 @@ def test_legacy_format_shows_resetup_notice(mem_keyring):
     runner = CliRunner()
     result = runner.invoke(cli, ["auth", "status"])
     assert "kiwoom config setup" in result.output or "config setup" in result.output
+
+
+def test_readonly_commands_survive_broken_keyring(monkeypatch):
+    """Locked/absent keychain (headless, CI): config show / auth status must
+    exit 0 as "미설정" instead of crashing with a KeyringError traceback."""
+
+    def _raise(svc, key):
+        raise keyring.errors.KeyringError("errSecInteractionNotAllowed (-25308)")
+
+    monkeypatch.setattr(keyring, "get_password", _raise)
+    runner = CliRunner()
+
+    for argv in (["config", "show"], ["auth", "status"], ["config", "profiles"]):
+        result = runner.invoke(cli, argv)
+        assert result.exit_code == 0, (argv, result.exception)
