@@ -87,6 +87,31 @@ def _fmt_number(value: str, strip_sign: bool = False) -> str:
             return v if strip_sign else value
 
 
+def _fmt_usd(value: str, strip_sign: bool = False) -> str:
+    """Format a USD decimal string: commas, up to 4 decimals, trailing zeros stripped.
+
+    Kiwoom US APIs return prices with up to 4 decimals ("213.0400", "0.0012").
+    _fmt_number would force 2 decimals and mangle penny stocks; this preserves them.
+    """
+    v = value.strip()
+    if not v:
+        return "-"
+    sign = ""
+    if v.startswith(("+", "-")):
+        sign = v[0]
+        v = v[1:]
+    if strip_sign:
+        sign = ""
+    v = v.lstrip("0") or "0"
+    try:
+        if "." not in v:
+            return sign + f"{int(v):,}"
+        s = f"{float(v):,.4f}".rstrip("0").rstrip(".")
+        return sign + (s or "0")
+    except ValueError:
+        return value
+
+
 # Fields where +/- is a direction indicator, not the actual sign.
 # These represent absolute values (prices, amounts, quantities).
 _ABS_FIELDS = frozenset({
@@ -101,6 +126,13 @@ _ABS_FIELDS = frozenset({
     "rmnd_qty", "ord_qty", "ord_uv", "mdfy_uv",
     "trde_qty", "acc_trde_qty", "now_trde_qty",
     "10", "16", "17", "18", "27", "28",  # WebSocket field IDs
+    "now_pric", "frgn_stk_book_uv", "cntr_uv", "stop_pric",
+    "fpr_sel_bid", "fpr_buy_bid",
+    "sel_1bid", "sel_2bid", "sel_3bid", "sel_4bid", "sel_5bid",
+    "sel_6bid", "sel_7bid", "sel_8bid", "sel_9bid", "sel_10bid",
+    "buy_1bid", "buy_2bid", "buy_3bid", "buy_4bid", "buy_5bid",
+    "buy_6bid", "buy_7bid", "buy_8bid", "buy_9bid", "buy_10bid",
+    "poss_qty", "sell_alowq",
 })
 
 # Fields where +/- is meaningful (changes, rates).
@@ -115,9 +147,28 @@ _CODE_FIELDS = frozenset({
     "stk_cd", "ord_no",
 })
 
+# USD decimal fields (up to 4 decimals). Routed to _fmt_usd by _smart_fmt.
+# Direction-indicator USD prices additionally live in _ABS_FIELDS (sign stripped).
+_USD_FIELDS = frozenset({
+    "now_pric", "frgn_stk_book_uv", "cntr_uv", "stop_pric",
+    "fpr_sel_bid", "fpr_buy_bid",
+    "sel_1bid", "sel_2bid", "sel_3bid", "sel_4bid", "sel_5bid",
+    "sel_6bid", "sel_7bid", "sel_8bid", "sel_9bid", "sel_10bid",
+    "buy_1bid", "buy_2bid", "buy_3bid", "buy_4bid", "buy_5bid",
+    "buy_6bid", "buy_7bid", "buy_8bid", "buy_9bid", "buy_10bid",
+    "pre_open_pric", "pre_high_pric", "pre_low_pric", "base_close_pric",
+    "fc_entra", "fc_uncl_amt", "pred_pre",
+    "aplc_exrt", "sell_aplc_exrt", "buy_aplc_exrt", "usd_exch_rate",
+    "exch_rate", "base_exrt", "spcl_bf_exrt",
+    "sell_expc_amt", "buy_expc_amt", "sell_crnc_exmn_alow_amt",
+    "buy_crnc_exmn_alow_amt", "fc_exmn_alow_amt",
+})
+
 
 def _smart_fmt(value: str, field_key: str) -> str:
     """Format a value based on the field type."""
+    if field_key in _USD_FIELDS:
+        return _fmt_usd(value, strip_sign=field_key in _ABS_FIELDS)
     if field_key in _ABS_FIELDS:
         return _fmt_number(value, strip_sign=True)
     return _fmt_number(value)
@@ -576,6 +627,50 @@ _FIELD_LABELS: dict[str, str] = {
     # 기타
     "dm1": "연속일1", "dm2": "연속일2", "dm3": "연속일3",
     "pipe1": "구분1", "pipe2": "구분2", "pipe3": "구분3",
+    # === 미국주식 (US) ===
+    "frgn_stk_nm": "종목명",
+    "stk_enm": "영문명",
+    "stex_nm": "거래소",
+    "crnc_code": "통화",
+    "natn_nm": "국가",
+    "mkgb": "거래소명",
+    "upgb": "업종",
+    "poss_qty": "보유수량",
+    "sell_alowq": "매도가능",
+    "frgn_stk_book_uv": "매입단가",
+    "now_pric": "현재가",
+    "evlt_amt_krw": "평가금액(원)",
+    "pl_amt_krw": "손익금액(원)",
+    "now_pric_krw": "현재가(원)",
+    "frgn_stk_book_uv_krw": "매입단가(원)",
+    "frgn_stk_book_amt": "매입금액",
+    "frgn_stk_book_amt_krw": "매입금액(원)",
+    "fc_entra": "외화예수금",
+    "fc_uncl_amt": "외화미수금",
+    "krw_entra": "원화예수금",
+    "won_entr": "원화예수금",
+    "trst_prof_ch": "사용증거금",
+    "usd_exch_rate": "매도환율(USD)",
+    "exch_rate": "환율",
+    "aplc_exrt": "적용환율",
+    "sell_aplc_exrt": "매도적용환율",
+    "buy_aplc_exrt": "매수적용환율",
+    "exrt_tp_nm": "환율구분",
+    "exrt_spcl_rt": "환율우대율",
+    "sell_expc_amt": "매도예상금액",
+    "buy_expc_amt": "매수예상금액",
+    "frgn_trde_nm": "매매구분",
+    "slby_tp_nm": "매도수구분",
+    "ord_stat": "주문상태",
+    "ord_time": "주문시간",
+    "ord_cntr_tp": "주문종류",
+    "tot_prch_amt": "총매입금액",
+    "tot_pl_amt": "총손익금액",
+    "tot_pl_rt": "총수익률",
+    "tdy_pl_amt": "당일실현손익",
+    "tot_evlt_amt_krw": "총평가금액(원)",
+    "tot_prch_amt_krw": "총매입금액(원)",
+    "tot_pl_amt_krw": "총손익금액(원)",
 }
 
 

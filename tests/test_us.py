@@ -157,3 +157,39 @@ def test_resolve_not_found_raises(tmp_cache):
     fake = _fake_with_10098([])
     with pytest.raises(detect.UsExchangeError):
         detect.resolve_us_exchange(fake, "ZZZZ")
+
+
+# ============================================================
+#  Task 4: USD formatting
+# ============================================================
+
+from kiwoom_cli.formatters import _fmt_usd, _smart_fmt  # noqa: E402
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("213.0400", "213.04"),
+    ("0.0012", "0.0012"),
+    ("1234.5000", "1,234.5"),
+    ("70000", "70,000"),          # int stays int-formatted
+    ("000001234", "1,234"),       # 0-padded
+    ("+213.0400", "+213.04"),     # sign kept by default
+    ("-0.5000", "-0.5"),
+    ("", "-"),
+    ("abc", "abc"),               # non-numeric passthrough
+])
+def test_fmt_usd(value, expected):
+    assert _fmt_usd(value) == expected
+
+
+def test_fmt_usd_strip_sign():
+    assert _fmt_usd("+213.0400", strip_sign=True) == "213.04"
+    assert _fmt_usd("-213.0400", strip_sign=True) == "213.04"
+
+
+def test_smart_fmt_routes_usd_price_fields():
+    # now_pric is a USD direction-indicator field: sign stripped, 4 decimals kept
+    assert _smart_fmt("+213.0400", "now_pric") == "213.04"
+    # pred_pre is signed USD
+    assert _smart_fmt("-1.2500", "pred_pre") == "-1.25"
+    # existing KR behavior unchanged for a non-USD field
+    assert _smart_fmt("+70000", "cur_prc") == "70,000"
