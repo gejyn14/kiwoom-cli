@@ -113,3 +113,32 @@ def test_purge_legacy_credentials_deletes_all_profile_keys(isolated_config):
     assert keyring.get_password(config.KEYRING_SERVICE, "second:appkey") is None
     # Tokens were always plaintext — untouched
     assert keyring.get_password(config.KEYRING_SERVICE, "default:token") == "tok"
+
+
+# ── Keyring-unavailable resilience ───────────────────
+# Locked/absent keychains (headless, CI, sandboxed shells) must degrade to
+# "not configured" everywhere, never crash. (is_legacy_encrypted was fixed
+# in v2.1; these cover the remaining read paths.)
+
+
+@pytest.fixture
+def broken_keyring(monkeypatch):
+    def _raise(svc, key):
+        raise keyring.errors.KeyringError("errSecInteractionNotAllowed (-25308)")
+
+    monkeypatch.setattr(keyring, "get_password", _raise)
+
+
+def test_is_configured_false_when_keyring_unavailable(isolated_config, broken_keyring):
+    assert config.is_configured("default") is False
+
+
+def test_get_appkey_empty_when_keyring_unavailable(isolated_config, broken_keyring):
+    assert config.get_appkey(profile="default") == ""
+    assert config.get_secretkey(profile="default") == ""
+
+
+def test_load_token_none_when_keyring_unavailable(isolated_config, broken_keyring):
+    from kiwoom_cli import auth
+
+    assert auth.load_token(profile="default") is None
