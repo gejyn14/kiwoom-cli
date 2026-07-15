@@ -35,9 +35,12 @@ def _load_cache() -> dict[str, str]:
     if not f.exists():
         return {}
     try:
-        return json.loads(f.read_text(encoding="utf-8"))
+        cache = json.loads(f.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
+    if not isinstance(cache, dict):
+        return {}
+    return cache
 
 
 def _save_cache(cache: dict[str, str]) -> None:
@@ -57,8 +60,9 @@ def resolve_us_exchange(client, code: str, exchange: str | None = None) -> str:
         return US_EXCHANGE[exchange]
     symbol = code.upper()
     cache = _load_cache()
-    if symbol in cache:
-        return cache[symbol]
+    cached = cache.get(symbol)
+    if cached in US_EXCHANGE.values():
+        return cached
     data, _ = client.request("usa10098", {"stk_cd": symbol})
     entries = [
         e for e in data.get("list", []) or []

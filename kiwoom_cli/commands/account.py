@@ -10,6 +10,7 @@ from ..client import KiwoomAPIError, KiwoomClient
 from ..formatters import (
     _find_list,
     print_account_eval,
+    print_api_response,
     print_deposit,
     print_generic_table,
     print_pending_orders,
@@ -45,6 +46,38 @@ def _run_unified(market: str, kr_fn, us_fn) -> None:
             if market == "us":
                 raise
             err_console.print(f"[dim]미국 조회 실패 (미국주식 미개설 계좌일 수 있음): {e}[/]")
+
+
+def _unified_structured(market: str, kr_fetch, us_fetch) -> bool:
+    """json 모드에서 통합 명령을 단일 문서로 출력. 처리했으면 True.
+
+    csv 정규화는 커맨드별로 다르므로(Fix 2 참고) 여기서는 json만 다룬다.
+    """
+    from ..formatters import _get_format, _output_json
+
+    fmt = _get_format()
+    if fmt != "json":
+        return False
+    kr_data = us_data = None
+    if market in ("all", "kr"):
+        try:
+            kr_data = kr_fetch()
+        except KiwoomAPIError as e:
+            if market == "kr":
+                raise
+            err_console.print(f"[dim]국내 조회 실패: {e}[/]")
+    if market in ("all", "us"):
+        try:
+            us_data = us_fetch()
+        except KiwoomAPIError as e:
+            if market == "us":
+                raise
+            err_console.print(f"[dim]미국 조회 실패: {e}[/]")
+    if market == "all" and kr_data is None and us_data is None:
+        err_console.print("[red]국내/미국 잔고 조회가 모두 실패했습니다.[/]")
+        raise SystemExit(2)
+    _output_json({"kr": kr_data, "us": us_data})
+    return True
 
 
 @click.group("account")
@@ -90,6 +123,9 @@ def balance(market: str, dmst_stex_tp: str, qry_tp: str):
                 if market == "us":
                     raise
                 err_console.print(f"[dim]미국 잔고 조회 실패 (미국주식 미개설 계좌일 수 있음): {e}[/]")
+    if market == "all" and kr_data is None and us_data is None:
+        err_console.print("[red]국내/미국 잔고 조회가 모두 실패했습니다.[/]")
+        raise SystemExit(2)
     if market == "kr":
         print_account_eval(kr_data or {})
     else:
@@ -103,10 +139,19 @@ def deposit(market: str, qry_type: str):
     """예수금 상세 — 국내+미국 (kt00001 + ust21160)."""
     tp_map = {"estimate": "3", "normal": "2"}
     with KiwoomClient() as c:
+        def kr_fetch():
+            return c.request("kt00001", {"qry_tp": tp_map[qry_type]})[0]
+
+        def us_fetch():
+            return c.request("ust21160", {})[0]
+
+        if _unified_structured(market, kr_fetch, us_fetch):
+            return
+
         _run_unified(
             market,
-            lambda: print_deposit(c.request("kt00001", {"qry_tp": tp_map[qry_type]})[0]),
-            lambda: us_account_ops.print_deposit_us(c),
+            lambda: print_deposit(kr_fetch()),
+            lambda: print_generic_table(us_fetch(), title="미국주식 예수금"),
         )
 
 
@@ -201,23 +246,41 @@ def pnl():
 @click.option("--krw", "fc_krw", is_flag=True, help="미국 손익을 원화로 표시")
 def pnl_today(code: str | None, market: str, fc_krw: bool):
     """당일 실현손익 — 국내(종목코드 필수 ka10077) + 미국(ust21170)."""
-    if market == "kr" and not code:
-        err_console.print("[red]국내 당일 실현손익은 종목코드가 필요합니다.[/]")
-        raise SystemExit(1)
-
-    def kr():
+    if market == "kr":
         if not code:
-            err_console.print("[dim]국내 섹션 생략 (종목코드 미지정).[/]")
+            err_console.print("[red]국내 당일 실현손익은 종목코드가 필요합니다.[/]")
+            raise SystemExit(1)
+        if is_us_symbol(code):
+            err_console.print("[red]국내 당일 실현손익에는 국내 종목코드가 필요합니다 (미국 티커는 지원하지 않음).[/]")
+            raise SystemExit(1)
+
+    with KiwoomClient() as c:
+        def kr_fetch():
+            if not code:
+                err_console.print("[dim]국내 섹션 생략 (종목코드 미지정).[/]")
+                return None
+            if is_us_symbol(code):
+                err_console.print("[dim]국내 섹션 생략 (미국 티커).[/]")
+                return None
+            return c.request("ka10077", {"stk_cd": code})[0]
+
+        def us_fetch():
+            if code and is_us_symbol(code):
+                err_console.print("[dim]미국은 종목코드 필터를 지원하지 않아 전체로 조회합니다.[/]")
+            return c.request("ust21170", {"fc_krw_tp": "1" if fc_krw else "0"})[0]
+
+        if _unified_structured(market, kr_fetch, us_fetch):
             return
-        with KiwoomClient() as c:
-            data, _ = c.request("ka10077", {"stk_cd": code})
-            print_generic_table(data, title="당일 실현손익 상세")
 
-    def us():
-        with KiwoomClient() as c:
-            us_account_ops.print_pnl_today_us(c, "1" if fc_krw else "0")
+        def kr():
+            data = kr_fetch()
+            if data is not None:
+                print_generic_table(data, title="당일 실현손익 상세")
 
-    _run_unified(market, kr, us)
+        def us():
+            print_generic_table(us_fetch(), title="미국주식 당일 실현손익")
+
+        _run_unified(market, kr, us)
 
 
 @pnl.command("by-date")
@@ -242,21 +305,30 @@ def pnl_by_date(stk_cd: str, strt_dt: str):
 def pnl_by_period(market: str, stk_cd: str, strt_dt: str, end_dt: str, fc_krw: bool):
     """일자별 종목별 실현손익 (기간 기준) — 국내(ka10073) + 미국(ust21530)."""
 
-    def kr():
-        with KiwoomClient() as c:
+    with KiwoomClient() as c:
+        def kr_fetch():
             body: dict = {"strt_dt": strt_dt, "end_dt": end_dt}
             if stk_cd and not is_us_symbol(stk_cd):
                 body["stk_cd"] = stk_cd
-            data, _ = c.request("ka10073", body)
-            print_generic_table(data, title="일자별 종목별 실현손익 (기간)")
+            return c.request("ka10073", body)[0]
 
-    def us():
-        if stk_cd and is_us_symbol(stk_cd):
-            err_console.print("[dim]미국 실현손익은 종목코드 필터를 지원하지 않아 전체로 조회합니다.[/]")
-        with KiwoomClient() as c:
-            us_account_ops.print_pnl_period_us(c, strt_dt, end_dt, "1" if fc_krw else "0")
+        def us_fetch():
+            if stk_cd and is_us_symbol(stk_cd):
+                err_console.print("[dim]미국 실현손익은 종목코드 필터를 지원하지 않아 전체로 조회합니다.[/]")
+            return c.request(
+                "ust21530", {"strt_dt": strt_dt, "end_dt": end_dt, "fc_krw_tp": "1" if fc_krw else "0"}
+            )[0]
 
-    _run_unified(market, kr, us)
+        if _unified_structured(market, kr_fetch, us_fetch):
+            return
+
+        def kr():
+            print_generic_table(kr_fetch(), title="일자별 종목별 실현손익 (기간)")
+
+        def us():
+            print_generic_table(us_fetch(), title="미국주식 실현손익")
+
+        _run_unified(market, kr, us)
 
 
 @pnl.command("daily")
@@ -287,8 +359,8 @@ def orders():
 def orders_pending(market: str, all_stk_tp: str, trde_tp: str, stk_cd: str, stex_tp: str):
     """미체결 주문 — 국내(ka10075) + 미국(ust21050)."""
 
-    def kr():
-        with KiwoomClient() as c:
+    with KiwoomClient() as c:
+        def kr_fetch():
             body: dict = {
                 "all_stk_tp": all_stk_tp,
                 "trde_tp": trde_tp,
@@ -296,18 +368,29 @@ def orders_pending(market: str, all_stk_tp: str, trde_tp: str, stk_cd: str, stex
             }
             if stk_cd and not is_us_symbol(stk_cd):
                 body["stk_cd"] = stk_cd
-            data, _ = c.request("ka10075", body)
+            return c.request("ka10075", body)[0]
+
+        def us_fetch():
+            body: dict = {"slby_tp": trde_tp}
+            if stk_cd and is_us_symbol(stk_cd):
+                body["stk_cd"] = stk_cd.upper()
+            return c.request("ust21050", body)[0]
+
+        if _unified_structured(market, kr_fetch, us_fetch):
+            return
+
+        def kr():
+            data = kr_fetch()
             items = _find_list(data)
             if isinstance(items, list):
                 print_pending_orders(items)
             else:
                 print_generic_table(data, title="미체결")
 
-    def us():
-        with KiwoomClient() as c:
-            us_account_ops.print_pending_us(c, trde_tp, stk_cd if is_us_symbol(stk_cd) else "")
+        def us():
+            print_generic_table(us_fetch(), title="미국주식 미체결")
 
-    _run_unified(market, kr, us)
+        _run_unified(market, kr, us)
 
 
 @orders.command("executed")
@@ -320,8 +403,8 @@ def orders_pending(market: str, all_stk_tp: str, trde_tp: str, stk_cd: str, stex
 def orders_executed(market: str, stk_cd: str, qry_tp: str, sell_tp: str, ord_no: str, stex_tp: str):
     """체결 내역 — 국내(ka10076) + 미국(ust21510)."""
 
-    def kr():
-        with KiwoomClient() as c:
+    with KiwoomClient() as c:
+        def kr_fetch():
             body: dict = {
                 "qry_tp": qry_tp,
                 "sell_tp": sell_tp,
@@ -331,18 +414,24 @@ def orders_executed(market: str, stk_cd: str, qry_tp: str, sell_tp: str, ord_no:
                 body["stk_cd"] = stk_cd
             if ord_no:
                 body["ord_no"] = ord_no
-            data, _ = c.request("ka10076", body)
-            items = _find_list(data)
-            if isinstance(items, list):
-                print_generic_table(items, title="체결 내역")
-            else:
-                print_generic_table(data, title="체결 내역")
+            return c.request("ka10076", body)[0]
 
-    def us():
-        with KiwoomClient() as c:
-            us_account_ops.print_executed_us(c, sell_tp, stk_cd if is_us_symbol(stk_cd) else "")
+        def us_fetch():
+            body: dict = {"slby_tp": sell_tp}
+            if stk_cd and is_us_symbol(stk_cd):
+                body["stk_cd"] = stk_cd.upper()
+            return c.request("ust21510", body)[0]
 
-    _run_unified(market, kr, us)
+        if _unified_structured(market, kr_fetch, us_fetch):
+            return
+
+        def kr():
+            print_api_response(kr_fetch(), title="체결 내역")
+
+        def us():
+            print_generic_table(us_fetch(), title="미국주식 당일 체결")
+
+        _run_unified(market, kr, us)
 
 
 @orders.command("split-detail")
@@ -547,8 +636,8 @@ def history_transactions(market: str, strt_dt: str, end_dt: str, tp: str, stk_cd
         err_console.print("[red]입금/출금 구분(6/7)은 국내 전용입니다. --market us 에서는 사용할 수 없습니다.[/]")
         raise SystemExit(1)
 
-    def kr():
-        with KiwoomClient() as c:
+    with KiwoomClient() as c:
+        def kr_fetch():
             body: dict = {
                 "strt_dt": strt_dt,
                 "end_dt": end_dt,
@@ -562,17 +651,26 @@ def history_transactions(market: str, strt_dt: str, end_dt: str, tp: str, stk_cd
                 body["crnc_cd"] = crnc_cd
             if frgn_stex_code:
                 body["frgn_stex_code"] = frgn_stex_code
-            data, _ = c.request("kt00015", body)
-            print_generic_table(data, title="위탁 종합거래내역")
+            return c.request("kt00015", body)[0]
 
-    def us():
-        if tp in ("6", "7"):
-            err_console.print("[dim]미국 섹션 생략 (입금/출금 구분은 국내 전용).[/]")
+        def us_fetch():
+            if tp in ("6", "7"):
+                err_console.print("[dim]미국 섹션 생략 (입금/출금 구분은 국내 전용).[/]")
+                return None
+            return c.request("ust21100", {"strt_dt": strt_dt, "end_dt": end_dt, "tp": tp})[0]
+
+        if _unified_structured(market, kr_fetch, us_fetch):
             return
-        with KiwoomClient() as c:
-            us_account_ops.print_history_us(c, strt_dt, end_dt, tp)
 
-    _run_unified(market, kr, us)
+        def kr():
+            print_generic_table(kr_fetch(), title="위탁 종합거래내역")
+
+        def us():
+            data = us_fetch()
+            if data is not None:
+                print_generic_table(data, title="미국주식 거래내역")
+
+        _run_unified(market, kr, us)
 
 
 @history.command("journal")

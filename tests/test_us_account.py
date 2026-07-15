@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from click.testing import CliRunner
 
@@ -253,3 +255,99 @@ def test_fx_apply_requires_confirm_prompt(runner, fx_fake):
     accepted = runner.invoke(cli, ["account", "exchange", "apply", "1000000", "--confirm"])
     assert accepted.exit_code == 0
     assert ("ust31302", {"exch_tp": "1", "fc_exmn_amt": "1000000"}) in fx_fake.calls
+
+
+# ============================================================
+#  Final-review fixes
+# ============================================================
+
+
+def test_deposit_json_single_document(runner, acct_fake_full):
+    result = runner.invoke(cli, ["--format", "json", "account", "deposit"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)   # must parse as ONE document
+    assert set(payload) == {"kr", "us"}
+
+
+def test_pnl_today_json_single_document(runner, acct_fake_full):
+    result = runner.invoke(cli, ["--format", "json", "account", "pnl", "today", "005930", "--market", "kr"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert set(payload) == {"kr", "us"}
+
+
+def test_orders_pending_json_single_document(runner, acct_fake_full):
+    result = runner.invoke(cli, ["--format", "json", "account", "orders", "pending"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert set(payload) == {"kr", "us"}
+
+
+def test_orders_executed_json_single_document(runner, acct_fake_full):
+    acct_fake_full.set_response("ka10076", {"return_code": 0, "cntr": []})
+    acct_fake_full.set_response("ust21510", {"return_code": 0, "result_list": []})
+    result = runner.invoke(cli, ["--format", "json", "account", "orders", "executed"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert set(payload) == {"kr", "us"}
+
+
+def test_history_transactions_json_single_document(runner, acct_fake_full):
+    result = runner.invoke(
+        cli, ["--format", "json", "account", "history", "transactions", "--from", "20260701", "--to", "20260715"]
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert set(payload) == {"kr", "us"}
+
+
+def test_pnl_by_period_json_single_document(runner, acct_fake_full):
+    acct_fake_full.set_response("ka10073", {"return_code": 0})
+    acct_fake_full.set_response("ust21530", {"return_code": 0, "tot_pl_amt": "10.00", "result_list": []})
+    result = runner.invoke(
+        cli, ["--format", "json", "account", "pnl", "by-period", "--from", "20260701", "--to", "20260715"]
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert set(payload) == {"kr", "us"}
+
+
+def test_balance_csv_includes_us_columns(runner, acct_fake):
+    result = runner.invoke(cli, ["--format", "csv", "account", "balance"])
+    assert result.exit_code == 0
+    lines = result.output.strip().splitlines()
+    header = lines[0].split(",")
+    assert {"market", "symbol", "name", "qty", "avg_price", "cur_price",
+            "eval_amt", "pl_amt", "pl_rt", "currency", "eval_krw", "pl_krw"} <= set(header)
+    us_rows = [line for line in lines[1:] if line.startswith("US,")]
+    assert len(us_rows) == 1
+    us_row = dict(zip(header, us_rows[0].split(",")))
+    assert us_row["name"] == "엔비디아"
+    assert us_row["qty"] == "000000010"
+    assert us_row["avg_price"] == "195.2000"
+
+
+def test_pnl_today_us_ticker_never_reaches_kr(runner, acct_fake_full):
+    result = runner.invoke(cli, ["account", "pnl", "today", "NVDA"])
+    assert result.exit_code == 0
+    assert all(c[0] != "ka10077" for c in acct_fake_full.calls)
+    assert ("ust21170", {"fc_krw_tp": "0"}) in acct_fake_full.calls
+
+
+def test_pnl_today_kr_market_rejects_us_ticker(runner, acct_fake_full):
+    result = runner.invoke(cli, ["account", "pnl", "today", "NVDA", "--market", "kr"])
+    assert result.exit_code == 1
+    assert all(c[0] != "ka10077" for c in acct_fake_full.calls)
+
+
+def test_balance_both_fail_exits_2(runner, acct_fake, monkeypatch):
+    from kiwoom_cli.client import KiwoomAPIError
+
+    def failing(api_id, body=None, **kw):
+        if api_id in ("kt00004", "ust21070"):
+            raise KiwoomAPIError(500, "boom")
+        raise AssertionError(f"unexpected call {api_id}")
+
+    monkeypatch.setattr(acct_fake, "request", failing)
+    result = runner.invoke(cli, ["account", "balance"])
+    assert result.exit_code == 2

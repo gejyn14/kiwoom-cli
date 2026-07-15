@@ -798,14 +798,44 @@ def print_unified_balance(kr_data: dict[str, Any] | None, us_data: dict[str, Any
         _output_json({"kr": kr_data, "us": us_data})
         return
     if fmt == "csv":
+        keys = [
+            "market", "symbol", "name", "qty", "avg_price", "cur_price",
+            "eval_amt", "pl_amt", "pl_rt", "currency", "eval_krw", "pl_krw",
+        ]
         rows: list[dict] = []
         if kr_data:
             for h in kr_data.get("stk_acnt_evlt_prst", []) or []:
-                rows.append({"market": "KR", **h})
+                rows.append({
+                    "market": "KR",
+                    "symbol": h.get("stk_cd", ""),
+                    "name": h.get("stk_nm", ""),
+                    "qty": h.get("rmnd_qty", ""),
+                    "avg_price": h.get("avg_prc", ""),
+                    "cur_price": h.get("cur_prc", ""),
+                    "eval_amt": h.get("evlt_amt", ""),
+                    "pl_amt": h.get("pl_amt", ""),
+                    "pl_rt": h.get("pl_rt", ""),
+                    "currency": "KRW",
+                    "eval_krw": h.get("evlt_amt", ""),
+                    "pl_krw": h.get("pl_amt", ""),
+                })
         if us_data:
             for h in _find_list(us_data) or []:
-                rows.append({"market": "US", **h})
-        _output_csv(rows)
+                rows.append({
+                    "market": "US",
+                    "symbol": h.get("stk_cd", ""),
+                    "name": h.get("frgn_stk_nm", ""),
+                    "qty": h.get("poss_qty", ""),
+                    "avg_price": h.get("frgn_stk_book_uv", ""),
+                    "cur_price": h.get("now_pric", ""),
+                    "eval_amt": h.get("evlt_amt", ""),
+                    "pl_amt": h.get("pl_amt", ""),
+                    "pl_rt": h.get("pl_rt", ""),
+                    "currency": h.get("crnc_code") or "USD",
+                    "eval_krw": h.get("evlt_amt_krw", ""),
+                    "pl_krw": h.get("pl_amt_krw", ""),
+                })
+        _output_csv(rows, keys)
         return
 
     def _pad_int(v: str) -> int:

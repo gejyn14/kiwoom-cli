@@ -159,6 +159,20 @@ def test_resolve_not_found_raises(tmp_cache):
         detect.resolve_us_exchange(fake, "ZZZZ")
 
 
+def test_resolve_ignores_non_dict_cache_and_falls_back_to_api(tmp_cache):
+    tmp_cache.write_text('["NVDA"]', encoding="utf-8")
+    fake = _fake_with_10098([{"stex_tp": "ND", "stk_cd": "NVDA"}])
+    assert detect.resolve_us_exchange(fake, "NVDA") == "ND"
+    assert fake.calls == [("usa10098", {"stk_cd": "NVDA"})]
+
+
+def test_resolve_ignores_invalid_cached_value(tmp_cache):
+    tmp_cache.write_text('{"NVDA": "bogus"}', encoding="utf-8")
+    fake = _fake_with_10098([{"stex_tp": "ND", "stk_cd": "NVDA"}])
+    assert detect.resolve_us_exchange(fake, "NVDA") == "ND"
+    assert fake.calls == [("usa10098", {"stk_cd": "NVDA"})]
+
+
 # ============================================================
 #  Task 4: USD formatting
 # ============================================================
