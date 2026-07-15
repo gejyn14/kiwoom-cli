@@ -1,29 +1,58 @@
 # kiwoom-cli
 
-키움증권 REST API를 터미널에서 사용하기 위한 CLI 도구.
+**키움증권 REST API 전체를 터미널에서.** 시세 조회부터 주문, 실시간 스트리밍, 미국주식까지 — 명령어 하나로.
 
-- 207개 API 전체 지원 (188 REST + 19 WebSocket 실시간)
-- 종목 조회, 호가, 차트, 계좌, 주문, 순위, 업종, 테마, ETF, ELW, 금현물
-- 출력 형식: Rich 테이블 / JSON / CSV (`-f json`, `-f csv`)
-- 실시간 WebSocket 스트리밍 (체결, 호가, VI, 잔고 등)
-- AI 에이전트 친화적: 구조화된 JSON 출력, exit code (0/1/2/3)
-
-## 설치
+[![PyPI](https://img.shields.io/pypi/v/kiwoom-cli)](https://pypi.org/project/kiwoom-cli/)
+[![Python](https://img.shields.io/pypi/pyversions/kiwoom-cli)](https://pypi.org/project/kiwoom-cli/)
+[![CI](https://github.com/gejyn14/kiwoom-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/gejyn14/kiwoom-cli/actions/workflows/ci.yml)
+[![Downloads](https://img.shields.io/pypi/dm/kiwoom-cli)](https://pypi.org/project/kiwoom-cli/)
+[![License](https://img.shields.io/badge/license-Source--Available-blue)](LICENSE)
 
 ```bash
 pip install kiwoom-cli
 ```
 
+```bash
+$ kiwoom stock price 005930          # 삼성전자 현재가
+$ kiwoom order buy NVDA 10 --price 213.04   # 미국주식도 그대로
+$ kiwoom -f json account balance | jq       # AI 에이전트·스크립트 친화
+```
+
+## 왜 kiwoom-cli인가
+
+- **236개 API 전체 지원** — REST 217개 + WebSocket 실시간 19종. 시세·차트·계좌·주문·순위·업종·테마·ETF·ELW·금현물·미국주식까지 키움 REST API를 빠짐없이 커버합니다.
+- **프롬프트 제로** — 인증정보는 OS 키체인에 저장되고, 어떤 명령도 비밀번호를 묻지 않습니다. `gh`/`aws`/`docker`와 같은 모델. 크론잡, CI, AI 에이전트가 그대로 돌립니다.
+- **AI 에이전트 퍼스트** — 구조화된 JSON 출력(`-f json`), 일관된 exit code(0/1/2/3), 주문 확인 게이트(`--confirm`). Claude Code, 자동매매 스크립트에 바로 연결됩니다.
+- **미국주식 자동 라우팅** — `005930`은 국내로, `NVDA`는 미국으로. 거래소(NASDAQ/NYSE/AMEX)도 자동 판별. 국내+미국 통합 잔고를 원화 총계로 보여줍니다.
+- **사람에게도 친절** — Rich 테이블, 상승=빨강/하락=파랑 색상, 실시간 TUI 대시보드, shell 자동완성.
+- **246개 테스트 + CI** — Python 3.10–3.13 매트릭스, CodeQL 정적 분석.
+
+> 📖 **전체 문서는 [Wiki](https://github.com/gejyn14/kiwoom-cli/wiki)에서** — 설치 가이드, 명령어 레퍼런스, 미국주식·AI 에이전트·멀티 프로필 가이드, 릴리스 노트.
+
+## 최근 업데이트
+
+### v2.1 — 비밀번호 프롬프트 완전 제거 (2026-07)
+
+앱 자체 암호화 계층을 걷어내고 모든 인증정보를 OS 키체인에 직접 저장합니다. `config setup`, `auth login` 어디서도 더 이상 비밀번호를 묻지 않습니다. 기존 사용자는 업그레이드 후 `kiwoom config setup` 한 번만 다시 실행하면 됩니다.
+
+### v2.0 — 미국주식 지원 (2026-07)
+
+미국주식 29개 엔드포인트를 기존 명령 체계에 그대로 통합했습니다. 티커만 입력하면 시장을 자동 판별하므로 미국 주문도 국내 주문과 똑같이 짧습니다. 소수점 가격, stop/stop-limit/vwap/twap 주문유형, 환전(`account exchange`), 국내+미국 통합 계좌 뷰를 지원합니다.
+
+전체 변경 내역: [CHANGELOG](CHANGELOG.md) · [Wiki 릴리스 노트](https://github.com/gejyn14/kiwoom-cli/wiki/Release-Notes)
+
 ## 시작하기
 
+[키움증권 REST API](https://openapi.kiwoom.com)에서 appkey/secretkey를 발급받은 뒤:
+
 ```bash
-# 1. 초기 설정 (appkey, secretkey 입력)
+# 1. 초기 설정 (appkey, secretkey → OS 키체인)
 kiwoom config setup
 
 # 2. 토큰 발급
 kiwoom auth login
 
-# 3. 사용 (프롬프트 없음)
+# 3. 끝. 이후 모든 명령은 프롬프트 없이 동작
 kiwoom stock info 005930
 ```
 
@@ -74,17 +103,38 @@ kiwoom -p isa account balance
 kiwoom -p isa auth login
 ```
 
+## AI 에이전트와 함께 쓰기
+
+kiwoom-cli는 AI 에이전트가 도구로 쓰는 것을 처음부터 염두에 두고 설계됐습니다.
+
+```bash
+# 구조화된 JSON — 파싱이 필요 없는 출력
+kiwoom -f json stock info 005930
+kiwoom -f json market rank volume | jq '.[].stk_nm'
+
+# 일관된 exit code — 0=성공, 1=입력오류, 2=API오류, 3=인증필요
+kiwoom stock price 005930 || echo "재시도 또는 재인증"
+
+# 주문은 기본 확인 게이트, 자동화 시에만 --confirm으로 명시적 스킵
+kiwoom order buy 005930 10 --type market --confirm
+```
+
+- 어떤 명령도 비밀번호·생체인증을 요구하지 않으므로 에이전트 세션이 중간에 멈추지 않습니다.
+- 페이지네이션(연속조회)은 자동 처리 — 에이전트가 커서를 관리할 필요가 없습니다.
+- 자세한 패턴은 [Wiki: AI 에이전트 가이드](https://github.com/gejyn14/kiwoom-cli/wiki/AI-Agents) 참고.
+
 ## 명령어 구조
 
 ```
-kiwoom [--format table|json|csv] [--no-color]
-├── config      설정 (setup / show / domain)
+kiwoom [--format table|json|csv] [--no-color] [-p 프로필]
+├── config      설정 (setup / show / domain / profiles)
 ├── auth        인증 (login / logout / status)
 ├── stock       종목 조회 (info / orderbook / chart / compare ...)
 ├── account     계좌 조회 (balance / deposit / returns / pnl ...)
 ├── order       주문 (buy / sell / modify / cancel / credit / gold)
 ├── market      시장 정보 (rank / sector / theme / etf / elw / gold)
 ├── stream      실시간 스트리밍 (quote / orderbook / order / vi ...)
+├── watch       실시간 종목 모니터링 (TUI)
 ├── dashboard   대시보드 (계좌 + 거래량 상위 한눈에)
 └── api         Raw API 호출
 ```
@@ -108,6 +158,7 @@ kiwoom stock sync                        # 전 시장 종목 리스트 다운로
 kiwoom stock search 삼성                 # 캐시에서 종목 검색
 kiwoom stock search 삼성 --market kospi  # 코스피만 필터
 kiwoom stock watchlist "005930|000660" # 관심종목
+kiwoom stock compare 005930 000660     # 종목 비교 (최대 여러 종목)
 ```
 
 ### 차트
@@ -160,6 +211,7 @@ kiwoom stock credit trend 005930 --date 20260301 --type loan
 | `search`         | 종목 검색 (캐시 기반, 시장/유형 필터)                 |
 | `watchlist`      | 관심종목                                              |
 | `brokers`        | 회원사 리스트                                         |
+| `compare`        | 복수 종목 비교                                        |
 | `chart *`        | 틱/분봉/일봉/주봉/월봉/년봉, 투자자별 차트            |
 | `investor *`     | 기관매매, 투자자별매매, 프로그램매매 등 10개          |
 | `analysis *`     | 거래상세, 거래량갱신, 매물대, PER, VI, 증권사 등 10개 |
@@ -174,7 +226,7 @@ kiwoom stock credit trend 005930 --date 20260301 --type loan
 
 ```bash
 kiwoom account list                # 계좌번호
-kiwoom account balance             # 잔고 + 보유종목 + 손익
+kiwoom account balance             # 잔고 + 보유종목 + 손익 (국내+미국 통합)
 kiwoom account deposit             # 예수금
 kiwoom account asset               # 추정자산
 kiwoom account today               # 당일현황
@@ -216,6 +268,9 @@ kiwoom account orderable amount 005930 --side buy --price 70000
 | `orderable` | `amount`        | 주문가능 금액       |
 | `orderable` | `margin-qty`    | 증거금율별 수량     |
 | `orderable` | `credit-qty`    | 신용보증금율별 수량 |
+| `exchange`  | `rate`          | 환율 조회           |
+| `exchange`  | `estimate`      | 환전 예상금액       |
+| `exchange`  | `apply`         | 환전 신청           |
 | `history`   | `transactions`  | 위탁종합 거래내역   |
 | `history`   | `journal`       | 당일 매매일지       |
 
@@ -244,11 +299,13 @@ kiwoom account exchange apply 1000000 --confirm    # 원화 → 달러 환전
 - 정정은 가격만 가능(전량), 취소는 전량 취소만 지원됩니다 (키움 API 제약).
 - 계좌 조회 명령(`balance/deposit/pnl/orders/history`)은 기본 통합 표시이며 `--market kr|us`로 필터링합니다.
 
+자세한 가이드: [Wiki: 미국주식](https://github.com/gejyn14/kiwoom-cli/wiki/US-Stocks)
+
 ---
 
 ## order - 주문
 
-모든 주문에 `--confirm` 필수.
+주문은 실행 전 미리보기 + 대화형 확인이 기본입니다. 자동화 시에만 `--confirm`으로 스킵하세요.
 
 ```bash
 # 주식
@@ -363,27 +420,13 @@ kiwoom stream types                     # 타입 코드 목록
 
 ---
 
-## Raw API
-
-```bash
-kiwoom api ka10001 '{"stk_cd":"005930"}'        # 테이블 출력
-kiwoom api ka10001 '{"stk_cd":"005930"}' --raw   # JSON 원본
-```
-
----
-
-## dashboard - 대시보드
+## dashboard / Raw API
 
 ```bash
 kiwoom dashboard                        # 계좌 요약 + 거래량 상위 한눈에
-```
 
-## 종목 비교
-
-```bash
-kiwoom stock compare 005930 000660      # 삼성전자 vs SK하이닉스
-kiwoom stock compare 005930 000660 035420  # 3종목 비교
-kiwoom -f json stock compare 005930 000660  # JSON 출력
+kiwoom api ka10001 '{"stk_cd":"005930"}'        # Raw API — 테이블 출력
+kiwoom api ka10001 '{"stk_cd":"005930"}' --raw   # JSON 원본
 ```
 
 ---
@@ -429,6 +472,23 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 | 2    | API/네트워크 오류       |
 | 3    | 인증 필요 (토큰 만료)   |
 
+## 보안
+
+모든 인증정보(appkey, secretkey, 토큰)는 **OS 키체인**(macOS Keychain / Windows Credential Manager / Linux Secret Service)에 저장됩니다. 파일로 존재하지 않으며, 키체인이 디스크 저장 시 암호화를 담당합니다. `gh`, `aws`, `docker` CLI와 동일한 모델입니다.
+
+| 항목               | 저장 방식          | 프롬프트 |
+| ------------------ | ------------------ | :------: |
+| appkey / secretkey | OS 키체인          |    X     |
+| 토큰               | OS 키체인          |    X     |
+| config.toml        | 도메인, 계좌번호만 |    X     |
+
+- 모든 명령어는 비밀번호/생체인증 프롬프트 없이 동작 (AI 에이전트·자동화 친화적)
+- 앱 자체 암호화 계층은 의도적으로 두지 않음 — 추가 계층은 명령마다 잠금 해제 프롬프트를 요구하게 되어 CLI 사용성을 해침
+- v2.0 이하에서 업그레이드한 경우: 암호화 저장소 형식이 제거되어 `kiwoom config setup`을 한 번 다시 실행해야 합니다
+- 주문은 기본적으로 미리보기 + 대화형 확인을 거칩니다 (`--confirm`으로 스킵)
+
+자세한 내용: [Wiki: 보안 모델](https://github.com/gejyn14/kiwoom-cli/wiki/Security) · [SECURITY.md](SECURITY.md)
+
 ## 참고
 
 | 항목             | 값                                       |
@@ -446,20 +506,6 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 - 연속조회(페이지네이션) 자동 처리
 - 종목코드 6자리: `005930` (삼성전자)
 - 금현물: `M04020000` (1kg), `M04020100` (미니 100g)
-
-## 보안
-
-모든 인증정보(appkey, secretkey, 토큰)는 **OS 키체인**(macOS Keychain / Windows Credential Manager / Linux Secret Service)에 저장됩니다. 파일로 존재하지 않으며, 키체인이 디스크 저장 시 암호화를 담당합니다. `gh`, `aws`, `docker` CLI와 동일한 모델입니다.
-
-| 항목               | 저장 방식          | 프롬프트 |
-| ------------------ | ------------------ | :------: |
-| appkey / secretkey | OS 키체인          |    X     |
-| 토큰               | OS 키체인          |    X     |
-| config.toml        | 도메인, 계좌번호만 |    X     |
-
-- 모든 명령어는 비밀번호/생체인증 프롬프트 없이 동작 (AI 에이전트·자동화 친화적)
-- 앱 자체 암호화 계층은 의도적으로 두지 않음 — 추가 계층은 명령마다 잠금 해제 프롬프트를 요구하게 되어 CLI 사용성을 해침
-- v2.0 이하에서 업그레이드한 경우: 암호화 저장소 형식이 제거되어 `kiwoom config setup`을 한 번 다시 실행해야 합니다
 
 ## License
 
