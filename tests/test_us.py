@@ -304,3 +304,72 @@ def test_us_buy_kr_order_type_rejected(runner, us_fake):
         cli, ["order", "buy", "NVDA", "1", "--type", "fok", "--confirm"]
     )
     assert result.exit_code == 1
+
+
+def test_us_buy_rejects_cond_price(runner, us_fake):
+    result = runner.invoke(cli, ["order", "buy", "NVDA", "1", "--cond-price", "500", "--confirm"])
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust20000") == []
+
+
+def test_us_sell_rejects_cond_price(runner, us_fake):
+    result = runner.invoke(cli, ["order", "sell", "NVDA", "1", "--cond-price", "500", "--confirm"])
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust20001") == []
+
+
+# ============================================================
+#  Task 6: US modify/cancel/orderable
+# ============================================================
+
+
+def test_us_modify_price_only_no_qty_sent(runner, us_fake):
+    result = runner.invoke(
+        cli,
+        ["order", "modify", "000000123", "NVDA", "5", "215.5", "--confirm"],
+    )
+    assert result.exit_code == 0
+    assert "전량" in result.output  # 수량 변경 미지원 notice
+    calls = _order_calls(us_fake, "ust20002")
+    assert calls == [(
+        "ust20002",
+        {"orig_ord_no": "000000123", "stex_tp": "ND", "stk_cd": "NVDA", "mdfy_uv": "215.5"},
+    )]
+
+
+def test_us_modify_stop_limit_sends_stop_pric(runner, us_fake):
+    result = runner.invoke(
+        cli,
+        ["order", "modify", "000000123", "NVDA", "5", "215.5", "--stop", "210.0", "--confirm"],
+    )
+    assert result.exit_code == 0
+    body = _order_calls(us_fake, "ust20002")[0][1]
+    assert body["stop_pric"] == "210"
+
+
+def test_us_cancel_full_remaining(runner, us_fake):
+    result = runner.invoke(
+        cli, ["order", "cancel", "000000123", "NVDA", "--confirm"]
+    )
+    assert result.exit_code == 0
+    assert _order_calls(us_fake, "ust20003") == [(
+        "ust20003",
+        {"orig_ord_no": "000000123", "stex_tp": "ND", "stk_cd": "NVDA"},
+    )]
+
+
+def test_us_cancel_rejects_partial_qty(runner, us_fake):
+    # cancel's qty is passed via --qty (matches existing KR CLI shape); nonzero → exit 1 on US path
+    result = runner.invoke(
+        cli, ["order", "cancel", "000000123", "NVDA", "--qty", "3", "--confirm"]
+    )
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust20003") == []
+
+
+def test_kr_modify_unchanged(runner, us_fake):
+    result = runner.invoke(
+        cli, ["order", "modify", "0000139", "005930", "1", "70000", "--confirm"]
+    )
+    assert result.exit_code == 0
+    assert len(_order_calls(us_fake, "kt10002")) == 1

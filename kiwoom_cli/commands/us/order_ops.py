@@ -6,7 +6,7 @@ import click
 from rich.panel import Panel
 
 from ...client import KiwoomClient
-from ...formatters import print_order_result
+from ...formatters import print_generic_table, print_order_result
 from ...output import console, err_console
 from ._constants import (
     US_ORDER_TYPES,
@@ -44,10 +44,11 @@ def _confirm_gate(confirm: bool) -> None:
 def _show_us_preview(action: str, code: str, qty: int, price: float,
                      order_type: str, stex_tp: str, stop: float = 0) -> None:
     price_str = f"${fmt_us_price(price)}" if price else "시장가"
+    qty_str = f"{qty:,}" if qty else "전량"
     body = (
         f"[bold]{action} 주문 (미국)[/]\n\n"
         f"  종목코드: {code}\n"
-        f"  수량: {qty:,}\n"
+        f"  수량: {qty_str}\n"
         f"  가격: {price_str}\n"
         f"  유형: {order_type}\n"
         f"  거래소: {_EXCHANGE_NAMES.get(stex_tp, stex_tp)}"
@@ -108,3 +109,53 @@ def sell(code: str, qty: int, price: float, order_type: str,
             body["stop_pric"] = fmt_us_price(stop)
         data, _ = c.request("ust20001", body)
         print_order_result(data, "매도")
+
+
+def modify(orig_order_no: str, code: str, qty: int, price: float,
+           exchange: str | None, stop: float, confirm: bool) -> None:
+    """미국주식 정정 (ust20002) — 가격 정정만 지원, 항상 잔량 전체."""
+    console.print("[yellow]미국주식 정정은 수량 변경 미지원 — 전량 가격정정으로 처리됩니다.[/]")
+    _confirm_gate(confirm)
+    with KiwoomClient() as c:
+        stex_tp = _resolve_or_exit(c, code, exchange)
+        _show_us_preview("정정", code, 0, price, "limit", stex_tp, stop)
+        body = {
+            "orig_ord_no": orig_order_no,
+            "stex_tp": stex_tp,
+            "stk_cd": code.upper(),
+            "mdfy_uv": fmt_us_price(price),
+        }
+        if stop:
+            body["stop_pric"] = fmt_us_price(stop)
+        data, _ = c.request("ust20002", body)
+        print_order_result(data, "정정")
+
+
+def cancel(orig_order_no: str, code: str, qty: int,
+           exchange: str | None, confirm: bool) -> None:
+    """미국주식 취소 (ust20003) — 잔량 전체 취소만 지원."""
+    if qty:
+        err_console.print("[red]미국주식은 부분 취소를 지원하지 않습니다 (수량 지정 불가, 전량 취소만 가능).[/]")
+        raise SystemExit(1)
+    _confirm_gate(confirm)
+    with KiwoomClient() as c:
+        stex_tp = _resolve_or_exit(c, code, exchange)
+        _show_us_preview("취소", code, 0, 0, "-", stex_tp)
+        data, _ = c.request("ust20003", {
+            "orig_ord_no": orig_order_no,
+            "stex_tp": stex_tp,
+            "stk_cd": code.upper(),
+        })
+        print_order_result(data, "취소")
+
+
+def orderable(code: str, price: float, exchange: str | None) -> None:
+    """미국주식 주문가능수량 (ust31490)."""
+    with KiwoomClient() as c:
+        stex_tp = _resolve_or_exit(c, code, exchange)
+        data, _ = c.request("ust31490", {
+            "stex_tp": stex_tp,
+            "stk_cd": code.upper(),
+            "uv": fmt_us_price(price),
+        })
+        print_generic_table(data, title=f"{code.upper()} 주문가능수량 (미국)")
