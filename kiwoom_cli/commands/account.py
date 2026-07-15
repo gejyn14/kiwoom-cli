@@ -6,16 +6,18 @@ from datetime import datetime
 
 import click
 
-from ..client import KiwoomClient
+from ..client import KiwoomAPIError, KiwoomClient
 from ..formatters import (
     _find_list,
     print_account_eval,
     print_deposit,
     print_generic_table,
     print_pending_orders,
+    print_unified_balance,
 )
 from ..output import err_console
 from ._constants import EXCHANGE_ALL_ZERO
+from .us import account_ops as us_account_ops
 from .us import order_ops as us_order_ops
 from .us._constants import US_EXCHANGE
 from .us.detect import is_us_symbol
@@ -48,13 +50,31 @@ def account_list():
 
 
 @account.command("balance")
-@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 구분")
+@click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장 (all=통합, kr=국내, us=미국)")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="국내 거래소 구분")
 @click.option("--delist", "qry_tp", default="0", type=click.Choice(["0", "1"]), help="상장폐지조회구분 (0=전체, 1=제외)")
-def balance(dmst_stex_tp: str, qry_tp: str):
-    """계좌 평가현황 (잔고, 보유종목, 손익). (kt00004)"""
+def balance(market: str, dmst_stex_tp: str, qry_tp: str):
+    """계좌 평가현황 — 국내+미국 통합. (kt00004 + ust21070)"""
+    kr_data = us_data = None
     with KiwoomClient() as c:
-        data, _ = c.request("kt00004", {"qry_tp": qry_tp, "dmst_stex_tp": dmst_stex_tp})
-        print_account_eval(data)
+        if market in ("all", "kr"):
+            try:
+                kr_data, _ = c.request("kt00004", {"qry_tp": qry_tp, "dmst_stex_tp": dmst_stex_tp})
+            except KiwoomAPIError as e:
+                if market == "kr":
+                    raise
+                err_console.print(f"[dim]국내 잔고 조회 실패: {e}[/]")
+        if market in ("all", "us"):
+            try:
+                us_data = us_account_ops.fetch_balance(c)
+            except KiwoomAPIError as e:
+                if market == "us":
+                    raise
+                err_console.print(f"[dim]미국 잔고 조회 실패 (미국주식 미개설 계좌일 수 있음): {e}[/]")
+    if market == "kr":
+        print_account_eval(kr_data or {})
+    else:
+        print_unified_balance(kr_data, us_data)
 
 
 @account.command("deposit")

@@ -45,8 +45,8 @@ def test_account_list_hits_ka00001(runner, fake_client):
 
 
 def test_balance_exchange_enum_maps_to_api_value(runner, fake_client):
-    """--exchange KRX maps through to dmst_stex_tp, with qry_tp default."""
-    result = runner.invoke(cli, ["account", "balance", "--exchange", "KRX"])
+    """--exchange KRX maps through to dmst_stex_tp, with qry_tp default (KR market)."""
+    result = runner.invoke(cli, ["account", "balance", "--market", "kr", "--exchange", "KRX"])
 
     assert result.exit_code == 0
     assert fake_client.calls == [

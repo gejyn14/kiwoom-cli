@@ -789,3 +789,92 @@ def print_deposit(data: dict[str, Any]) -> None:
         if val:
             t.add_row(label, _fmt_number(val))
     console.print(t)
+
+
+def print_unified_balance(kr_data: dict[str, Any] | None, us_data: dict[str, Any] | None) -> None:
+    """국내(kt00004) + 미국(ust21070) 통합 계좌 평가현황."""
+    fmt = _get_format()
+    if fmt == "json":
+        _output_json({"kr": kr_data, "us": us_data})
+        return
+    if fmt == "csv":
+        rows: list[dict] = []
+        if kr_data:
+            for h in kr_data.get("stk_acnt_evlt_prst", []) or []:
+                rows.append({"market": "KR", **h})
+        if us_data:
+            for h in _find_list(us_data) or []:
+                rows.append({"market": "US", **h})
+        _output_csv(rows)
+        return
+
+    def _pad_int(v: str) -> int:
+        try:
+            return int(str(v).lstrip("+-").lstrip("0") or "0")
+        except ValueError:
+            return 0
+
+    table = Table(title="🌏 통합 계좌평가현황", border_style="dim")
+    table.add_column("시장", style="dim")
+    table.add_column("종목")
+    table.add_column("수량", justify="right")
+    table.add_column("매입가", justify="right")
+    table.add_column("현재가", justify="right")
+    table.add_column("평가금액", justify="right")
+    table.add_column("손익", justify="right")
+    table.add_column("수익률", justify="right")
+
+    if kr_data:
+        for h in kr_data.get("stk_acnt_evlt_prst", []) or []:
+            pl = h.get("pl_amt", "0")
+            color = _sign_color(pl)
+            table.add_row(
+                "KRX",
+                h.get("stk_nm", ""),
+                _fmt_number(h.get("rmnd_qty", "")),
+                _fmt_number(h.get("avg_prc", "")),
+                _fmt_number(h.get("cur_prc", "")),
+                f"₩{_fmt_number(h.get('evlt_amt', ''))}",
+                Text(_fmt_number(pl), style=color),
+                Text(h.get("pl_rt", "0") + "%", style=color),
+            )
+    if us_data:
+        for h in _find_list(us_data) or []:
+            pl = h.get("pl_amt", "0")
+            color = _sign_color(pl)
+            table.add_row(
+                h.get("stex_nm", "US"),
+                h.get("frgn_stk_nm", "") or h.get("stk_cd", ""),
+                _fmt_number(h.get("poss_qty", ""), strip_sign=True),
+                f"${_fmt_usd(h.get('frgn_stk_book_uv', ''), strip_sign=True)}",
+                f"${_fmt_usd(h.get('now_pric', ''), strip_sign=True)}",
+                f"${_fmt_usd(h.get('evlt_amt', ''))}\n(₩{_fmt_number(h.get('evlt_amt_krw', ''))})",
+                Text(
+                    f"{_fmt_usd(pl)}\n(₩{_fmt_number(h.get('pl_amt_krw', ''))})",
+                    style=color,
+                ),
+                Text(h.get("pl_rt", "0") + "%", style=color),
+            )
+    console.print(table)
+
+    # 소계 + 원화 총계
+    kr_total = _pad_int(kr_data.get("tot_est_amt", "0")) if kr_data else 0
+    us_total_krw = _pad_int(us_data.get("tot_evlt_amt_krw", "0")) if us_data else 0
+    summary = Table(show_header=False, border_style="dim")
+    summary.add_column("항목", style="cyan", width=20)
+    summary.add_column("값", justify="right")
+    if kr_data:
+        _, kr_pl_str, kr_pl_rt, kr_color = _calc_eval_pl(kr_data)
+        summary.add_row("KRW 소계", Text(f"₩{kr_total:,} ({kr_pl_str})", style=kr_color))
+    if us_data:
+        us_pl = us_data.get("tot_pl_amt", "0")
+        us_color = _sign_color(us_pl)
+        summary.add_row(
+            "USD 소계",
+            Text(
+                f"${_fmt_usd(us_data.get('tot_evlt_amt', '0'))} ({_fmt_usd(us_pl)})",
+                style=us_color,
+            ),
+        )
+    summary.add_row("총평가액 (KRW)", Text(f"₩{kr_total + us_total_krw:,}", style="bold"))
+    console.print(summary)
