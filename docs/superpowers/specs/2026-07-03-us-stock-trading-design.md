@@ -178,9 +178,10 @@ unless `--confirm`. `account exchange apply` (moves money) gets the same confirm
 | month | usa06014 | 〃 |
 | year | usa06015 | 〃 |
 
-US-only options: `--adjust/--no-adjust` (`upd_stkpc_tp`, default adjust=1 to match domestic
-convention) and `--krw` (`exrt_appl_tp`, default 0). Existing domestic options that have no US
-equivalent are ignored on the US path with a notice only when explicitly set.
+The existing shared `--adjusted` option (`upd_stkpc_tp`, default `0` = 미적용, matching
+domestic) passes through to the US body. New US-only option `--krw` (`exrt_appl_tp`, default
+0); the KR path rejects it. Existing domestic options that have no US equivalent are ignored
+on the US path with a notice only when explicitly set.
 
 ## 7. Formatting changes (`formatters.py`)
 
@@ -221,7 +222,8 @@ kiwoom_cli/commands/us/
 **Unchanged:** `client.py`, `config.py`, `auth.py`, domain/profile system. US APIs use the
 same appkey/secret/account/token and the same host (`api.kiwoom.com` /
 `mockapi.kiwoom.com`). Among shared modules only `api_spec.py` (register ~24 IDs) and
-`formatters.py` (§7) change; `main.py` wires the `account exchange` subgroup.
+`formatters.py` (§7) change; `commands/account.py` wires the `account exchange` subgroup
+(`account.add_command(...)`) — `main.py` is untouched.
 
 Files modified: `api_spec.py`, `formatters.py`, `commands/order.py` (dispatch + float price +
 `--stop` + broadened `--exchange`), `commands/stock.py` (dispatch), `commands/account.py`
