@@ -236,6 +236,9 @@ def modify(orig_order_no: str, code: str, qty: int, price: float, exchange: str 
         kiwoom order modify 000000123 NVDA 5 215.5 --confirm
     """
     if is_us_symbol(code, exchange):
+        if mdfy_cond_uv:
+            err_console.print("[red]--cond-price는 국내 주문에서만 사용합니다.[/]")
+            raise SystemExit(1)
         return us_order_ops.modify(orig_order_no, code, qty, price, exchange, stop, confirm)
 
     if stop:

@@ -387,3 +387,18 @@ def test_us_orderable_margin_qty_requires_price(runner, us_fake, monkeypatch):
     result = runner.invoke(cli, ["account", "orderable", "margin-qty", "NVDA"])
     assert result.exit_code == 1
     assert _order_calls(us_fake, "ust31490") == []
+
+
+def test_us_orderable_margin_qty_rejects_non_numeric_price(runner, us_fake, monkeypatch):
+    monkeypatch.setattr("kiwoom_cli.commands.account.KiwoomClient", lambda *a, **k: us_fake)
+    result = runner.invoke(cli, ["account", "orderable", "margin-qty", "NVDA", "--price", "abc"])
+    assert result.exit_code == 1
+    # clean SystemExit, not a raw ValueError traceback
+    assert isinstance(result.exception, SystemExit)
+    assert _order_calls(us_fake, "ust31490") == []
+
+
+def test_us_modify_rejects_cond_price(runner, us_fake):
+    result = runner.invoke(cli, ["order", "modify", "000000123", "NVDA", "5", "215.5", "--cond-price", "500", "--confirm"])
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust20002") == []
