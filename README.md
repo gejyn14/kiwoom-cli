@@ -264,8 +264,8 @@ kiwoom order credit sell 005930 10 --type market --confirm
 
 # 금현물
 kiwoom order gold buy M04020000 1 --type market --confirm
-kiwoom order gold balance --confirm    # 잔고
-kiwoom order gold pending --confirm   # 미체결
+kiwoom order gold balance             # 잔고
+kiwoom order gold pending             # 미체결
 
 # 조건검색
 kiwoom order condition list
