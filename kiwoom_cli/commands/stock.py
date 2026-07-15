@@ -19,6 +19,8 @@ from ..formatters import (
 )
 from ..output import console
 from ._constants import EXCHANGE_ALL, MARKET_ALL, MARKET_PROGRAM, MARKET_TWO
+from .us import stock_ops as us_stock_ops
+from .us.detect import is_us_symbol
 
 
 @click.group("stock")
@@ -34,8 +36,16 @@ def stock():
 
 @stock.command("info")
 @click.argument("code")
-def info(code: str):
-    """종목 기본정보 조회. (ka10001)"""
+@click.option(
+    "--exchange", "exchange",
+    default=None,
+    type=click.Choice(["nasdaq", "nyse", "amex"]),
+    help="미국 거래소 (미국 종목 강제 라우팅)",
+)
+def info(code: str, exchange: str | None):
+    """종목 기본정보 조회. (국내 ka10001 / 미국 usa10100)"""
+    if is_us_symbol(code, exchange):
+        return us_stock_ops.info(code, exchange)
     with KiwoomClient() as c:
         data, _ = c.request("ka10001", {"stk_cd": code})
         print_stock_info(data)
@@ -43,8 +53,16 @@ def info(code: str):
 
 @stock.command("price")
 @click.argument("code")
-def price(code: str):
+@click.option(
+    "--exchange", "exchange",
+    default=None,
+    type=click.Choice(["nasdaq", "nyse", "amex"]),
+    help="미국 거래소 (미국 종목 강제 라우팅)",
+)
+def price(code: str, exchange: str | None):
     """종목 현재가 간단 조회."""
+    if is_us_symbol(code, exchange):
+        return us_stock_ops.price(code, exchange)
     with KiwoomClient() as c:
         data, _ = c.request("ka10001", {"stk_cd": code})
         name = data.get("stk_nm", code)
@@ -56,8 +74,16 @@ def price(code: str):
 
 @stock.command("orderbook")
 @click.argument("code")
-def orderbook(code: str):
-    """호가창 조회. 10단계 매수/매도 호가. (ka10004)"""
+@click.option(
+    "--exchange", "exchange",
+    default=None,
+    type=click.Choice(["nasdaq", "nyse", "amex"]),
+    help="미국 거래소 (미국 종목 강제 라우팅)",
+)
+def orderbook(code: str, exchange: str | None):
+    """호가창 조회. 10단계 매수/매도 호가. (국내 ka10004 / 미국 usa20101)"""
+    if is_us_symbol(code, exchange):
+        return us_stock_ops.orderbook(code, exchange)
     with KiwoomClient() as c:
         data, _ = c.request("ka10004", {"stk_cd": code})
         print_orderbook(data)
@@ -235,12 +261,20 @@ def sync():
 @click.argument("keyword", required=False)
 @click.option(
     "--market", "mrkt_tp",
-    type=click.Choice(["all", "kospi", "kosdaq", "etf", "elw", "etn"]),
+    type=click.Choice(["all", "kospi", "kosdaq", "etf", "elw", "etn", "us"]),
     default="all",
-    help="시장/유형 필터 (all/kospi/kosdaq/etf/elw/etn)",
+    help="시장/유형 필터 (all/kospi/kosdaq/etf/elw/etn/us)",
 )
-def search(keyword: str | None, mrkt_tp: str):
+@click.option(
+    "--exchange", "exchange",
+    type=click.Choice(["nasdaq", "nyse", "amex", "all"]),
+    default="all",
+    help="미국 거래소 필터 (--market us 일 때만 사용)",
+)
+def search(keyword: str | None, mrkt_tp: str, exchange: str):
     """캐시에서 종목 검색. 캐시가 없으면 자동으로 sync 실행."""
+    if mrkt_tp == "us":
+        return us_stock_ops.search(keyword, exchange)
     from ..output import err_console
     items = _load_stock_cache()
     if items is None:

@@ -402,3 +402,56 @@ def test_us_modify_rejects_cond_price(runner, us_fake):
     result = runner.invoke(cli, ["order", "modify", "000000123", "NVDA", "5", "215.5", "--cond-price", "500", "--confirm"])
     assert result.exit_code == 1
     assert _order_calls(us_fake, "ust20002") == []
+
+
+# ============================================================
+#  Task 7: US stock info/price/orderbook/search
+# ============================================================
+
+
+@pytest.fixture
+def us_stock_fake(monkeypatch, tmp_cache):
+    fake = FakeKiwoomClient()
+    fake.set_response("usa10098", {"return_code": 0, "list": [{"stex_tp": "ND", "stk_cd": "NVDA"}]})
+    fake.set_response("usa10100", {"return_code": 0, "stk_cd": "NVDA", "stk_nm": "엔비디아", "mkgb": "NASDAQ"})
+    fake.set_response("usa20100", {"return_code": 0, "stk_cd": "NVDA", "cur_prc": "+213.0400"})
+    fake.set_response("usa20101", {"return_code": 0, "stk_cd": "NVDA", "sel_1bid": "+213.0500"})
+    fake.set_response("usa10099", {"return_code": 0, "list": [
+        {"stk_cd": "NVDA", "stk_nm": "엔비디아", "stk_enm": "NVIDIA Corp", "stex_tp": "ND"},
+        {"stk_cd": "AAPL", "stk_nm": "애플", "stk_enm": "Apple Inc", "stex_tp": "ND"},
+    ]})
+    monkeypatch.setattr("kiwoom_cli.commands.stock.KiwoomClient", lambda *a, **k: fake)
+    monkeypatch.setattr("kiwoom_cli.commands.us.stock_ops.KiwoomClient", lambda *a, **k: fake)
+    return fake
+
+
+def test_us_stock_info_dispatch(runner, us_stock_fake):
+    result = runner.invoke(cli, ["stock", "info", "NVDA"])
+    assert result.exit_code == 0
+    assert ("usa10100", {"stk_cd": "NVDA"}) in us_stock_fake.calls
+
+
+def test_us_stock_price_resolves_exchange(runner, us_stock_fake):
+    result = runner.invoke(cli, ["stock", "price", "NVDA"])
+    assert result.exit_code == 0
+    assert ("usa20100", {"stex_tp": "ND", "stk_cd": "NVDA"}) in us_stock_fake.calls
+
+
+def test_us_stock_orderbook(runner, us_stock_fake):
+    result = runner.invoke(cli, ["stock", "orderbook", "NVDA", "--exchange", "nasdaq"])
+    assert result.exit_code == 0
+    assert ("usa20101", {"stex_tp": "ND", "stk_cd": "NVDA"}) in us_stock_fake.calls
+
+
+def test_kr_stock_info_unchanged(runner, us_stock_fake):
+    result = runner.invoke(cli, ["stock", "info", "005930"])
+    assert result.exit_code == 0
+    assert us_stock_fake.calls[0][0] == "ka10001"
+
+
+def test_us_stock_search_filters_keyword(runner, us_stock_fake):
+    result = runner.invoke(cli, ["stock", "search", "apple", "--market", "us"])
+    assert result.exit_code == 0
+    assert ("usa10099", {"stex_tp": "%"}) in us_stock_fake.calls
+    assert "AAPL" in result.output
+    assert "NVDA" not in result.output
