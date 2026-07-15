@@ -54,6 +54,16 @@ def test_is_legacy_encrypted_detects_salt(isolated_config):
     assert config.is_legacy_encrypted() is True
 
 
+def test_is_legacy_encrypted_false_when_keyring_unavailable(isolated_config, monkeypatch):
+    """Locked/absent keychain (headless, CI) must not crash — treat as not legacy."""
+
+    def _raise(svc, key):
+        raise RuntimeError("errSecInteractionNotAllowed")
+
+    monkeypatch.setattr(keyring, "get_password", _raise)
+    assert config.is_legacy_encrypted() is False
+
+
 def test_get_appkey_returns_empty_under_legacy_format(isolated_config):
     """Fernet ciphertext must never be mistaken for a real key."""
     keyring.set_password(config.KEYRING_SERVICE, "_salt", "abc123")

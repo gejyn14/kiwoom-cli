@@ -93,8 +93,15 @@ def get_domain(profile: str | None = None) -> str:
 
 
 def is_legacy_encrypted() -> bool:
-    """True if the pre-v2.1 password-encrypted format is present in the keychain."""
-    return keyring.get_password(KEYRING_SERVICE, "_salt") is not None
+    """True if the pre-v2.1 password-encrypted format is present in the keychain.
+
+    Keyring errors (locked/absent keychain in headless or CI environments) are
+    treated as "not legacy" so commands like --help never crash.
+    """
+    try:
+        return keyring.get_password(KEYRING_SERVICE, "_salt") is not None
+    except Exception:
+        return False
 
 
 def clear_legacy_sentinels() -> None:
