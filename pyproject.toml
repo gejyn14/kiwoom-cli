@@ -29,7 +29,6 @@ dependencies = [
     "tomli-w>=1.0",
     "keyring>=25.0",
     "websockets>=12.0",
-    "cryptography>=42.0",
 ]
 
 [project.optional-dependencies]

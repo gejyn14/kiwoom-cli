@@ -1,10 +1,11 @@
 """Configuration management for Kiwoom CLI.
 
-Priority: environment variables > secure store (encrypted keychain) > config.toml
+Priority: environment variables > OS keychain > config.toml
 
-Sensitive credentials (appkey, secretkey, token) are encrypted with a
-password-derived key and stored in the OS keychain via SecureStore.
-Even direct keychain access (keyring.get_password) returns encrypted data.
+Credentials (appkey, secretkey, token) are stored directly in the OS
+keychain via keyring (macOS Keychain / Windows Credential Manager /
+Linux Secret Service). The keychain encrypts secrets at rest; no
+app-level password is required — commands never prompt.
 
 Non-sensitive settings (domain, account) remain in config.toml.
 
@@ -30,8 +31,6 @@ else:
 import keyring
 import tomli_w
 
-from .secure_store import SecureStore
-
 CONFIG_DIR = Path.home() / ".kiwoom"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 CACHE_DIR = CONFIG_DIR / "cache"
@@ -47,10 +46,6 @@ DEFAULT_CONFIG = {
     "general": {"default_profile": "default"},
     "profiles": {"default": {"domain": "mock", "account": ""}},
 }
-
-# Shared SecureStore instance
-store = SecureStore(KEYRING_SERVICE)
-
 
 def ensure_config_dir() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -97,24 +92,70 @@ def get_domain(profile: str | None = None) -> str:
     return DOMAINS.get(key, DOMAINS["mock"])
 
 
-def get_appkey(profile: str | None = None) -> str:
+def is_legacy_encrypted() -> bool:
+    """True if the pre-v2.1 password-encrypted format is present in the keychain.
+
+    Keyring errors (locked/absent keychain in headless or CI environments) are
+    treated as "not legacy" so commands like --help never crash.
+    """
+    try:
+        return keyring.get_password(KEYRING_SERVICE, "_salt") is not None
+    except Exception:
+        return False
+
+
+def clear_legacy_sentinels() -> None:
+    """Remove the legacy SecureStore sentinels (_salt, _verify)."""
+    for key in ("_salt", "_verify"):
+        try:
+            keyring.delete_password(KEYRING_SERVICE, key)
+        except keyring.errors.PasswordDeleteError:
+            pass
+
+
+def purge_legacy_credentials() -> None:
+    """Delete legacy Fernet-encrypted appkey/secretkey entries for all profiles.
+
+    Tokens are untouched (they were always stored plaintext and remain valid).
+    """
+    for p in get_profiles():
+        for key in (f"{p}:appkey", f"{p}:secretkey"):
+            try:
+                keyring.delete_password(KEYRING_SERVICE, key)
+            except keyring.errors.PasswordDeleteError:
+                pass
+
+
+def is_configured(profile: str | None = None) -> bool:
+    """True if an appkey is stored for the profile (and not in legacy format)."""
+    if is_legacy_encrypted():
+        return False
     p = resolve_profile(profile)
-    return store.get(f"{p}:appkey") or ""
+    return keyring.get_password(KEYRING_SERVICE, f"{p}:appkey") is not None
+
+
+def get_appkey(profile: str | None = None) -> str:
+    if is_legacy_encrypted():
+        return ""
+    p = resolve_profile(profile)
+    return keyring.get_password(KEYRING_SERVICE, f"{p}:appkey") or ""
 
 
 def get_secretkey(profile: str | None = None) -> str:
+    if is_legacy_encrypted():
+        return ""
     p = resolve_profile(profile)
-    return store.get(f"{p}:secretkey") or ""
+    return keyring.get_password(KEYRING_SERVICE, f"{p}:secretkey") or ""
 
 
 def set_appkey(value: str, profile: str | None = None) -> None:
     p = resolve_profile(profile)
-    store.set(f"{p}:appkey", value)
+    keyring.set_password(KEYRING_SERVICE, f"{p}:appkey", value)
 
 
 def set_secretkey(value: str, profile: str | None = None) -> None:
     p = resolve_profile(profile)
-    store.set(f"{p}:secretkey", value)
+    keyring.set_password(KEYRING_SERVICE, f"{p}:secretkey", value)
 
 
 def get_account(profile: str | None = None) -> str:
@@ -146,31 +187,22 @@ def set_default_profile(name: str) -> None:
 
 
 def migrate_from_plaintext() -> bool:
-    """Migrate plaintext credentials to encrypted secure store."""
+    """Migrate legacy plaintext credential locations into the keychain."""
     migrated = False
-    # Migrate from config.toml
+    # Migrate from config.toml [auth] section
     cfg = load_config()
     auth_section = cfg.get("auth", {})
     ak = auth_section.get("appkey", "")
     sk = auth_section.get("secretkey", "")
     if ak or sk:
         if ak:
-            store.set("default:appkey", ak)
+            keyring.set_password(KEYRING_SERVICE, "default:appkey", ak)
         if sk:
-            store.set("default:secretkey", sk)
+            keyring.set_password(KEYRING_SERVICE, "default:secretkey", sk)
         cfg.pop("auth", None)
         save_config(cfg)
         migrated = True
-    # Migrate from plain keyring (v0.4.0 format)
-    plain_ak = keyring.get_password(KEYRING_SERVICE, "appkey")
-    if plain_ak and not plain_ak.startswith("ey"):  # not already encrypted (base64 JSON)
-        store.set("default:appkey", plain_ak)
-        migrated = True
-    plain_sk = keyring.get_password(KEYRING_SERVICE, "secretkey")
-    if plain_sk and not plain_sk.startswith("ey"):
-        store.set("default:secretkey", plain_sk)
-        migrated = True
-    # Migrate token file to plain keyring
+    # Migrate token file to keyring
     token_file = CONFIG_DIR / "token"
     if token_file.exists():
         token = token_file.read_text().strip()

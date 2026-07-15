@@ -1,8 +1,8 @@
 """Tests for config migration functions.
 
 Covers migrate_from_plaintext() and migrate_to_profiles() in kiwoom_cli/config.py.
-These functions touch module globals (CONFIG_DIR, CONFIG_FILE, store) and the
-keyring backend, so we use monkeypatch to isolate file I/O.
+These functions touch module globals (CONFIG_DIR, CONFIG_FILE) and the keyring
+backend, so we use monkeypatch to isolate file I/O.
 """
 
 from __future__ import annotations
@@ -13,14 +13,26 @@ import pytest
 from kiwoom_cli import config
 
 
+@pytest.fixture(autouse=True)
+def mem_keyring(monkeypatch):
+    data: dict[str, str] = {}
+    monkeypatch.setattr(keyring, "get_password", lambda svc, key: data.get(f"{svc}:{key}"))
+    monkeypatch.setattr(keyring, "set_password", lambda svc, key, val: data.__setitem__(f"{svc}:{key}", val))
+
+    def _delete(svc, key):
+        if f"{svc}:{key}" not in data:
+            raise keyring.errors.PasswordDeleteError(key)
+        del data[f"{svc}:{key}"]
+
+    monkeypatch.setattr(keyring, "delete_password", _delete)
+    return data
+
+
 @pytest.fixture
 def isolated_config(tmp_path, monkeypatch):
-    """Redirect config.CONFIG_DIR/CONFIG_FILE to tmp_path and init store."""
+    """Redirect config.CONFIG_DIR/CONFIG_FILE to tmp_path."""
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
-    # Reset store state and initialize with a fresh salt
-    config.store._key = None
-    config.store.setup("testpw")
     return tmp_path
 
 
@@ -33,8 +45,8 @@ def _write_toml(path, content: str) -> None:
 # ============================================================
 
 
-def test_migrate_from_plaintext_moves_toml_auth_to_store(isolated_config):
-    """config.toml [auth] section is encrypted into store and removed from TOML."""
+def test_migrate_from_plaintext_moves_toml_auth_to_keyring(isolated_config):
+    """config.toml [auth] section moves into keyring and is removed from TOML."""
     _write_toml(
         isolated_config / "config.toml",
         '[auth]\nappkey = "plain-key"\nsecretkey = "plain-secret"\n',
@@ -43,20 +55,10 @@ def test_migrate_from_plaintext_moves_toml_auth_to_store(isolated_config):
     result = config.migrate_from_plaintext()
 
     assert result is True
-    assert config.store.get("default:appkey") == "plain-key"
-    assert config.store.get("default:secretkey") == "plain-secret"
+    assert keyring.get_password(config.KEYRING_SERVICE, "default:appkey") == "plain-key"
+    assert keyring.get_password(config.KEYRING_SERVICE, "default:secretkey") == "plain-secret"
     cfg = config.load_config()
     assert "auth" not in cfg
-
-
-def test_migrate_from_plaintext_moves_plain_keyring_keys(isolated_config):
-    """Plain (unencrypted) keyring entries are re-stored encrypted."""
-    keyring.set_password(config.KEYRING_SERVICE, "appkey", "plain-xyz")
-
-    result = config.migrate_from_plaintext()
-
-    assert result is True
-    assert config.store.get("default:appkey") == "plain-xyz"
 
 
 def test_migrate_from_plaintext_moves_token_file(isolated_config):
@@ -124,7 +126,6 @@ def test_migrate_to_profiles_skips_if_profiles_exist(isolated_config):
 
 def test_migrate_to_profiles_renames_bare_keyring_keys(isolated_config):
     """Bare keyring keys (appkey/secretkey/token) renamed to default:-prefixed."""
-    # Write pre-profile config.toml (without [profiles] section) so migration runs
     _write_toml(
         isolated_config / "config.toml",
         '[general]\ndomain = "mock"\n',
