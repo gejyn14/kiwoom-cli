@@ -223,6 +223,29 @@ kiwoom account orderable amount 005930 --side buy --price 70000
 
 ---
 
+## 미국주식 (US Stocks)
+
+티커를 입력하면 자동으로 미국 시장으로 라우팅됩니다 (6자리 숫자 = 국내, 알파벳 = 미국).
+
+```bash
+kiwoom order buy NVDA 10 --price 213.04           # 매수 (거래소 자동 판별)
+kiwoom order sell NVDA 5 --type stop-limit --price 200.5 --stop 199.99 --confirm
+kiwoom stock price NVDA                            # 현재가
+kiwoom stock chart day NVDA --base-date 20260701   # 일봉
+kiwoom stock search apple --market us              # 종목 검색
+kiwoom account balance                             # 국내+미국 통합 잔고 (원화 총계)
+kiwoom account balance --market us                 # 미국만
+kiwoom account exchange rate                       # 환율
+kiwoom account exchange apply 1000000 --confirm    # 원화 → 달러 환전
+```
+
+- 거래소(`--exchange nasdaq|nyse|amex`)는 자동 판별되며, 복수 상장 종목만 직접 지정이 필요합니다.
+- 미국 주문 유형: limit/market/vwap/twap/vwap-limit/twap-limit/loc (매수·매도), moc/stop/stop-limit (매도 전용).
+- 정정은 가격만 가능(전량), 취소는 전량 취소만 지원됩니다 (키움 API 제약).
+- 계좌 조회 명령(`balance/deposit/pnl/orders/history`)은 기본 통합 표시이며 `--market kr|us`로 필터링합니다.
+
+---
+
 ## order - 주문
 
 모든 주문에 `--confirm` 필수.

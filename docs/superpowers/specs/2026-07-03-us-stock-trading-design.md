@@ -1,7 +1,7 @@
 # US Stock Trading — Design Spec
 
 **Date:** 2026-07-03 (rev 2)
-**Status:** Approved design, spec revised after self-review
+**Status:** Implemented (feature/us-stock-trading)
 **Target release:** v2.0 (US-stocks release)
 
 ## 1. Goal
