@@ -21,6 +21,7 @@ from .us import account_ops as us_account_ops
 from .us import order_ops as us_order_ops
 from .us._constants import US_EXCHANGE
 from .us.detect import is_us_symbol
+from .us.exchange import exchange_group
 
 
 def _today() -> str:
@@ -589,3 +590,6 @@ def history_journal(base_dt: str, ottks_tp: str, ch_crd_tp: str):
             body["base_dt"] = base_dt
         data, _ = c.request("ka10170", body)
         print_generic_table(data, title="당일 매매일지")
+
+
+account.add_command(exchange_group)

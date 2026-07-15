@@ -210,3 +210,46 @@ def test_orders_executed_dotted_ticker_routes_to_us(runner, acct_fake_full):
     assert "stk_cd" not in kr_body
     us_body = [c for c in acct_fake_full.calls if c[0] == "ust21510"][0][1]
     assert us_body["stk_cd"] == "BRK.B"
+
+
+# ============================================================
+#  Task 11: account exchange (FX)
+# ============================================================
+
+
+@pytest.fixture
+def fx_fake(monkeypatch):
+    fake = FakeKiwoomClient()
+    fake.set_response("ust31301", {"return_code": 0, "aplc_exrt": "1381.500000", "sell_aplc_exrt": "1380.50", "buy_aplc_exrt": "1382.50"})
+    fake.set_response("ust31300", {"return_code": 0, "aplc_exrt": "1381.500000", "buy_expc_amt": "723.85"})
+    fake.set_response("ust31302", {"return_code": 0, "krw_exmn_amt": "000001000000", "buy_fc_amt": "723.85"})
+    monkeypatch.setattr("kiwoom_cli.commands.us.exchange.KiwoomClient", lambda *a, **k: fake)
+    return fake
+
+
+def test_fx_rate(runner, fx_fake):
+    result = runner.invoke(cli, ["account", "exchange", "rate"])
+    assert result.exit_code == 0
+    assert ("ust31301", {"exch_tp": "1"}) in fx_fake.calls
+
+
+def test_fx_rate_usd_krw_direction(runner, fx_fake):
+    result = runner.invoke(cli, ["account", "exchange", "rate", "--direction", "usd-krw"])
+    assert result.exit_code == 0
+    assert ("ust31301", {"exch_tp": "2"}) in fx_fake.calls
+
+
+def test_fx_estimate(runner, fx_fake):
+    result = runner.invoke(cli, ["account", "exchange", "estimate", "1000000"])
+    assert result.exit_code == 0
+    assert ("ust31300", {"exch_tp": "1", "fc_exmn_amt": "1000000"}) in fx_fake.calls
+
+
+def test_fx_apply_requires_confirm_prompt(runner, fx_fake):
+    declined = runner.invoke(cli, ["account", "exchange", "apply", "1000000"], input="n\n")
+    assert declined.exit_code != 0
+    assert [c for c in fx_fake.calls if c[0] == "ust31302"] == []
+
+    accepted = runner.invoke(cli, ["account", "exchange", "apply", "1000000", "--confirm"])
+    assert accepted.exit_code == 0
+    assert ("ust31302", {"exch_tp": "1", "fc_exmn_amt": "1000000"}) in fx_fake.calls
