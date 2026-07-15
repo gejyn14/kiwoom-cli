@@ -204,3 +204,103 @@ def test_generic_table_formats_usd_decimals(capsys):
     out = capsys.readouterr().out
     assert "213.04" in out and "213.0400" not in out
     assert "-0.5" in out and "0.5000" not in out
+
+
+# ============================================================
+#  Task 5: US buy/sell orders + dispatch
+# ============================================================
+
+
+@pytest.fixture
+def us_fake(monkeypatch, tmp_cache):
+    """FakeKiwoomClient injected into both order.py and us ops modules."""
+    fake = FakeKiwoomClient()
+    fake.set_response("usa10098", {"return_code": 0, "list": [{"stex_tp": "ND", "stk_cd": "NVDA"}]})
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", lambda *a, **k: fake)
+    monkeypatch.setattr("kiwoom_cli.commands.us.order_ops.KiwoomClient", lambda *a, **k: fake)
+    return fake
+
+
+def _order_calls(fake, api_id):
+    return [c for c in fake.calls if c[0] == api_id]
+
+
+def test_us_buy_auto_detect_and_resolve(runner, us_fake):
+    result = runner.invoke(
+        cli, ["order", "buy", "NVDA", "10", "--price", "213.04", "--type", "limit", "--confirm"]
+    )
+    assert result.exit_code == 0
+    assert _order_calls(us_fake, "ust20000") == [(
+        "ust20000",
+        {"stex_tp": "ND", "stk_cd": "NVDA", "ord_qty": "10", "ord_uv": "213.04", "trde_tp": "00"},
+    )]
+
+
+def test_us_buy_explicit_exchange_skips_resolution(runner, us_fake):
+    result = runner.invoke(
+        cli, ["order", "buy", "TSLA", "1", "--exchange", "nasdaq", "--confirm"]
+    )
+    assert result.exit_code == 0
+    assert _order_calls(us_fake, "usa10098") == []
+    body = _order_calls(us_fake, "ust20000")[0][1]
+    assert body["stex_tp"] == "ND"
+    assert body["trde_tp"] == "03"  # default market
+    assert body["ord_uv"] == ""     # market order → empty price
+
+
+def test_us_buy_rejects_sell_only_type(runner, us_fake):
+    result = runner.invoke(
+        cli, ["order", "buy", "NVDA", "1", "--type", "moc", "--confirm"]
+    )
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust20000") == []
+
+
+def test_us_sell_stop_limit_body(runner, us_fake):
+    result = runner.invoke(
+        cli,
+        ["order", "sell", "NVDA", "5", "--type", "stop-limit",
+         "--price", "200.5", "--stop", "199.9900", "--confirm"],
+    )
+    assert result.exit_code == 0
+    assert _order_calls(us_fake, "ust20001") == [(
+        "ust20001",
+        {"stex_tp": "ND", "stk_cd": "NVDA", "ord_qty": "5",
+         "ord_uv": "200.5", "stop_pric": "199.99", "trde_tp": "34"},
+    )]
+
+
+def test_us_sell_stop_type_requires_stop_price(runner, us_fake):
+    result = runner.invoke(
+        cli, ["order", "sell", "NVDA", "5", "--type", "stop", "--confirm"]
+    )
+    assert result.exit_code == 1
+
+
+def test_kr_buy_unchanged_and_fractional_price_rejected(runner, us_fake):
+    ok = runner.invoke(
+        cli, ["order", "buy", "005930", "10", "--price", "70000", "--type", "limit", "--confirm"]
+    )
+    assert ok.exit_code == 0
+    body = _order_calls(us_fake, "kt10000")[0][1]
+    assert body["ord_uv"] == "70000" and body["dmst_stex_tp"] == "KRX"
+
+    bad = runner.invoke(
+        cli, ["order", "buy", "005930", "10", "--price", "70000.5", "--confirm"]
+    )
+    assert bad.exit_code == 1
+
+
+def test_kr_sell_rejects_stop_option(runner, us_fake):
+    result = runner.invoke(
+        cli, ["order", "sell", "005930", "1", "--stop", "100.0", "--confirm"]
+    )
+    assert result.exit_code == 1
+
+
+def test_us_buy_kr_order_type_rejected(runner, us_fake):
+    # KR-only type name on US path → exit 1
+    result = runner.invoke(
+        cli, ["order", "buy", "NVDA", "1", "--type", "fok", "--confirm"]
+    )
+    assert result.exit_code == 1

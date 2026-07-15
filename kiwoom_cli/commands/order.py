@@ -18,7 +18,10 @@ from rich.panel import Panel
 
 from ..client import KiwoomClient
 from ..formatters import print_order_result, print_generic_table
-from ..output import console
+from ..output import console, err_console
+from .us import order_ops as us_order_ops
+from .us._constants import US_ORDER_TYPES
+from .us.detect import is_us_symbol
 
 ORDER_TYPES = {
     "limit": "0",         # 보통 (지정가)
@@ -40,6 +43,26 @@ ORDER_TYPES = {
     "mid-ioc": "30",      # 중간가(IOC)
     "mid-fok": "31",      # 중간가(FOK)
 }
+
+
+# 국내+미국 주문유형 CLI 이름 합집합 (경로별로 재검증)
+ALL_ORDER_TYPES = sorted(set(ORDER_TYPES) | set(US_ORDER_TYPES))
+ORDER_EXCHANGES = ["KRX", "NXT", "SOR", "nasdaq", "nyse", "amex"]
+
+
+def _kr_price_or_exit(price: float) -> int:
+    """국내 주문 가격은 정수(원). 소수점 입력 시 exit 1."""
+    if price != int(price):
+        err_console.print("[red]국내 주문 가격은 정수(원)여야 합니다.[/]")
+        raise SystemExit(1)
+    return int(price)
+
+
+def _kr_type_or_exit(order_type: str) -> str:
+    if order_type not in ORDER_TYPES:
+        err_console.print(f"[red]국내주식에서 지원하지 않는 주문유형입니다: {order_type}[/]")
+        raise SystemExit(1)
+    return ORDER_TYPES[order_type]
 
 
 def _order_type_help() -> str:
@@ -116,28 +139,35 @@ def order():
 @order.command("buy")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
-@click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
-@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
-@click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (스톱지정가 등)")
+@click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략, 미국주식은 소수점 4자리까지)")
+@click.option("--type", "order_type", default="market", type=click.Choice(ALL_ORDER_TYPES), help="주문유형")
+@click.option("--exchange", "exchange", default=None, type=click.Choice(ORDER_EXCHANGES), help="거래소 (기본: 국내 KRX / 미국 자동판별)")
+@click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (국내 전용)")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def buy(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str, cond_uv: int, confirm: bool):
-    """주식 매수주문 (kt10000).
+def buy(code: str, qty: int, price: float, order_type: str, exchange: str | None, cond_uv: int, confirm: bool):
+    """주식 매수주문 (국내 kt10000 / 미국 ust20000).
 
     예: kiwoom order buy 005930 10 --price 70000 --type limit --confirm
+        kiwoom order buy NVDA 10 --price 213.04 --confirm
     """
+    if is_us_symbol(code, exchange):
+        return us_order_ops.buy(code, qty, price, order_type, exchange, confirm)
+
+    dmst_stex_tp = exchange or "KRX"
+    trde_tp = _kr_type_or_exit(order_type)
+    kr_price = _kr_price_or_exit(price)
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_order_preview("매수", code, qty, price, order_type, dmst_stex_tp)
+    _show_order_preview("매수", code, qty, kr_price, order_type, dmst_stex_tp)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10000", {
             "dmst_stex_tp": dmst_stex_tp,
             "stk_cd": code,
             "ord_qty": str(qty),
-            "ord_uv": str(price) if price else "",
-            "trde_tp": ORDER_TYPES[order_type],
+            "ord_uv": str(kr_price) if kr_price else "",
+            "trde_tp": trde_tp,
             "cond_uv": str(cond_uv) if cond_uv else "",
         })
         print_order_result(data, "매수")
@@ -146,28 +176,39 @@ def buy(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str, con
 @order.command("sell")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
-@click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
-@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
-@click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (스톱지정가 등)")
+@click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략, 미국주식은 소수점 4자리까지)")
+@click.option("--type", "order_type", default="market", type=click.Choice(ALL_ORDER_TYPES), help="주문유형")
+@click.option("--exchange", "exchange", default=None, type=click.Choice(ORDER_EXCHANGES), help="거래소 (기본: 국내 KRX / 미국 자동판별)")
+@click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (국내 전용)")
+@click.option("--stop", "stop", type=float, default=0, help="STOP가격 (미국 stop/stop-limit 전용)")
 @click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def sell(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str, cond_uv: int, confirm: bool):
-    """주식 매도주문 (kt10001).
+def sell(code: str, qty: int, price: float, order_type: str, exchange: str | None, cond_uv: int, stop: float, confirm: bool):
+    """주식 매도주문 (국내 kt10001 / 미국 ust20001).
 
     예: kiwoom order sell 005930 10 --type market --confirm
+        kiwoom order sell NVDA 5 --type stop-limit --price 200.5 --stop 199.99 --confirm
     """
+    if is_us_symbol(code, exchange):
+        return us_order_ops.sell(code, qty, price, order_type, exchange, stop, confirm)
+
+    if stop:
+        err_console.print("[red]--stop은 미국주식 매도에서만 사용합니다.[/]")
+        raise SystemExit(1)
+    dmst_stex_tp = exchange or "KRX"
+    trde_tp = _kr_type_or_exit(order_type)
+    kr_price = _kr_price_or_exit(price)
     if not confirm:
         click.confirm("주문을 실행하시겠습니까?", abort=True)
 
-    _show_order_preview("매도", code, qty, price, order_type, dmst_stex_tp)
+    _show_order_preview("매도", code, qty, kr_price, order_type, dmst_stex_tp)
 
     with KiwoomClient() as c:
         data, _ = c.request("kt10001", {
             "dmst_stex_tp": dmst_stex_tp,
             "stk_cd": code,
             "ord_qty": str(qty),
-            "ord_uv": str(price) if price else "",
-            "trde_tp": ORDER_TYPES[order_type],
+            "ord_uv": str(kr_price) if kr_price else "",
+            "trde_tp": trde_tp,
             "cond_uv": str(cond_uv) if cond_uv else "",
         })
         print_order_result(data, "매도")
