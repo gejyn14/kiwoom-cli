@@ -17,13 +17,13 @@ pip install kiwoom-cli
 ## 시작하기
 
 ```bash
-# 1. 초기 설정 (appkey, secretkey 입력 + 암호화 비밀번호 설정)
+# 1. 초기 설정 (appkey, secretkey 입력)
 kiwoom config setup
 
-# 2. 토큰 발급 (비밀번호 확인 후 발급)
+# 2. 토큰 발급
 kiwoom auth login
 
-# 3. 사용 (토큰 발급 후에는 비밀번호 불필요)
+# 3. 사용 (프롬프트 없음)
 kiwoom stock info 005930
 ```
 
@@ -49,7 +49,7 @@ export KIWOOM_DOMAIN="prod"       # prod 또는 mock
 export KIWOOM_ACCOUNT="1234567"   # 선택
 ```
 
-appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 반드시 `kiwoom config setup`으로 암호화 저장하세요.
+appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 반드시 `kiwoom config setup`으로 OS 키체인에 저장하세요.
 
 ### 멀티 프로필
 
@@ -434,7 +434,7 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 | 항목             | 값                                       |
 | ---------------- | ---------------------------------------- |
 | 설정 파일        | `~/.kiwoom/config.toml` (도메인, 계좌만) |
-| appkey/secretkey | OS 키체인 (암호화 저장)                  |
+| appkey/secretkey | OS 키체인                                |
 | 토큰             | OS 키체인                                |
 | 캐시 디렉터리    | `~/.kiwoom/cache/`                       |
 | 운영 도메인      | `https://api.kiwoom.com`                 |
@@ -449,18 +449,17 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 
 ## 보안
 
-인증정보(appkey, secretkey)는 **OS 키체인에 암호화되어 저장**됩니다. 파일로 존재하지 않으며, 비밀번호 없이는 복호화할 수 없습니다.
+모든 인증정보(appkey, secretkey, 토큰)는 **OS 키체인**(macOS Keychain / Windows Credential Manager / Linux Secret Service)에 저장됩니다. 파일로 존재하지 않으며, 키체인이 디스크 저장 시 암호화를 담당합니다. `gh`, `aws`, `docker` CLI와 동일한 모델입니다.
 
-| 항목               | 저장 방식          |            비밀번호 필요            |
-| ------------------ | ------------------ | :---------------------------------: |
-| appkey / secretkey | 암호화 + OS 키체인 | O (`config setup`, `auth login` 시) |
-| 토큰               | OS 키체인 (평문)   |           X (만료되는 값)           |
-| config.toml        | 도메인, 계좌번호만 |                  X                  |
+| 항목               | 저장 방식          | 프롬프트 |
+| ------------------ | ------------------ | :------: |
+| appkey / secretkey | OS 키체인          |    X     |
+| 토큰               | OS 키체인          |    X     |
+| config.toml        | 도메인, 계좌번호만 |    X     |
 
-- `config setup` 시 설정한 비밀번호로 appkey/secretkey를 암호화
-- `auth login/logout` 시 비밀번호 확인 후 키체인 접근
-- 토큰 발급 후 일반 명령어는 비밀번호 없이 사용
-- `keyring.get_password()`로 직접 접근해도 암호화된 값만 반환
+- 모든 명령어는 비밀번호/생체인증 프롬프트 없이 동작 (AI 에이전트·자동화 친화적)
+- 앱 자체 암호화 계층은 의도적으로 두지 않음 — 추가 계층은 명령마다 잠금 해제 프롬프트를 요구하게 되어 CLI 사용성을 해침
+- v2.0 이하에서 업그레이드한 경우: 암호화 저장소 형식이 제거되어 `kiwoom config setup`을 한 번 다시 실행해야 합니다
 
 ## License
 
