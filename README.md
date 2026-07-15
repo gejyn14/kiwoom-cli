@@ -464,4 +464,10 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 
 ## License
 
-MIT
+kiwoom-cli **Source-Available License, Version 1.0** — see [LICENSE](LICENSE).
+
+- **Individuals** (natural persons, on their own behalf): free to use, modify, and distribute for any purpose, including profit (e.g. trading your own account). Attribution only; no source-disclosure obligation.
+- **Organizations, unmodified use for profit**: require a commercial license.
+- **Organizations, modified use for profit**: either buy a commercial license (source may stay closed) or publish your entire codebase under this same license — and in both cases deliver the full modified source to the Licensor.
+
+Versions released before v2.0 remain available under the MIT License. For commercial licensing, contact ge.jyn14@gmail.com — see [COMMERCIAL.md](COMMERCIAL.md).

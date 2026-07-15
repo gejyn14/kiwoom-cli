@@ -14,3 +14,6 @@ KIND_README.md
 docs/
 .coverage
 .hypothesis/
+
+# Serena LSP cache
+.serena/
