@@ -157,13 +157,10 @@ zeros stripped.
   `account orderable margin-qty <CODE> --price`
 
 ### Order safety
-Mirror the **actual** domestic pattern: Rich preview panel + interactive `click.confirm`
-unless `--confirm`. `account exchange apply` (moves money) gets the same confirm gate.
-
-> Note: CLAUDE.md/SECURITY.md describe Touch-ID/dangerous-mode system auth for orders, but the
-> current `order.py` does not implement it. This spec matches the real code. Flagged for the
-> maintainer — if system auth is desired it should be added to both Korean and US orders as a
-> separate change.
+Mirror the domestic pattern: Rich preview panel + interactive `click.confirm` unless
+`--confirm`. `account exchange apply` (moves money) gets the same confirm gate. This is the
+only order-safety gate — OS-level system authentication (Touch ID etc.) was considered and
+deliberately rejected as too much friction for a CLI and unusable by AI agents.
 
 ## 6. Chart mapping
 
@@ -252,4 +249,5 @@ Mirror the existing 40-test pattern (mocked `KiwoomClient.request`):
 - **Assumption:** trading-core scope (§2), not full 125-API parity, in this pass.
 - **Assumption:** the same Kiwoom account/token covers KR and US; no config changes. Verify on
   first mock call.
-- **Flagged:** order system-auth discrepancy between docs and code (§5) — separate change.
+- **Resolved:** order system auth (Touch ID) was considered and rejected (§5); SECURITY.md and
+  CLAUDE.md corrected to describe the interactive confirm gate as the only order-safety mechanism.
