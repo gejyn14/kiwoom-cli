@@ -95,3 +95,65 @@ def test_us_order_type_codes():
     )
     assert US_SELL_TYPES == US_BUY_TYPES | frozenset({"moc", "stop", "stop-limit"})
     assert US_EXCHANGE == {"nasdaq": "ND", "nyse": "NY", "amex": "NA"}
+
+
+# ============================================================
+#  Task 3: exchange resolution + cache
+# ============================================================
+
+from kiwoom_cli.commands.us import detect  # noqa: E402
+
+
+@pytest.fixture
+def tmp_cache(tmp_path, monkeypatch):
+    """Point the exchange cache at a temp dir."""
+    monkeypatch.setattr("kiwoom_cli.config.CACHE_DIR", tmp_path)
+    return tmp_path / "us_exchanges.json"
+
+
+def _fake_with_10098(entries):
+    fake = FakeKiwoomClient()
+    fake.set_response("usa10098", {"return_code": 0, "list": entries})
+    return fake
+
+
+def test_resolve_explicit_exchange_skips_api(tmp_cache):
+    fake = FakeKiwoomClient()
+    assert detect.resolve_us_exchange(fake, "NVDA", "nasdaq") == "ND"
+    assert fake.calls == []  # no API hit
+
+
+def test_resolve_via_usa10098_and_writes_cache(tmp_cache):
+    fake = _fake_with_10098([{"stex_tp": "ND", "stk_cd": "NVDA"}])
+    assert detect.resolve_us_exchange(fake, "NVDA") == "ND"
+    assert fake.calls == [("usa10098", {"stk_cd": "NVDA"})]
+    assert tmp_cache.exists()
+
+
+def test_resolve_uses_cache_on_second_call(tmp_cache):
+    fake = _fake_with_10098([{"stex_tp": "NY", "stk_cd": "KO"}])
+    assert detect.resolve_us_exchange(fake, "KO") == "NY"
+    fake2 = FakeKiwoomClient()  # would return default junk if called
+    assert detect.resolve_us_exchange(fake2, "KO") == "NY"
+    assert fake2.calls == []  # served from cache
+
+
+def test_resolve_lowercases_nothing_uppercases_code(tmp_cache):
+    fake = _fake_with_10098([{"stex_tp": "ND", "stk_cd": "NVDA"}])
+    assert detect.resolve_us_exchange(fake, "nvda") == "ND"
+    assert fake.calls[0][1] == {"stk_cd": "NVDA"}
+
+
+def test_resolve_ambiguous_raises(tmp_cache):
+    fake = _fake_with_10098([
+        {"stex_tp": "ND", "stk_cd": "DUAL"},
+        {"stex_tp": "NY", "stk_cd": "DUAL"},
+    ])
+    with pytest.raises(detect.UsExchangeError):
+        detect.resolve_us_exchange(fake, "DUAL")
+
+
+def test_resolve_not_found_raises(tmp_cache):
+    fake = _fake_with_10098([])
+    with pytest.raises(detect.UsExchangeError):
+        detect.resolve_us_exchange(fake, "ZZZZ")
