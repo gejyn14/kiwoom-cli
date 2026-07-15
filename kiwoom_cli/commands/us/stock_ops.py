@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ...client import KiwoomClient
-from ...formatters import print_generic_table
+from ...formatters import _find_list, print_chart_data, print_generic_table
 from ...output import err_console
 from ._constants import US_EXCHANGE, US_EXCHANGE_ALL
 from .detect import UsExchangeError, resolve_us_exchange
@@ -61,3 +61,47 @@ def search(keyword: str | None, exchange: str | None) -> None:
             err_console.print("[yellow]검색 결과가 없습니다.[/]")
             return
         print_generic_table(items, title=f"미국주식 검색: {keyword or '전체'}")
+
+
+_CHART_APIS = {
+    "tick": "usa06010",
+    "minute": "usa06011",
+    "day": "usa06012",
+    "week": "usa06013",
+    "month": "usa06014",
+    "year": "usa06015",
+}
+
+_CHART_TITLES = {
+    "tick": "틱", "minute": "분봉", "day": "일봉",
+    "week": "주봉", "month": "월봉", "year": "년봉",
+}
+
+
+def chart(kind: str, code: str, exchange: str | None, tic_scope: str = "1",
+          strt_dt: str = "", adjusted: str = "0", krw: bool = False) -> None:
+    """미국주식 차트 (usa06010~usa06015)."""
+    api_id = _CHART_APIS[kind]
+    with KiwoomClient() as c:
+        stex_tp = _resolve_or_exit(c, code, exchange)
+        body = {
+            "stex_tp": stex_tp,
+            "stk_cd": code.upper(),
+            "upd_stkpc_tp": adjusted,
+            "exrt_appl_tp": "1" if krw else "0",
+        }
+        if kind == "tick":
+            body["tic_scope"] = tic_scope
+        elif kind == "minute":
+            body["tic_scope"] = tic_scope
+            if strt_dt:
+                body["strt_dt"] = strt_dt
+        else:
+            body["strt_dt"] = strt_dt
+        data, _ = c.request(api_id, body)
+        items = _find_list(data)
+        title = f"{code.upper()} {_CHART_TITLES[kind]} 차트 (미국)"
+        if isinstance(items, list):
+            print_chart_data(items, title=title)
+        else:
+            print_generic_table(data, title=title)

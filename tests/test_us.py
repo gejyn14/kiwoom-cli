@@ -455,3 +455,62 @@ def test_us_stock_search_filters_keyword(runner, us_stock_fake):
     assert ("usa10099", {"stex_tp": "%"}) in us_stock_fake.calls
     assert "AAPL" in result.output
     assert "NVDA" not in result.output
+
+
+# ============================================================
+#  Task 8: US charts
+# ============================================================
+
+
+def test_us_chart_day_dispatch(runner, us_stock_fake):
+    us_stock_fake.set_response("usa06012", {"return_code": 0, "result_list": [
+        {"dt": "20260714", "cur_prc": "213.0400", "open_pric": "210.0000",
+         "high_pric": "214.0000", "low_pric": "209.5000", "acc_trde_qty": "1000"},
+    ]})
+    result = runner.invoke(
+        cli, ["stock", "chart", "day", "NVDA", "--base-date", "20260714"]
+    )
+    assert result.exit_code == 0
+    assert ("usa06012", {
+        "stex_tp": "ND", "stk_cd": "NVDA", "strt_dt": "20260714",
+        "upd_stkpc_tp": "0", "exrt_appl_tp": "0",
+    }) in us_stock_fake.calls
+
+
+def test_us_chart_tick_with_krw(runner, us_stock_fake):
+    us_stock_fake.set_response("usa06010", {"return_code": 0, "result_list": []})
+    result = runner.invoke(
+        cli, ["stock", "chart", "tick", "NVDA", "--range", "5", "--krw"]
+    )
+    assert result.exit_code == 0
+    assert ("usa06010", {
+        "stex_tp": "ND", "stk_cd": "NVDA", "tic_scope": "5",
+        "upd_stkpc_tp": "0", "exrt_appl_tp": "1",
+    }) in us_stock_fake.calls
+
+
+def test_us_chart_minute_sends_strt_dt(runner, us_stock_fake):
+    us_stock_fake.set_response("usa06011", {"return_code": 0, "result_list": []})
+    result = runner.invoke(
+        cli, ["stock", "chart", "minute", "NVDA", "--interval", "5", "--base-date", "20260714"]
+    )
+    assert result.exit_code == 0
+    body = [c for c in us_stock_fake.calls if c[0] == "usa06011"][0][1]
+    assert body["strt_dt"] == "20260714" and body["tic_scope"] == "5"
+
+
+def test_kr_chart_rejects_krw(runner, us_stock_fake):
+    result = runner.invoke(
+        cli, ["stock", "chart", "day", "005930", "--base-date", "20260714", "--krw"]
+    )
+    assert result.exit_code == 1
+
+
+def test_kr_chart_day_unchanged(runner, us_stock_fake):
+    result = runner.invoke(
+        cli, ["stock", "chart", "day", "005930", "--base-date", "20260714"]
+    )
+    assert result.exit_code == 0
+    assert us_stock_fake.calls[0] == ("ka10081", {
+        "stk_cd": "005930", "base_dt": "20260714", "upd_stkpc_tp": "0",
+    })

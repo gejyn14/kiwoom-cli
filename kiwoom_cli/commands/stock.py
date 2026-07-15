@@ -17,7 +17,7 @@ from ..formatters import (
     print_orderbook,
     print_stock_info,
 )
-from ..output import console
+from ..output import console, err_console
 from ._constants import EXCHANGE_ALL, MARKET_ALL, MARKET_PROGRAM, MARKET_TWO
 from .us import stock_ops as us_stock_ops
 from .us.detect import is_us_symbol
@@ -1319,8 +1319,16 @@ def chart():
     default="0",
     help="수정주가구분 (0=미적용, 1=적용)",
 )
-def chart_tick(code: str, tic_scope: str, upd_stkpc_tp: str):
-    """틱 차트 조회. (ka10079)"""
+@click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
+@click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
+def chart_tick(code: str, tic_scope: str, upd_stkpc_tp: str, exchange: str | None, krw: bool):
+    """틱 차트 조회 (국내 ka10079 / 미국 usa06010)."""
+    if is_us_symbol(code, exchange):
+        return us_stock_ops.chart("tick", code, exchange, tic_scope=tic_scope,
+                                  adjusted=upd_stkpc_tp, krw=krw)
+    if krw:
+        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
+        raise SystemExit(1)
     with KiwoomClient() as c:
         data, _ = c.request("ka10079", {
             "stk_cd": code,
@@ -1349,8 +1357,16 @@ def chart_tick(code: str, tic_scope: str, upd_stkpc_tp: str):
     help="수정주가구분 (0=미적용, 1=적용)",
 )
 @click.option("--base-date", "base_dt", default="", help="기준일자 (YYYYMMDD, 선택)")
-def chart_minute(code: str, tic_scope: str, upd_stkpc_tp: str, base_dt: str):
-    """분봉 차트 조회. (ka10080)"""
+@click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
+@click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
+def chart_minute(code: str, tic_scope: str, upd_stkpc_tp: str, base_dt: str, exchange: str | None, krw: bool):
+    """분봉 차트 조회 (국내 ka10080 / 미국 usa06011)."""
+    if is_us_symbol(code, exchange):
+        return us_stock_ops.chart("minute", code, exchange, tic_scope=tic_scope,
+                                  strt_dt=base_dt, adjusted=upd_stkpc_tp, krw=krw)
+    if krw:
+        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
+        raise SystemExit(1)
     body: dict = {
         "stk_cd": code,
         "tic_scope": tic_scope,
@@ -1376,8 +1392,16 @@ def chart_minute(code: str, tic_scope: str, upd_stkpc_tp: str, base_dt: str):
     default="0",
     help="수정주가구분 (0=미적용, 1=적용)",
 )
-def chart_day(code: str, base_dt: str, upd_stkpc_tp: str):
-    """일봉 차트 조회. (ka10081)"""
+@click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
+@click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
+def chart_day(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, krw: bool):
+    """일봉 차트 조회 (국내 ka10081 / 미국 usa06012)."""
+    if is_us_symbol(code, exchange):
+        return us_stock_ops.chart("day", code, exchange, strt_dt=base_dt,
+                                  adjusted=upd_stkpc_tp, krw=krw)
+    if krw:
+        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
+        raise SystemExit(1)
     with KiwoomClient() as c:
         data, _ = c.request("ka10081", {
             "stk_cd": code,
@@ -1400,8 +1424,16 @@ def chart_day(code: str, base_dt: str, upd_stkpc_tp: str):
     default="0",
     help="수정주가구분 (0=미적용, 1=적용)",
 )
-def chart_week(code: str, base_dt: str, upd_stkpc_tp: str):
-    """주봉 차트 조회. (ka10082)"""
+@click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
+@click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
+def chart_week(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, krw: bool):
+    """주봉 차트 조회 (국내 ka10082 / 미국 usa06013)."""
+    if is_us_symbol(code, exchange):
+        return us_stock_ops.chart("week", code, exchange, strt_dt=base_dt,
+                                  adjusted=upd_stkpc_tp, krw=krw)
+    if krw:
+        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
+        raise SystemExit(1)
     with KiwoomClient() as c:
         data, _ = c.request("ka10082", {
             "stk_cd": code,
@@ -1424,8 +1456,16 @@ def chart_week(code: str, base_dt: str, upd_stkpc_tp: str):
     default="0",
     help="수정주가구분 (0=미적용, 1=적용)",
 )
-def chart_month(code: str, base_dt: str, upd_stkpc_tp: str):
-    """월봉 차트 조회. (ka10083)"""
+@click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
+@click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
+def chart_month(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, krw: bool):
+    """월봉 차트 조회 (국내 ka10083 / 미국 usa06014)."""
+    if is_us_symbol(code, exchange):
+        return us_stock_ops.chart("month", code, exchange, strt_dt=base_dt,
+                                  adjusted=upd_stkpc_tp, krw=krw)
+    if krw:
+        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
+        raise SystemExit(1)
     with KiwoomClient() as c:
         data, _ = c.request("ka10083", {
             "stk_cd": code,
@@ -1448,8 +1488,16 @@ def chart_month(code: str, base_dt: str, upd_stkpc_tp: str):
     default="0",
     help="수정주가구분 (0=미적용, 1=적용)",
 )
-def chart_year(code: str, base_dt: str, upd_stkpc_tp: str):
-    """년봉 차트 조회. (ka10094)"""
+@click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
+@click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
+def chart_year(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, krw: bool):
+    """년봉 차트 조회 (국내 ka10094 / 미국 usa06015)."""
+    if is_us_symbol(code, exchange):
+        return us_stock_ops.chart("year", code, exchange, strt_dt=base_dt,
+                                  adjusted=upd_stkpc_tp, krw=krw)
+    if krw:
+        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
+        raise SystemExit(1)
     with KiwoomClient() as c:
         data, _ = c.request("ka10094", {
             "stk_cd": code,
