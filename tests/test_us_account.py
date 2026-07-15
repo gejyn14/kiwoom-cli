@@ -190,3 +190,23 @@ def test_orders_executed_unified(runner, acct_fake_full):
     result = runner.invoke(cli, ["account", "orders", "executed"])
     assert result.exit_code == 0
     assert "ka10076" in _apis(acct_fake_full) and "ust21510" in _apis(acct_fake_full)
+
+
+def test_orders_pending_dotted_ticker_routes_to_us(runner, acct_fake_full):
+    result = runner.invoke(cli, ["account", "orders", "pending", "--code", "BRK.B"])
+    assert result.exit_code == 0
+    kr_body = [c for c in acct_fake_full.calls if c[0] == "ka10075"][0][1]
+    assert "stk_cd" not in kr_body                      # never leaks to KR
+    us_body = [c for c in acct_fake_full.calls if c[0] == "ust21050"][0][1]
+    assert us_body["stk_cd"] == "BRK.B"                 # reaches US filter
+
+
+def test_orders_executed_dotted_ticker_routes_to_us(runner, acct_fake_full):
+    acct_fake_full.set_response("ka10076", {"return_code": 0, "cntr": []})
+    acct_fake_full.set_response("ust21510", {"return_code": 0, "result_list": []})
+    result = runner.invoke(cli, ["account", "orders", "executed", "--code", "BRK.B"])
+    assert result.exit_code == 0
+    kr_body = [c for c in acct_fake_full.calls if c[0] == "ka10076"][0][1]
+    assert "stk_cd" not in kr_body
+    us_body = [c for c in acct_fake_full.calls if c[0] == "ust21510"][0][1]
+    assert us_body["stk_cd"] == "BRK.B"

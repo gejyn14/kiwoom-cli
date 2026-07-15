@@ -244,13 +244,13 @@ def pnl_by_period(market: str, stk_cd: str, strt_dt: str, end_dt: str, fc_krw: b
     def kr():
         with KiwoomClient() as c:
             body: dict = {"strt_dt": strt_dt, "end_dt": end_dt}
-            if stk_cd and not stk_cd.isalpha():
+            if stk_cd and not is_us_symbol(stk_cd):
                 body["stk_cd"] = stk_cd
             data, _ = c.request("ka10073", body)
             print_generic_table(data, title="일자별 종목별 실현손익 (기간)")
 
     def us():
-        if stk_cd and stk_cd.isalpha():
+        if stk_cd and is_us_symbol(stk_cd):
             err_console.print("[dim]미국 실현손익은 종목코드 필터를 지원하지 않아 전체로 조회합니다.[/]")
         with KiwoomClient() as c:
             us_account_ops.print_pnl_period_us(c, strt_dt, end_dt, "1" if fc_krw else "0")
@@ -293,7 +293,7 @@ def orders_pending(market: str, all_stk_tp: str, trde_tp: str, stk_cd: str, stex
                 "trde_tp": trde_tp,
                 "stex_tp": EXCHANGE_ALL_ZERO[stex_tp],
             }
-            if stk_cd and not stk_cd.isalpha():
+            if stk_cd and not is_us_symbol(stk_cd):
                 body["stk_cd"] = stk_cd
             data, _ = c.request("ka10075", body)
             items = _find_list(data)
@@ -304,7 +304,7 @@ def orders_pending(market: str, all_stk_tp: str, trde_tp: str, stk_cd: str, stex
 
     def us():
         with KiwoomClient() as c:
-            us_account_ops.print_pending_us(c, trde_tp, stk_cd if stk_cd.isalpha() else "")
+            us_account_ops.print_pending_us(c, trde_tp, stk_cd if is_us_symbol(stk_cd) else "")
 
     _run_unified(market, kr, us)
 
@@ -326,7 +326,7 @@ def orders_executed(market: str, stk_cd: str, qry_tp: str, sell_tp: str, ord_no:
                 "sell_tp": sell_tp,
                 "stex_tp": EXCHANGE_ALL_ZERO[stex_tp],
             }
-            if stk_cd and not stk_cd.isalpha():
+            if stk_cd and not is_us_symbol(stk_cd):
                 body["stk_cd"] = stk_cd
             if ord_no:
                 body["ord_no"] = ord_no
@@ -339,7 +339,7 @@ def orders_executed(market: str, stk_cd: str, qry_tp: str, sell_tp: str, ord_no:
 
     def us():
         with KiwoomClient() as c:
-            us_account_ops.print_executed_us(c, sell_tp, stk_cd if stk_cd.isalpha() else "")
+            us_account_ops.print_executed_us(c, sell_tp, stk_cd if is_us_symbol(stk_cd) else "")
 
     _run_unified(market, kr, us)
 
