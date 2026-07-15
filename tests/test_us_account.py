@@ -100,3 +100,93 @@ def test_balance_us_failure_degrades_gracefully(runner, acct_fake, monkeypatch):
     result = runner.invoke(cli, ["account", "balance"])
     assert result.exit_code == 0          # KR still renders
     assert "삼성전자" in result.output
+
+
+# ============================================================
+#  Task 10: deposit / pnl / orders / history --market
+# ============================================================
+
+
+@pytest.fixture
+def acct_fake_full(acct_fake):
+    acct_fake.set_response("kt00001", {"return_code": 0, "entr": "000001000000"})
+    acct_fake.set_response("ust21160", {"return_code": 0, "won_entr": "000001000000", "d0_usd_fx_entr": "1234.56"})
+    acct_fake.set_response("ka10077", {"return_code": 0, "tot_pl_amt": "1000"})
+    acct_fake.set_response("ust21170", {"return_code": 0, "crnc_code": "USD", "tdy_pl_amt": "12.3400", "result_list": []})
+    acct_fake.set_response("ka10075", {"return_code": 0, "oso": []})
+    acct_fake.set_response("ust21050", {"return_code": 0, "result_list": [
+        {"ord_no": "000000123", "stk_cd": "NVDA", "frgn_stk_nm": "엔비디아",
+         "ord_qty": "000000010", "ord_uv": "213.0400", "ord_remnq": "000000010",
+         "slby_tp_nm": "매수", "ord_stat": "접수"},
+    ]})
+    acct_fake.set_response("kt00015", {"return_code": 0, "trst_list": []})
+    acct_fake.set_response("ust21100", {"return_code": 0, "sell_sum": "0", "buy_sum": "0", "result_list": []})
+    return acct_fake
+
+
+def test_deposit_unified(runner, acct_fake_full):
+    result = runner.invoke(cli, ["account", "deposit"])
+    assert result.exit_code == 0
+    assert "kt00001" in _apis(acct_fake_full) and "ust21160" in _apis(acct_fake_full)
+
+
+def test_deposit_market_us_only(runner, acct_fake_full):
+    result = runner.invoke(cli, ["account", "deposit", "--market", "us"])
+    assert result.exit_code == 0
+    assert "kt00001" not in _apis(acct_fake_full)
+
+
+def test_pnl_today_us_no_code_needed(runner, acct_fake_full):
+    result = runner.invoke(cli, ["account", "pnl", "today", "--market", "us"])
+    assert result.exit_code == 0
+    assert ("ust21170", {"fc_krw_tp": "0"}) in acct_fake_full.calls
+
+
+def test_pnl_today_kr_still_requires_code(runner, acct_fake_full):
+    result = runner.invoke(cli, ["account", "pnl", "today", "005930", "--market", "kr"])
+    assert result.exit_code == 0
+    assert ("ka10077", {"stk_cd": "005930"}) in acct_fake_full.calls
+    bad = runner.invoke(cli, ["account", "pnl", "today", "--market", "kr"])
+    assert bad.exit_code == 1
+
+
+def test_orders_pending_unified(runner, acct_fake_full):
+    result = runner.invoke(cli, ["account", "orders", "pending"])
+    assert result.exit_code == 0
+    assert "ka10075" in _apis(acct_fake_full) and "ust21050" in _apis(acct_fake_full)
+    assert "NVDA" in result.output or "엔비디아" in result.output
+
+
+def test_orders_pending_trade_maps_to_slby(runner, acct_fake_full):
+    result = runner.invoke(cli, ["account", "orders", "pending", "--trade", "2", "--market", "us"])
+    assert result.exit_code == 0
+    body = [c for c in acct_fake_full.calls if c[0] == "ust21050"][0][1]
+    assert body["slby_tp"] == "2"
+
+
+def test_history_transactions_unified(runner, acct_fake_full):
+    result = runner.invoke(
+        cli, ["account", "history", "transactions", "--from", "20260701", "--to", "20260715"]
+    )
+    assert result.exit_code == 0
+    assert "kt00015" in _apis(acct_fake_full) and "ust21100" in _apis(acct_fake_full)
+    us_body = [c for c in acct_fake_full.calls if c[0] == "ust21100"][0][1]
+    assert us_body == {"strt_dt": "20260701", "end_dt": "20260715", "tp": "0"}
+
+
+def test_pnl_by_period_unified(runner, acct_fake_full):
+    acct_fake_full.set_response("ka10073", {"return_code": 0})
+    acct_fake_full.set_response("ust21530", {"return_code": 0, "tot_pl_amt": "10.00", "result_list": []})
+    result = runner.invoke(
+        cli, ["account", "pnl", "by-period", "--from", "20260701", "--to", "20260715"]
+    )
+    assert result.exit_code == 0
+    assert ("ust21530", {"strt_dt": "20260701", "end_dt": "20260715", "fc_krw_tp": "0"}) in acct_fake_full.calls
+
+
+def test_orders_executed_unified(runner, acct_fake_full):
+    acct_fake_full.set_response("ka10076", {"return_code": 0, "cntr": []})
+    acct_fake_full.set_response("ust21510", {"return_code": 0, "result_list": []})
+    result = runner.invoke(cli, ["account", "orders", "executed"])
+    assert result.exit_code == 0
+    assert "ka10076" in _apis(acct_fake_full) and "ust21510" in _apis(acct_fake_full)

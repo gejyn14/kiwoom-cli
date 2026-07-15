@@ -61,8 +61,8 @@ def test_balance_exchange_enum_maps_to_api_value(runner, fake_client):
 def test_deposit_type_maps_to_qry_tp(
     runner, fake_client, type_name, expected_qry_tp
 ):
-    """--type estimate -> qry_tp=3, --type normal -> qry_tp=2."""
-    result = runner.invoke(cli, ["account", "deposit", "--type", type_name])
+    """--type estimate -> qry_tp=3, --type normal -> qry_tp=2. (KR market)"""
+    result = runner.invoke(cli, ["account", "deposit", "--market", "kr", "--type", type_name])
 
     assert result.exit_code == 0
     assert fake_client.calls == [("kt00001", {"qry_tp": expected_qry_tp})]
@@ -105,8 +105,8 @@ def test_returns_daily_detail_sends_date_range(runner, fake_client):
 
 
 def test_pnl_today_requires_code_arg(runner, fake_client):
-    """pnl today without positional code arg exits nonzero and makes no request."""
-    result = runner.invoke(cli, ["account", "pnl", "today"])
+    """pnl today without positional code arg exits nonzero and makes no request. (KR market)"""
+    result = runner.invoke(cli, ["account", "pnl", "today", "--market", "kr"])
 
     assert result.exit_code != 0
     assert fake_client.calls == []
