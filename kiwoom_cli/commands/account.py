@@ -6,20 +6,78 @@ from datetime import datetime
 
 import click
 
-from ..client import KiwoomClient
+from ..client import KiwoomAPIError, KiwoomClient
 from ..formatters import (
     _find_list,
     print_account_eval,
+    print_api_response,
     print_deposit,
     print_generic_table,
     print_pending_orders,
+    print_unified_balance,
 )
+from ..output import err_console
 from ._constants import EXCHANGE_ALL_ZERO
+from .us import account_ops as us_account_ops
+from .us import order_ops as us_order_ops
+from .us._constants import US_EXCHANGE
+from .us.detect import is_us_symbol
+from .us.exchange import exchange_group
 
 
 def _today() -> str:
     """Return today's date as YYYYMMDD."""
     return datetime.now().strftime("%Y%m%d")
+
+
+def _run_unified(market: str, kr_fn, us_fn) -> None:
+    """국내/미국 섹션을 순차 실행. all이면 한쪽 실패는 경고로 강등."""
+    if market in ("all", "kr"):
+        try:
+            kr_fn()
+        except KiwoomAPIError as e:
+            if market == "kr":
+                raise
+            err_console.print(f"[dim]국내 조회 실패: {e}[/]")
+    if market in ("all", "us"):
+        try:
+            us_fn()
+        except KiwoomAPIError as e:
+            if market == "us":
+                raise
+            err_console.print(f"[dim]미국 조회 실패 (미국주식 미개설 계좌일 수 있음): {e}[/]")
+
+
+def _unified_structured(market: str, kr_fetch, us_fetch) -> bool:
+    """json 모드에서 통합 명령을 단일 문서로 출력. 처리했으면 True.
+
+    csv 정규화는 커맨드별로 다르므로(Fix 2 참고) 여기서는 json만 다룬다.
+    """
+    from ..formatters import _get_format, _output_json
+
+    fmt = _get_format()
+    if fmt != "json":
+        return False
+    kr_data = us_data = None
+    if market in ("all", "kr"):
+        try:
+            kr_data = kr_fetch()
+        except KiwoomAPIError as e:
+            if market == "kr":
+                raise
+            err_console.print(f"[dim]국내 조회 실패: {e}[/]")
+    if market in ("all", "us"):
+        try:
+            us_data = us_fetch()
+        except KiwoomAPIError as e:
+            if market == "us":
+                raise
+            err_console.print(f"[dim]미국 조회 실패: {e}[/]")
+    if market == "all" and kr_data is None and us_data is None:
+        err_console.print("[red]국내/미국 잔고 조회가 모두 실패했습니다.[/]")
+        raise SystemExit(2)
+    _output_json({"kr": kr_data, "us": us_data})
+    return True
 
 
 @click.group("account")
@@ -44,23 +102,57 @@ def account_list():
 
 
 @account.command("balance")
-@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 구분")
+@click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장 (all=통합, kr=국내, us=미국)")
+@click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="국내 거래소 구분")
 @click.option("--delist", "qry_tp", default="0", type=click.Choice(["0", "1"]), help="상장폐지조회구분 (0=전체, 1=제외)")
-def balance(dmst_stex_tp: str, qry_tp: str):
-    """계좌 평가현황 (잔고, 보유종목, 손익). (kt00004)"""
+def balance(market: str, dmst_stex_tp: str, qry_tp: str):
+    """계좌 평가현황 — 국내+미국 통합. (kt00004 + ust21070)"""
+    kr_data = us_data = None
     with KiwoomClient() as c:
-        data, _ = c.request("kt00004", {"qry_tp": qry_tp, "dmst_stex_tp": dmst_stex_tp})
-        print_account_eval(data)
+        if market in ("all", "kr"):
+            try:
+                kr_data, _ = c.request("kt00004", {"qry_tp": qry_tp, "dmst_stex_tp": dmst_stex_tp})
+            except KiwoomAPIError as e:
+                if market == "kr":
+                    raise
+                err_console.print(f"[dim]국내 잔고 조회 실패: {e}[/]")
+        if market in ("all", "us"):
+            try:
+                us_data = us_account_ops.fetch_balance(c)
+            except KiwoomAPIError as e:
+                if market == "us":
+                    raise
+                err_console.print(f"[dim]미국 잔고 조회 실패 (미국주식 미개설 계좌일 수 있음): {e}[/]")
+    if market == "all" and kr_data is None and us_data is None:
+        err_console.print("[red]국내/미국 잔고 조회가 모두 실패했습니다.[/]")
+        raise SystemExit(2)
+    if market == "kr":
+        print_account_eval(kr_data or {})
+    else:
+        print_unified_balance(kr_data, us_data)
 
 
 @account.command("deposit")
-@click.option("--type", "qry_type", type=click.Choice(["estimate", "normal"]), default="estimate", help="조회구분 (estimate=추정조회, normal=일반조회)")
-def deposit(qry_type: str):
-    """예수금 상세현황 조회. (kt00001)"""
+@click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장")
+@click.option("--type", "qry_type", type=click.Choice(["estimate", "normal"]), default="estimate", help="조회구분 (국내 전용)")
+def deposit(market: str, qry_type: str):
+    """예수금 상세 — 국내+미국 (kt00001 + ust21160)."""
     tp_map = {"estimate": "3", "normal": "2"}
     with KiwoomClient() as c:
-        data, _ = c.request("kt00001", {"qry_tp": tp_map[qry_type]})
-        print_deposit(data)
+        def kr_fetch():
+            return c.request("kt00001", {"qry_tp": tp_map[qry_type]})[0]
+
+        def us_fetch():
+            return c.request("ust21160", {})[0]
+
+        if _unified_structured(market, kr_fetch, us_fetch):
+            return
+
+        _run_unified(
+            market,
+            lambda: print_deposit(kr_fetch()),
+            lambda: print_generic_table(us_fetch(), title="미국주식 예수금"),
+        )
 
 
 @account.command("asset")
@@ -149,12 +241,46 @@ def pnl():
 
 
 @pnl.command("today")
-@click.argument("code")
-def pnl_today(code: str):
-    """당일 실현손익 상세 (종목코드 필수). (ka10077)"""
+@click.argument("code", required=False)
+@click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장")
+@click.option("--krw", "fc_krw", is_flag=True, help="미국 손익을 원화로 표시")
+def pnl_today(code: str | None, market: str, fc_krw: bool):
+    """당일 실현손익 — 국내(종목코드 필수 ka10077) + 미국(ust21170)."""
+    if market == "kr":
+        if not code:
+            err_console.print("[red]국내 당일 실현손익은 종목코드가 필요합니다.[/]")
+            raise SystemExit(1)
+        if is_us_symbol(code):
+            err_console.print("[red]국내 당일 실현손익에는 국내 종목코드가 필요합니다 (미국 티커는 지원하지 않음).[/]")
+            raise SystemExit(1)
+
     with KiwoomClient() as c:
-        data, _ = c.request("ka10077", {"stk_cd": code})
-        print_generic_table(data, title="당일 실현손익 상세")
+        def kr_fetch():
+            if not code:
+                err_console.print("[dim]국내 섹션 생략 (종목코드 미지정).[/]")
+                return None
+            if is_us_symbol(code):
+                err_console.print("[dim]국내 섹션 생략 (미국 티커).[/]")
+                return None
+            return c.request("ka10077", {"stk_cd": code})[0]
+
+        def us_fetch():
+            if code and is_us_symbol(code):
+                err_console.print("[dim]미국은 종목코드 필터를 지원하지 않아 전체로 조회합니다.[/]")
+            return c.request("ust21170", {"fc_krw_tp": "1" if fc_krw else "0"})[0]
+
+        if _unified_structured(market, kr_fetch, us_fetch):
+            return
+
+        def kr():
+            data = kr_fetch()
+            if data is not None:
+                print_generic_table(data, title="당일 실현손익 상세")
+
+        def us():
+            print_generic_table(us_fetch(), title="미국주식 당일 실현손익")
+
+        _run_unified(market, kr, us)
 
 
 @pnl.command("by-date")
@@ -171,17 +297,38 @@ def pnl_by_date(stk_cd: str, strt_dt: str):
 
 
 @pnl.command("by-period")
-@click.option("--code", "stk_cd", default="", help="종목코드 (미입력시 전체)")
+@click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장")
+@click.option("--code", "stk_cd", default="", help="종목코드 (국내 전용, 미입력시 전체)")
 @click.option("--from", "strt_dt", required=True, help="시작일자 (YYYYMMDD)")
 @click.option("--to", "end_dt", required=True, help="종료일자 (YYYYMMDD)")
-def pnl_by_period(stk_cd: str, strt_dt: str, end_dt: str):
-    """일자별 종목별 실현손익 (기간 기준). (ka10073)"""
+@click.option("--krw", "fc_krw", is_flag=True, help="미국 손익을 원화로 표시")
+def pnl_by_period(market: str, stk_cd: str, strt_dt: str, end_dt: str, fc_krw: bool):
+    """일자별 종목별 실현손익 (기간 기준) — 국내(ka10073) + 미국(ust21530)."""
+
     with KiwoomClient() as c:
-        body: dict = {"strt_dt": strt_dt, "end_dt": end_dt}
-        if stk_cd:
-            body["stk_cd"] = stk_cd
-        data, _ = c.request("ka10073", body)
-        print_generic_table(data, title="일자별 종목별 실현손익 (기간)")
+        def kr_fetch():
+            body: dict = {"strt_dt": strt_dt, "end_dt": end_dt}
+            if stk_cd and not is_us_symbol(stk_cd):
+                body["stk_cd"] = stk_cd
+            return c.request("ka10073", body)[0]
+
+        def us_fetch():
+            if stk_cd and is_us_symbol(stk_cd):
+                err_console.print("[dim]미국 실현손익은 종목코드 필터를 지원하지 않아 전체로 조회합니다.[/]")
+            return c.request(
+                "ust21530", {"strt_dt": strt_dt, "end_dt": end_dt, "fc_krw_tp": "1" if fc_krw else "0"}
+            )[0]
+
+        if _unified_structured(market, kr_fetch, us_fetch):
+            return
+
+        def kr():
+            print_generic_table(kr_fetch(), title="일자별 종목별 실현손익 (기간)")
+
+        def us():
+            print_generic_table(us_fetch(), title="미국주식 실현손익")
+
+        _run_unified(market, kr, us)
 
 
 @pnl.command("daily")
@@ -204,52 +351,87 @@ def orders():
 
 
 @orders.command("pending")
-@click.option("--all-stocks", "all_stk_tp", default="0", type=click.Choice(["0", "1"]), help="전체종목구분 (0=전체, 1=종목)")
+@click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장")
+@click.option("--all-stocks", "all_stk_tp", default="0", type=click.Choice(["0", "1"]), help="전체종목구분 (국내 전용)")
 @click.option("--trade", "trde_tp", default="0", type=click.Choice(["0", "1", "2"]), help="매매구분 (0=전체, 1=매도, 2=매수)")
 @click.option("--code", "stk_cd", default="", help="종목코드 (미입력시 전체)")
-@click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="거래소구분")
-def orders_pending(all_stk_tp: str, trde_tp: str, stk_cd: str, stex_tp: str):
-    """미체결 주문 조회. (ka10075)"""
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="국내 거래소구분")
+def orders_pending(market: str, all_stk_tp: str, trde_tp: str, stk_cd: str, stex_tp: str):
+    """미체결 주문 — 국내(ka10075) + 미국(ust21050)."""
+
     with KiwoomClient() as c:
-        body: dict = {
-            "all_stk_tp": all_stk_tp,
-            "trde_tp": trde_tp,
-            "stex_tp": EXCHANGE_ALL_ZERO[stex_tp],
-        }
-        if stk_cd:
-            body["stk_cd"] = stk_cd
-        data, _ = c.request("ka10075", body)
-        items = _find_list(data)
-        if isinstance(items, list):
-            print_pending_orders(items)
-        else:
-            print_generic_table(data, title="미체결")
+        def kr_fetch():
+            body: dict = {
+                "all_stk_tp": all_stk_tp,
+                "trde_tp": trde_tp,
+                "stex_tp": EXCHANGE_ALL_ZERO[stex_tp],
+            }
+            if stk_cd and not is_us_symbol(stk_cd):
+                body["stk_cd"] = stk_cd
+            return c.request("ka10075", body)[0]
+
+        def us_fetch():
+            body: dict = {"slby_tp": trde_tp}
+            if stk_cd and is_us_symbol(stk_cd):
+                body["stk_cd"] = stk_cd.upper()
+            return c.request("ust21050", body)[0]
+
+        if _unified_structured(market, kr_fetch, us_fetch):
+            return
+
+        def kr():
+            data = kr_fetch()
+            items = _find_list(data)
+            if isinstance(items, list):
+                print_pending_orders(items)
+            else:
+                print_generic_table(data, title="미체결")
+
+        def us():
+            print_generic_table(us_fetch(), title="미국주식 미체결")
+
+        _run_unified(market, kr, us)
 
 
 @orders.command("executed")
+@click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장")
 @click.option("--code", "stk_cd", default="", help="종목코드 (미입력시 전체)")
-@click.option("--qry-type", "qry_tp", default="0", type=click.Choice(["0", "1"]), help="조회구분 (0=전체, 1=종목)")
+@click.option("--qry-type", "qry_tp", default="0", type=click.Choice(["0", "1"]), help="조회구분 (0=전체, 1=종목, 국내 전용)")
 @click.option("--side", "sell_tp", default="0", type=click.Choice(["0", "1", "2"]), help="매도수구분 (0=전체, 1=매도, 2=매수)")
-@click.option("--order-no", "ord_no", default="", help="주문번호")
-@click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="거래소구분")
-def orders_executed(stk_cd: str, qry_tp: str, sell_tp: str, ord_no: str, stex_tp: str):
-    """체결 내역 조회. (ka10076)"""
+@click.option("--order-no", "ord_no", default="", help="주문번호 (국내 전용)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="국내 거래소구분")
+def orders_executed(market: str, stk_cd: str, qry_tp: str, sell_tp: str, ord_no: str, stex_tp: str):
+    """체결 내역 — 국내(ka10076) + 미국(ust21510)."""
+
     with KiwoomClient() as c:
-        body: dict = {
-            "qry_tp": qry_tp,
-            "sell_tp": sell_tp,
-            "stex_tp": EXCHANGE_ALL_ZERO[stex_tp],
-        }
-        if stk_cd:
-            body["stk_cd"] = stk_cd
-        if ord_no:
-            body["ord_no"] = ord_no
-        data, _ = c.request("ka10076", body)
-        items = _find_list(data)
-        if isinstance(items, list):
-            print_generic_table(items, title="체결 내역")
-        else:
-            print_generic_table(data, title="체결 내역")
+        def kr_fetch():
+            body: dict = {
+                "qry_tp": qry_tp,
+                "sell_tp": sell_tp,
+                "stex_tp": EXCHANGE_ALL_ZERO[stex_tp],
+            }
+            if stk_cd and not is_us_symbol(stk_cd):
+                body["stk_cd"] = stk_cd
+            if ord_no:
+                body["ord_no"] = ord_no
+            return c.request("ka10076", body)[0]
+
+        def us_fetch():
+            body: dict = {"slby_tp": sell_tp}
+            if stk_cd and is_us_symbol(stk_cd):
+                body["stk_cd"] = stk_cd.upper()
+            return c.request("ust21510", body)[0]
+
+        if _unified_structured(market, kr_fetch, us_fetch):
+            return
+
+        def kr():
+            print_api_response(kr_fetch(), title="체결 내역")
+
+        def us():
+            print_generic_table(us_fetch(), title="미국주식 당일 체결")
+
+        _run_unified(market, kr, us)
 
 
 @orders.command("split-detail")
@@ -395,8 +577,19 @@ def orderable_amount(code: str, trde_tp: str, uv: str, io_amt: str, trde_qty: st
 @orderable.command("margin-qty")
 @click.argument("code")
 @click.option("--price", "uv", default="", help="매수가격")
-def orderable_margin_qty(code: str, uv: str):
-    """증거금율별 주문가능 수량 조회. (kt00011)"""
+@click.option("--exchange", "exchange", default=None, type=click.Choice(list(US_EXCHANGE)), help="미국 거래소")
+def orderable_margin_qty(code: str, uv: str, exchange: str | None):
+    """증거금율별 주문가능 수량 조회 (국내 kt00011 / 미국 ust31490)."""
+    if is_us_symbol(code, exchange):
+        if not uv:
+            err_console.print("[red]미국주식 주문가능수량 조회에는 --price가 필요합니다.[/]")
+            raise SystemExit(1)
+        try:
+            price = float(uv)
+        except ValueError:
+            err_console.print("[red]--price는 숫자여야 합니다.[/]")
+            raise SystemExit(1) from None
+        return us_order_ops.orderable(code, price, exchange)
     with KiwoomClient() as c:
         body: dict = {"stk_cd": code}
         if uv:
@@ -428,32 +621,56 @@ def history():
 
 
 @history.command("transactions")
+@click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장")
 @click.option("--from", "strt_dt", required=True, help="시작일자 (YYYYMMDD)")
 @click.option("--to", "end_dt", required=True, help="종료일자 (YYYYMMDD)")
-@click.option("--type", "tp", default="0", type=click.Choice(["0", "1", "2", "3", "4", "5", "6", "7"]), help="구분 (0=전체, 1=입출금, 2=입출고, 3=매매, 4=매수, 5=매도, 6=입금, 7=출금)")
-@click.option("--code", "stk_cd", default="", help="종목코드")
-@click.option("--currency", "crnc_cd", default="", help="통화코드")
-@click.option("--product", "gds_tp", default="0", type=click.Choice(["0", "1"]), help="상품구분 (0=전체, 1=국내주식)")
-@click.option("--foreign-exchange", "frgn_stex_code", default="", help="해외거래소코드")
-@click.option("--exchange", "dmst_stex_tp", default="%", type=click.Choice(["%", "KRX", "NXT"]), help="거래소구분 (%=전체)")
-def history_transactions(strt_dt: str, end_dt: str, tp: str, stk_cd: str, crnc_cd: str, gds_tp: str, frgn_stex_code: str, dmst_stex_tp: str):
-    """위탁 종합거래내역 조회. (kt00015)"""
+@click.option("--type", "tp", default="0", type=click.Choice(["0", "1", "2", "3", "4", "5", "6", "7"]), help="구분 (0=전체, 1=입출금, 2=입출고, 3=매매, 4=매수, 5=매도, 6=입금, 7=출금; 6/7은 국내 전용)")
+@click.option("--code", "stk_cd", default="", help="종목코드 (국내 전용)")
+@click.option("--currency", "crnc_cd", default="", help="통화코드 (국내 전용)")
+@click.option("--product", "gds_tp", default="0", type=click.Choice(["0", "1"]), help="상품구분 (0=전체, 1=국내주식, 국내 전용)")
+@click.option("--foreign-exchange", "frgn_stex_code", default="", help="해외거래소코드 (국내 전용)")
+@click.option("--exchange", "dmst_stex_tp", default="%", type=click.Choice(["%", "KRX", "NXT"]), help="국내 거래소구분 (%=전체)")
+def history_transactions(market: str, strt_dt: str, end_dt: str, tp: str, stk_cd: str, crnc_cd: str, gds_tp: str, frgn_stex_code: str, dmst_stex_tp: str):
+    """위탁 종합거래내역 — 국내(kt00015) + 미국(ust21100)."""
+    if market == "us" and tp in ("6", "7"):
+        err_console.print("[red]입금/출금 구분(6/7)은 국내 전용입니다. --market us 에서는 사용할 수 없습니다.[/]")
+        raise SystemExit(1)
+
     with KiwoomClient() as c:
-        body: dict = {
-            "strt_dt": strt_dt,
-            "end_dt": end_dt,
-            "tp": tp,
-            "gds_tp": gds_tp,
-            "dmst_stex_tp": dmst_stex_tp,
-        }
-        if stk_cd:
-            body["stk_cd"] = stk_cd
-        if crnc_cd:
-            body["crnc_cd"] = crnc_cd
-        if frgn_stex_code:
-            body["frgn_stex_code"] = frgn_stex_code
-        data, _ = c.request("kt00015", body)
-        print_generic_table(data, title="위탁 종합거래내역")
+        def kr_fetch():
+            body: dict = {
+                "strt_dt": strt_dt,
+                "end_dt": end_dt,
+                "tp": tp,
+                "gds_tp": gds_tp,
+                "dmst_stex_tp": dmst_stex_tp,
+            }
+            if stk_cd:
+                body["stk_cd"] = stk_cd
+            if crnc_cd:
+                body["crnc_cd"] = crnc_cd
+            if frgn_stex_code:
+                body["frgn_stex_code"] = frgn_stex_code
+            return c.request("kt00015", body)[0]
+
+        def us_fetch():
+            if tp in ("6", "7"):
+                err_console.print("[dim]미국 섹션 생략 (입금/출금 구분은 국내 전용).[/]")
+                return None
+            return c.request("ust21100", {"strt_dt": strt_dt, "end_dt": end_dt, "tp": tp})[0]
+
+        if _unified_structured(market, kr_fetch, us_fetch):
+            return
+
+        def kr():
+            print_generic_table(kr_fetch(), title="위탁 종합거래내역")
+
+        def us():
+            data = us_fetch()
+            if data is not None:
+                print_generic_table(data, title="미국주식 거래내역")
+
+        _run_unified(market, kr, us)
 
 
 @history.command("journal")
@@ -471,3 +688,6 @@ def history_journal(base_dt: str, ottks_tp: str, ch_crd_tp: str):
             body["base_dt"] = base_dt
         data, _ = c.request("ka10170", body)
         print_generic_table(data, title="당일 매매일지")
+
+
+account.add_command(exchange_group)

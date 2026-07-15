@@ -212,6 +212,41 @@ API_REGISTRY: dict[str, tuple[str, str]] = {
     "ka10172": ("/api/dostk/websocket", "조건검색 요청 일반"),
     "ka10173": ("/api/dostk/websocket", "조건검색 요청 실시간"),
     "ka10174": ("/api/dostk/websocket", "조건검색 실시간 해제"),
+    # === 미국주식 주문 (US Orders) ===
+    "ust20000": ("/api/us/ordr", "미국주식 매수 주문"),
+    "ust20001": ("/api/us/ordr", "미국주식 매도 주문"),
+    "ust20002": ("/api/us/ordr", "미국주식 정정 주문"),
+    "ust20003": ("/api/us/ordr", "미국주식 취소 주문"),
+    "ust31490": ("/api/us/ordr", "미국주식 주문가능수량"),
+    # === 미국주식 계좌 (US Account) ===
+    "ust21070": ("/api/us/acnt", "미국주식 원장잔고확인"),
+    "ust21160": ("/api/us/acnt", "미국주식 예수금 상세"),
+    "ust21110": ("/api/us/acnt", "해외주식 예수금"),
+    "ust21530": ("/api/us/acnt", "미국주식 실현손익"),
+    "ust21170": ("/api/us/acnt", "미국주식 당일 종목별 실현손익"),
+    "ust21050": ("/api/us/acnt", "미국주식 원장 미체결"),
+    "ust21150": ("/api/us/acnt", "미국주식 일별 주문체결내역"),
+    "ust21510": ("/api/us/acnt", "미국주식 당일 주문체결 확인"),
+    "ust21180": ("/api/us/acnt", "미국주식 기간별 주문내역"),
+    "ust21100": ("/api/us/acnt", "미국주식 거래내역"),
+    # === 미국주식 종목정보 (US Stock Info) ===
+    "usa10098": ("/api/us/stkinfo", "미국주식 거래소구분 조회"),
+    "usa10099": ("/api/us/stkinfo", "미국주식 종목리스트"),
+    "usa10100": ("/api/us/stkinfo", "미국주식 종목 조회"),
+    # === 미국주식 시세 (US Quotes) ===
+    "usa20100": ("/api/us/mrkcond", "미국주식 현재가 종목정보"),
+    "usa20101": ("/api/us/mrkcond", "미국주식 현재가 10호가"),
+    # === 미국주식 차트 (US Charts) ===
+    "usa06010": ("/api/us/chart", "미국주식 틱 차트"),
+    "usa06011": ("/api/us/chart", "미국주식 분 차트"),
+    "usa06012": ("/api/us/chart", "미국주식 일 차트"),
+    "usa06013": ("/api/us/chart", "미국주식 주 차트"),
+    "usa06014": ("/api/us/chart", "미국주식 월 차트"),
+    "usa06015": ("/api/us/chart", "미국주식 년 차트"),
+    # === 환전 (FX) ===
+    "ust31300": ("/api/us/exchange", "환전 예상 금액 조회"),
+    "ust31301": ("/api/us/exchange", "환율 조회"),
+    "ust31302": ("/api/us/exchange", "환전 신청"),
 }
 
 

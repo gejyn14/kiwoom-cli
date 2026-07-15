@@ -223,6 +223,29 @@ kiwoom account orderable amount 005930 --side buy --price 70000
 
 ---
 
+## 미국주식 (US Stocks)
+
+티커를 입력하면 자동으로 미국 시장으로 라우팅됩니다 (6자리 숫자 = 국내, 알파벳 = 미국).
+
+```bash
+kiwoom order buy NVDA 10 --price 213.04           # 매수 (거래소 자동 판별)
+kiwoom order sell NVDA 5 --type stop-limit --price 200.5 --stop 199.99 --confirm
+kiwoom stock price NVDA                            # 현재가
+kiwoom stock chart day NVDA --base-date 20260701   # 일봉
+kiwoom stock search apple --market us              # 종목 검색
+kiwoom account balance                             # 국내+미국 통합 잔고 (원화 총계)
+kiwoom account balance --market us                 # 미국만
+kiwoom account exchange rate                       # 환율
+kiwoom account exchange apply 1000000 --confirm    # 원화 → 달러 환전
+```
+
+- 거래소(`--exchange nasdaq|nyse|amex`)는 자동 판별되며, 복수 상장 종목만 직접 지정이 필요합니다.
+- 미국 주문 유형: limit/market/vwap/twap/vwap-limit/twap-limit/loc (매수·매도), moc/stop/stop-limit (매도 전용).
+- 정정은 가격만 가능(전량), 취소는 전량 취소만 지원됩니다 (키움 API 제약).
+- 계좌 조회 명령(`balance/deposit/pnl/orders/history`)은 기본 통합 표시이며 `--market kr|us`로 필터링합니다.
+
+---
+
 ## order - 주문
 
 모든 주문에 `--confirm` 필수.
@@ -241,8 +264,8 @@ kiwoom order credit sell 005930 10 --type market --confirm
 
 # 금현물
 kiwoom order gold buy M04020000 1 --type market --confirm
-kiwoom order gold balance --confirm    # 잔고
-kiwoom order gold pending --confirm   # 미체결
+kiwoom order gold balance             # 잔고
+kiwoom order gold pending             # 미체결
 
 # 조건검색
 kiwoom order condition list
@@ -441,4 +464,10 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 
 ## License
 
-MIT
+kiwoom-cli **Source-Available License, Version 1.0** — see [LICENSE](LICENSE).
+
+- **Individuals** (natural persons, on their own behalf): free to use, modify, and distribute for any purpose, including profit (e.g. trading your own account). Attribution only; no source-disclosure obligation.
+- **Organizations, unmodified use for profit**: require a commercial license.
+- **Organizations, modified use for profit**: either buy a commercial license (source may stay closed) or publish your entire codebase under this same license — and in both cases deliver the full modified source to the Licensor.
+
+Versions released before v2.0 remain available under the MIT License. For commercial licensing, contact ge.jyn14@gmail.com — see [COMMERCIAL.md](COMMERCIAL.md).

@@ -87,6 +87,31 @@ def _fmt_number(value: str, strip_sign: bool = False) -> str:
             return v if strip_sign else value
 
 
+def _fmt_usd(value: str, strip_sign: bool = False) -> str:
+    """Format a USD decimal string: commas, up to 4 decimals, trailing zeros stripped.
+
+    Kiwoom US APIs return prices with up to 4 decimals ("213.0400", "0.0012").
+    _fmt_number would force 2 decimals and mangle penny stocks; this preserves them.
+    """
+    v = value.strip()
+    if not v:
+        return "-"
+    sign = ""
+    if v.startswith(("+", "-")):
+        sign = v[0]
+        v = v[1:]
+    if strip_sign:
+        sign = ""
+    v = v.lstrip("0") or "0"
+    try:
+        if "." not in v:
+            return sign + f"{int(v):,}"
+        s = f"{float(v):,.4f}".rstrip("0").rstrip(".")
+        return sign + (s or "0")
+    except ValueError:
+        return value
+
+
 # Fields where +/- is a direction indicator, not the actual sign.
 # These represent absolute values (prices, amounts, quantities).
 _ABS_FIELDS = frozenset({
@@ -101,6 +126,13 @@ _ABS_FIELDS = frozenset({
     "rmnd_qty", "ord_qty", "ord_uv", "mdfy_uv",
     "trde_qty", "acc_trde_qty", "now_trde_qty",
     "10", "16", "17", "18", "27", "28",  # WebSocket field IDs
+    "now_pric", "frgn_stk_book_uv", "cntr_uv", "stop_pric",
+    "fpr_sel_bid", "fpr_buy_bid",
+    "sel_1bid", "sel_2bid", "sel_3bid", "sel_4bid", "sel_5bid",
+    "sel_6bid", "sel_7bid", "sel_8bid", "sel_9bid", "sel_10bid",
+    "buy_1bid", "buy_2bid", "buy_3bid", "buy_4bid", "buy_5bid",
+    "buy_6bid", "buy_7bid", "buy_8bid", "buy_9bid", "buy_10bid",
+    "poss_qty", "sell_alowq",
 })
 
 # Fields where +/- is meaningful (changes, rates).
@@ -115,9 +147,31 @@ _CODE_FIELDS = frozenset({
     "stk_cd", "ord_no",
 })
 
+# USD decimal fields (up to 4 decimals). Routed to _fmt_usd by _smart_fmt.
+# Direction-indicator USD prices additionally live in _ABS_FIELDS (sign stripped).
+_USD_FIELDS = frozenset({
+    "now_pric", "frgn_stk_book_uv", "cntr_uv", "stop_pric",
+    "fpr_sel_bid", "fpr_buy_bid",
+    "sel_1bid", "sel_2bid", "sel_3bid", "sel_4bid", "sel_5bid",
+    "sel_6bid", "sel_7bid", "sel_8bid", "sel_9bid", "sel_10bid",
+    "buy_1bid", "buy_2bid", "buy_3bid", "buy_4bid", "buy_5bid",
+    "buy_6bid", "buy_7bid", "buy_8bid", "buy_9bid", "buy_10bid",
+    "pre_open_pric", "pre_high_pric", "pre_low_pric", "base_close_pric",
+    "fc_entra", "fc_uncl_amt", "pred_pre",
+    "aplc_exrt", "sell_aplc_exrt", "buy_aplc_exrt", "usd_exch_rate",
+    "exch_rate", "base_exrt", "spcl_bf_exrt",
+    "sell_expc_amt", "buy_expc_amt", "sell_crnc_exmn_alow_amt",
+    "buy_crnc_exmn_alow_amt", "fc_exmn_alow_amt",
+    # USD in US responses (KRW twin: pl_amt_krw); integer path renders
+    # identically to _fmt_number, so KR pl_amt output is unchanged.
+    "pl_amt",
+})
+
 
 def _smart_fmt(value: str, field_key: str) -> str:
     """Format a value based on the field type."""
+    if field_key in _USD_FIELDS:
+        return _fmt_usd(value, strip_sign=field_key in _ABS_FIELDS)
     if field_key in _ABS_FIELDS:
         return _fmt_number(value, strip_sign=True)
     return _fmt_number(value)
@@ -576,6 +630,50 @@ _FIELD_LABELS: dict[str, str] = {
     # 기타
     "dm1": "연속일1", "dm2": "연속일2", "dm3": "연속일3",
     "pipe1": "구분1", "pipe2": "구분2", "pipe3": "구분3",
+    # === 미국주식 (US) ===
+    "frgn_stk_nm": "종목명",
+    "stk_enm": "영문명",
+    "stex_nm": "거래소",
+    "crnc_code": "통화",
+    "natn_nm": "국가",
+    "mkgb": "거래소명",
+    "upgb": "업종",
+    "poss_qty": "보유수량",
+    "sell_alowq": "매도가능",
+    "frgn_stk_book_uv": "매입단가",
+    "now_pric": "현재가",
+    "evlt_amt_krw": "평가금액(원)",
+    "pl_amt_krw": "손익금액(원)",
+    "now_pric_krw": "현재가(원)",
+    "frgn_stk_book_uv_krw": "매입단가(원)",
+    "frgn_stk_book_amt": "매입금액",
+    "frgn_stk_book_amt_krw": "매입금액(원)",
+    "fc_entra": "외화예수금",
+    "fc_uncl_amt": "외화미수금",
+    "krw_entra": "원화예수금",
+    "won_entr": "원화예수금",
+    "trst_prof_ch": "사용증거금",
+    "usd_exch_rate": "매도환율(USD)",
+    "exch_rate": "환율",
+    "aplc_exrt": "적용환율",
+    "sell_aplc_exrt": "매도적용환율",
+    "buy_aplc_exrt": "매수적용환율",
+    "exrt_tp_nm": "환율구분",
+    "exrt_spcl_rt": "환율우대율",
+    "sell_expc_amt": "매도예상금액",
+    "buy_expc_amt": "매수예상금액",
+    "frgn_trde_nm": "매매구분",
+    "slby_tp_nm": "매도수구분",
+    "ord_stat": "주문상태",
+    "ord_time": "주문시간",
+    "ord_cntr_tp": "주문종류",
+    "tot_prch_amt": "총매입금액",
+    "tot_pl_amt": "총손익금액",
+    "tot_pl_rt": "총수익률",
+    "tdy_pl_amt": "당일실현손익",
+    "tot_evlt_amt_krw": "총평가금액(원)",
+    "tot_prch_amt_krw": "총매입금액(원)",
+    "tot_pl_amt_krw": "총손익금액(원)",
 }
 
 
@@ -637,7 +735,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             row = []
             for k in keys:
                 v = str(item.get(k, ""))
-                if k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4:
+                if k in _USD_FIELDS or (k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4):
                     row.append(_smart_fmt(v, k))
                 else:
                     row.append(v)
@@ -654,7 +752,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             for k, v in scalar.items():
                 label = _get_label(k)
                 sv = str(v)
-                if k not in _CODE_FIELDS and sv.lstrip("+-").isdigit() and len(sv) > 4:
+                if k in _USD_FIELDS or (k not in _CODE_FIELDS and sv.lstrip("+-").isdigit() and len(sv) > 4):
                     sv = _smart_fmt(sv, k)
                 t.add_row(label, sv)
             console.print(t)
@@ -691,3 +789,122 @@ def print_deposit(data: dict[str, Any]) -> None:
         if val:
             t.add_row(label, _fmt_number(val))
     console.print(t)
+
+
+def print_unified_balance(kr_data: dict[str, Any] | None, us_data: dict[str, Any] | None) -> None:
+    """국내(kt00004) + 미국(ust21070) 통합 계좌 평가현황."""
+    fmt = _get_format()
+    if fmt == "json":
+        _output_json({"kr": kr_data, "us": us_data})
+        return
+    if fmt == "csv":
+        keys = [
+            "market", "symbol", "name", "qty", "avg_price", "cur_price",
+            "eval_amt", "pl_amt", "pl_rt", "currency", "eval_krw", "pl_krw",
+        ]
+        rows: list[dict] = []
+        if kr_data:
+            for h in kr_data.get("stk_acnt_evlt_prst", []) or []:
+                rows.append({
+                    "market": "KR",
+                    "symbol": h.get("stk_cd", ""),
+                    "name": h.get("stk_nm", ""),
+                    "qty": h.get("rmnd_qty", ""),
+                    "avg_price": h.get("avg_prc", ""),
+                    "cur_price": h.get("cur_prc", ""),
+                    "eval_amt": h.get("evlt_amt", ""),
+                    "pl_amt": h.get("pl_amt", ""),
+                    "pl_rt": h.get("pl_rt", ""),
+                    "currency": "KRW",
+                    "eval_krw": h.get("evlt_amt", ""),
+                    "pl_krw": h.get("pl_amt", ""),
+                })
+        if us_data:
+            for h in _find_list(us_data) or []:
+                rows.append({
+                    "market": "US",
+                    "symbol": h.get("stk_cd", ""),
+                    "name": h.get("frgn_stk_nm", ""),
+                    "qty": h.get("poss_qty", ""),
+                    "avg_price": h.get("frgn_stk_book_uv", ""),
+                    "cur_price": h.get("now_pric", ""),
+                    "eval_amt": h.get("evlt_amt", ""),
+                    "pl_amt": h.get("pl_amt", ""),
+                    "pl_rt": h.get("pl_rt", ""),
+                    "currency": h.get("crnc_code") or "USD",
+                    "eval_krw": h.get("evlt_amt_krw", ""),
+                    "pl_krw": h.get("pl_amt_krw", ""),
+                })
+        _output_csv(rows, keys)
+        return
+
+    def _pad_int(v: str) -> int:
+        try:
+            return int(str(v).lstrip("+-").lstrip("0") or "0")
+        except ValueError:
+            return 0
+
+    table = Table(title="🌏 통합 계좌평가현황", border_style="dim")
+    table.add_column("시장", style="dim")
+    table.add_column("종목")
+    table.add_column("수량", justify="right")
+    table.add_column("매입가", justify="right")
+    table.add_column("현재가", justify="right")
+    table.add_column("평가금액", justify="right")
+    table.add_column("손익", justify="right")
+    table.add_column("수익률", justify="right")
+
+    if kr_data:
+        for h in kr_data.get("stk_acnt_evlt_prst", []) or []:
+            pl = h.get("pl_amt", "0")
+            color = _sign_color(pl)
+            table.add_row(
+                "KRX",
+                h.get("stk_nm", ""),
+                _fmt_number(h.get("rmnd_qty", "")),
+                _fmt_number(h.get("avg_prc", "")),
+                _fmt_number(h.get("cur_prc", "")),
+                f"₩{_fmt_number(h.get('evlt_amt', ''))}",
+                Text(_fmt_number(pl), style=color),
+                Text(h.get("pl_rt", "0") + "%", style=color),
+            )
+    if us_data:
+        for h in _find_list(us_data) or []:
+            pl = h.get("pl_amt", "0")
+            color = _sign_color(pl)
+            table.add_row(
+                h.get("stex_nm", "US"),
+                h.get("frgn_stk_nm", "") or h.get("stk_cd", ""),
+                _fmt_number(h.get("poss_qty", ""), strip_sign=True),
+                f"${_fmt_usd(h.get('frgn_stk_book_uv', ''), strip_sign=True)}",
+                f"${_fmt_usd(h.get('now_pric', ''), strip_sign=True)}",
+                f"${_fmt_usd(h.get('evlt_amt', ''))}\n(₩{_fmt_number(h.get('evlt_amt_krw', ''))})",
+                Text(
+                    f"{_fmt_usd(pl)}\n(₩{_fmt_number(h.get('pl_amt_krw', ''))})",
+                    style=color,
+                ),
+                Text(h.get("pl_rt", "0") + "%", style=color),
+            )
+    console.print(table)
+
+    # 소계 + 원화 총계
+    kr_total = _pad_int(kr_data.get("tot_est_amt", "0")) if kr_data else 0
+    us_total_krw = _pad_int(us_data.get("tot_evlt_amt_krw", "0")) if us_data else 0
+    summary = Table(show_header=False, border_style="dim")
+    summary.add_column("항목", style="cyan", width=20)
+    summary.add_column("값", justify="right")
+    if kr_data:
+        _, kr_pl_str, kr_pl_rt, kr_color = _calc_eval_pl(kr_data)
+        summary.add_row("KRW 소계", Text(f"₩{kr_total:,} ({kr_pl_str})", style=kr_color))
+    if us_data:
+        us_pl = us_data.get("tot_pl_amt", "0")
+        us_color = _sign_color(us_pl)
+        summary.add_row(
+            "USD 소계",
+            Text(
+                f"${_fmt_usd(us_data.get('tot_evlt_amt', '0'))} ({_fmt_usd(us_pl)})",
+                style=us_color,
+            ),
+        )
+    summary.add_row("총평가액 (KRW)", Text(f"₩{kr_total + us_total_krw:,}", style="bold"))
+    console.print(summary)

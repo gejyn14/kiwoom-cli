@@ -1,0 +1,37 @@
+# Changelog
+
+## v2.0.0 (2026-07-15) — 미국주식 지원
+
+키움 REST API의 미국주식 29개 엔드포인트를 기존 명령 체계에 그대로 통합한 메이저 릴리스입니다.
+티커만 입력하면 시장을 자동 판별하므로, 미국 주문도 국내 주문과 똑같이 짧게 입력합니다.
+
+> ⚠️ **라이선스 변경 (MIT → Source-Available)** — v2.0.0부터 **kiwoom-cli Source-Available License, Version 1.0**을 적용합니다.
+> **개인**은 영리 목적(자기 계좌 매매 등)을 포함해 자유롭게 사용/수정/배포 가능(출처 표기만).
+> **조직**이 영리 목적으로 사용할 경우 상용 라이선스가 필요하며, 수정 후 영리 사용 시에는 상용 라이선스를 구매하거나 전체 코드를 동일 라이선스로 공개해야 합니다(어느 경우든 수정 소스를 Licensor에게 전달).
+> v2.0 이전 릴리스는 계속 MIT로 제공됩니다. 자세한 내용은 [LICENSE](LICENSE)·[COMMERCIAL.md](COMMERCIAL.md) 참조.
+
+### 새 기능
+
+- **자동 시장 라우팅** — 6자리 숫자(005930)는 국내, 알파벳 티커(NVDA, BRK.B)는 미국으로 자동 판별. `--exchange nasdaq|nyse|amex`로 강제 지정 가능
+- **미국주식 주문** — `order buy/sell/modify/cancel`이 미국 티커를 그대로 지원
+  - 소수점 가격 (`--price 213.04`, 페니스톡 `0.0012`까지)
+  - 미국 전용 주문유형: vwap/twap/vwap-limit/twap-limit/loc (매수·매도), moc/stop/stop-limit (매도 전용, `--stop` 가격)
+  - 정정은 가격만(전량), 취소는 전량만 — 키움 API 제약을 명확한 안내와 함께 처리
+- **거래소 자동 판별** — usa10098 조회 + `~/.kiwoom/cache/us_exchanges.json` 캐시. 복수 상장 종목만 `--exchange` 필요
+- **통합 계좌 뷰** — `account balance`가 국내+미국을 한 테이블로: 종목별 USD/원화 병기, 통화별 소계, 원화 총평가액. `deposit/pnl/orders/history`도 동일하게 통합 (`--market kr|us`로 필터, 한쪽 실패 시 경고 후 나머지 표시)
+- **미국 시세/차트** — `stock info/price/orderbook/search`(`--market us`)와 `stock chart tick~year` 6종 (`--krw` 원화 환산 옵션)
+- **환전** — 새 `account exchange rate|estimate|apply` 서브그룹 (환율 조회/예상금액/신청, apply는 확인 게이트 필수)
+- **주문가능수량** — `account orderable margin-qty NVDA --price 213.04`
+- **USD 포매팅** — 소수점 4자리 보존, 후행 0 제거, 방향 부호 규칙 유지
+- **AI/자동화 친화** — 통합 명령의 `--format json`이 단일 `{"kr", "us"}` 문서를 출력, exit code 계약 유지 (0=성공, 1=입력오류, 2=API오류)
+
+### 변경 사항
+
+- `order buy/sell/modify`의 `--price`/`PRICE`가 정수→실수 타입으로 변경 (국내 경로는 정수만 허용, 동작 동일)
+- `account balance/deposit/pnl/orders/history`가 기본적으로 국내+미국 통합 표시 (`--market kr`로 기존 국내 전용 동작)
+- SECURITY.md의 주문 안전 설명을 실제 동작(미리보기 + 대화형 확인 + `--confirm`)에 맞게 정정
+
+### 내부
+
+- 신규 패키지 `kiwoom_cli/commands/us/` (detect/order_ops/stock_ops/account_ops/exchange)
+- API 레지스트리 188 → 217개 (REST), 테스트 155 → 245개

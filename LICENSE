@@ -1,21 +1,90 @@
-MIT License
+kiwoom-cli Source-Available License
+Version 1.0
 
 Copyright (c) 2026 gejyn14
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This license governs use of the accompanying software ("the Software"). By
+using, copying, modifying, or distributing the Software, You accept this
+license. If You do not accept it, do not use the Software.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Prior released versions of the Software that were distributed under the MIT
+License remain available under the MIT License. This license applies to this
+version and later versions distributed under it.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. DEFINITIONS
+
+  "Licensor" means gejyn14, the copyright holder, reachable at
+  ge.jyn14@gmail.com.
+
+  "You" means the individual or entity exercising rights under this license.
+
+  "Individual" means a natural person acting on their own behalf and not on
+  behalf of, or for the benefit of, any organization.
+
+  "Organization" means any legal entity other than an Individual, including
+  companies, partnerships, nonprofits, government bodies, and any natural
+  person acting on behalf of or for the benefit of such an entity.
+
+  "Commercial License" means a separate written agreement purchased from the
+  Licensor granting an Organization rights beyond those in this license.
+
+  "For Profit" means any use in connection with, or in furtherance of, a
+  commercial or revenue-generating activity of an Organization.
+
+  "Modify" means to create a work based on the Software, and a "Modified
+  Version" is any such work.
+
+2. GRANT FOR INDIVIDUALS
+
+  If You are an Individual, You are granted a perpetual, worldwide,
+  royalty-free right to use, copy, modify, and distribute the Software for any
+  purpose, including for Your own profit (for example, trading Your own
+  account), subject only to the attribution requirement in Section 5. You have
+  no obligation to disclose source code.
+
+3. GRANT FOR ORGANIZATIONS — UNMODIFIED USE
+
+  If You are an Organization and You use the Software without modification For
+  Profit, You must obtain a Commercial License from the Licensor. Use for
+  internal evaluation, testing, or non-profit purposes is permitted without a
+  Commercial License, subject to the attribution requirement in Section 5.
+
+4. GRANT FOR ORGANIZATIONS — MODIFIED USE
+
+  If You are an Organization and You use a Modified Version For Profit, You must
+  do EITHER (a) or (b):
+
+    (a) Obtain a Commercial License from the Licensor, in which case You may
+        keep Your Modified Version's source code closed to the public; OR
+
+    (b) Publish the complete source code of Your entire work incorporating the
+        Software to the public under this same license.
+
+  In BOTH cases — whether or not You have purchased a Commercial License — You
+  must deliver the complete source code of Your Modified Version to the
+  Licensor at ge.jyn14@gmail.com promptly upon first use For Profit and upon
+  each subsequent material change.
+
+5. ATTRIBUTION
+
+  All copies or substantial portions of the Software, and all distributions of
+  Modified Versions, must retain this license, the above copyright notice, and
+  a notice identifying gejyn14 as the original author.
+
+6. TERMINATION
+
+  Any use in breach of this license automatically terminates Your rights under
+  it. Rights may be reinstated by the Licensor in writing.
+
+7. DISCLAIMER OF WARRANTY AND LIMITATION OF LIABILITY
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+  ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+8. COMMERCIAL LICENSES
+
+  For commercial licensing, contact ge.jyn14@gmail.com.

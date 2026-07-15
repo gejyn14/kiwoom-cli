@@ -13,7 +13,7 @@
 - **토큰**: `keyring`에 평문 저장 (만료되는 값이므로 별도 암호화 불필요). 키 형식: `{profile}:token`
 - **비밀번호**: SecureStore 잠금 해제용. PBKDF2로 키 유도 후 Fernet 복호화에 사용. 저장되지 않음
 - **config.toml**: 도메인, 계좌번호, 프로필 설정 등 비민감 정보만 저장
-- **주문**: 시스템 인증 필수 (macOS: Touch ID, Windows: LogonUser, Linux: PAM). `dangerous-mode on` 시 비활성화
+- **주문**: 실행 전 주문 내용 미리보기 + 대화형 확인 프롬프트(y/n). 자동화 시 `--confirm` 플래그로 생략
 
 ## Reporting a Vulnerability
 
@@ -36,5 +36,5 @@
 ## Best Practices for Users
 
 - 모의투자 환경에서 먼저 테스트하세요 (`kiwoom config set domain mock`)
-- `dangerous-mode`는 신뢰할 수 있는 환경에서만 활성화하세요
+- 주문 확인 프롬프트를 생략하는 `--confirm`은 신뢰할 수 있는 자동화 환경에서만 사용하세요
 - 정기적으로 `pip install --upgrade kiwoom-cli`로 최신 버전을 유지하세요
