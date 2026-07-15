@@ -14,7 +14,10 @@ from ..formatters import (
     print_generic_table,
     print_pending_orders,
 )
+from ..output import err_console
 from ._constants import EXCHANGE_ALL_ZERO
+from .us import order_ops as us_order_ops
+from .us.detect import is_us_symbol
 
 
 def _today() -> str:
@@ -395,8 +398,14 @@ def orderable_amount(code: str, trde_tp: str, uv: str, io_amt: str, trde_qty: st
 @orderable.command("margin-qty")
 @click.argument("code")
 @click.option("--price", "uv", default="", help="매수가격")
-def orderable_margin_qty(code: str, uv: str):
-    """증거금율별 주문가능 수량 조회. (kt00011)"""
+@click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
+def orderable_margin_qty(code: str, uv: str, exchange: str | None):
+    """증거금율별 주문가능 수량 조회 (국내 kt00011 / 미국 ust31490)."""
+    if is_us_symbol(code, exchange):
+        if not uv:
+            err_console.print("[red]미국주식 주문가능수량 조회에는 --price가 필요합니다.[/]")
+            raise SystemExit(1)
+        return us_order_ops.orderable(code, float(uv), exchange)
     with KiwoomClient() as c:
         body: dict = {"stk_cd": code}
         if uv:

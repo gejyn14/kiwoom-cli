@@ -373,3 +373,17 @@ def test_kr_modify_unchanged(runner, us_fake):
     )
     assert result.exit_code == 0
     assert len(_order_calls(us_fake, "kt10002")) == 1
+
+
+def test_us_orderable_margin_qty(runner, us_fake, monkeypatch):
+    monkeypatch.setattr("kiwoom_cli.commands.account.KiwoomClient", lambda *a, **k: us_fake)
+    result = runner.invoke(cli, ["account", "orderable", "margin-qty", "NVDA", "--price", "213.04"])
+    assert result.exit_code == 0
+    assert ("ust31490", {"stex_tp": "ND", "stk_cd": "NVDA", "uv": "213.04"}) in us_fake.calls
+
+
+def test_us_orderable_margin_qty_requires_price(runner, us_fake, monkeypatch):
+    monkeypatch.setattr("kiwoom_cli.commands.account.KiwoomClient", lambda *a, **k: us_fake)
+    result = runner.invoke(cli, ["account", "orderable", "margin-qty", "NVDA"])
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust31490") == []
