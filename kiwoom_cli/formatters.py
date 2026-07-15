@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from .output import console
+from .output import console, err_console
 
 
 def _get_format() -> str:
@@ -20,6 +20,18 @@ def _get_format() -> str:
     if ctx and ctx.obj:
         return ctx.obj.get("format", "table")
     return "table"
+
+
+def human(renderable: Any) -> None:
+    """사람이 읽는 출력 (미리보기, 안내 메시지 등).
+
+    table 모드에서는 stdout, json/csv 모드에서는 stderr로 출력해
+    stdout이 단일 파싱 가능 문서로 유지되도록 한다.
+    """
+    if _get_format() == "table":
+        console.print(renderable)
+    else:
+        err_console.print(renderable)
 
 
 def _output_json(data: Any) -> None:

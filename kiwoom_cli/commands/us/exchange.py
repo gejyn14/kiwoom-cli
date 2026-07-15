@@ -6,8 +6,7 @@ import click
 from rich.panel import Panel
 
 from ...client import KiwoomClient
-from ...formatters import print_generic_table
-from ...output import console
+from ...formatters import human, print_generic_table
 
 DIRECTION = {"krw-usd": "1", "usd-krw": "2"}
 _DIRECTION_LABELS = {"krw-usd": "원화 → 달러", "usd-krw": "달러 → 원화"}
@@ -47,7 +46,7 @@ def fx_estimate(amount: int, direction: str):
 def fx_apply(amount: int, direction: str, confirm: bool):
     """환전 신청 (ust31302). 실제 자금이 이동합니다."""
     unit = "원" if direction == "krw-usd" else "달러"
-    console.print(Panel(
+    human(Panel(
         f"[bold]환전 신청[/]\n\n"
         f"  방향: {_DIRECTION_LABELS[direction]}\n"
         f"  금액: {amount:,}{unit}",
@@ -55,7 +54,7 @@ def fx_apply(amount: int, direction: str, confirm: bool):
         border_style="yellow",
     ))
     if not confirm:
-        click.confirm("환전을 신청하시겠습니까?", abort=True)
+        click.confirm("환전을 신청하시겠습니까?", abort=True, err=True)
     with KiwoomClient() as c:
         data, _ = c.request("ust31302", {
             "exch_tp": DIRECTION[direction],
