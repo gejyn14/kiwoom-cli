@@ -162,6 +162,9 @@ _USD_FIELDS = frozenset({
     "exch_rate", "base_exrt", "spcl_bf_exrt",
     "sell_expc_amt", "buy_expc_amt", "sell_crnc_exmn_alow_amt",
     "buy_crnc_exmn_alow_amt", "fc_exmn_alow_amt",
+    # USD in US responses (KRW twin: pl_amt_krw); integer path renders
+    # identically to _fmt_number, so KR pl_amt output is unchanged.
+    "pl_amt",
 })
 
 
@@ -732,7 +735,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             row = []
             for k in keys:
                 v = str(item.get(k, ""))
-                if k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4:
+                if k in _USD_FIELDS or (k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4):
                     row.append(_smart_fmt(v, k))
                 else:
                     row.append(v)
@@ -749,7 +752,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             for k, v in scalar.items():
                 label = _get_label(k)
                 sv = str(v)
-                if k not in _CODE_FIELDS and sv.lstrip("+-").isdigit() and len(sv) > 4:
+                if k in _USD_FIELDS or (k not in _CODE_FIELDS and sv.lstrip("+-").isdigit() and len(sv) > 4):
                     sv = _smart_fmt(sv, k)
                 t.add_row(label, sv)
             console.print(t)

@@ -193,3 +193,14 @@ def test_smart_fmt_routes_usd_price_fields():
     assert _smart_fmt("-1.2500", "pred_pre") == "-1.25"
     # existing KR behavior unchanged for a non-USD field
     assert _smart_fmt("+70000", "cur_prc") == "70,000"
+
+
+def test_generic_table_formats_usd_decimals(capsys):
+    from kiwoom_cli.formatters import print_generic_table
+    print_generic_table(
+        [{"stk_cd": "NVDA", "now_pric": "+213.0400", "pl_amt": "-0.5000"}],
+        title="t",
+    )
+    out = capsys.readouterr().out
+    assert "213.04" in out and "213.0400" not in out
+    assert "-0.5" in out and "0.5000" not in out
