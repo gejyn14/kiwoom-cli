@@ -77,6 +77,8 @@ def test_json_error_path_emits_json_error(runner, monkeypatch):
 
     result = runner.invoke(cli, ["-f", "json", "stock", "info", "005930"])
     assert result.exit_code == 2
-    err = json.loads(result.stdout)
-    assert err["code"] == -1
-    assert err["error"] == "테스트 오류"
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is False
+    assert doc["error"]["upstream_code"] == -1
+    assert doc["error"]["message"] == "테스트 오류"
+    assert isinstance(doc["error"]["code"], str)

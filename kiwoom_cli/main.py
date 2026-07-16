@@ -9,7 +9,7 @@ import click
 import httpx
 import keyring
 
-from . import __version__, auth, config
+from . import __version__, auth, config, envelope
 from .client import KiwoomClient, KiwoomAPIError, KiwoomAuthError
 from .commands.account import account
 from .commands.dashboard import dashboard
@@ -36,40 +36,58 @@ click.exceptions.UsageError.exit_code = EXIT_INPUT
 class KiwoomGroup(click.Group):
     """Custom group that catches API/network errors globally."""
 
+    @staticmethod
+    def _json_mode(ctx) -> bool:
+        return (ctx.obj.get("format", "table") if ctx.obj else "table") == "json"
+
     def invoke(self, ctx):
         try:
             return super().invoke(ctx)
         except KiwoomAPIError as e:
-            fmt = ctx.obj.get("format", "table") if ctx.obj else "table"
-            if fmt == "json":
-                click.echo(json.dumps({"error": e.msg, "code": e.code}, ensure_ascii=False))
+            if self._json_mode(ctx):
+                envelope.emit(error=envelope.error_body(e.msg, upstream_code=e.code))
             else:
                 console.print(f"[red]API 오류:[/] {e}")
             ctx.exit(EXIT_API)
         except KiwoomAuthError:
-            fmt = ctx.obj.get("format", "table") if ctx.obj else "table"
-            msg = "토큰이 없습니다. 'kiwoom auth login'으로 발급하세요."
-            if fmt == "json":
-                click.echo(json.dumps({"error": msg, "code": "auth_required"}, ensure_ascii=False))
+            if self._json_mode(ctx):
+                envelope.emit(error=envelope.error_body(
+                    "토큰이 없습니다. 'kiwoom auth login'으로 발급하세요.",
+                    code="AUTH_REQUIRED", retryable=False,
+                ))
             else:
                 console.print("[red]인증 필요:[/] 토큰이 없습니다. [dim]kiwoom auth login[/]")
             ctx.exit(EXIT_AUTH)
         except keyring.errors.KeyringError:
-            console.print("[red]키체인 오류:[/] OS 키체인에 접근할 수 없습니다 (잠김 또는 비대화형 세션).")
-            console.print(
-                "[dim]키체인 없는 환경에서는 본인 터미널에서 토큰을 발급한 뒤 "
-                "KIWOOM_TOKEN 환경변수로 전달하세요. (README '샌드박스 환경' 참고)[/]"
-            )
+            if self._json_mode(ctx):
+                envelope.emit(error=envelope.error_body(
+                    "OS 키체인에 접근할 수 없습니다. KIWOOM_TOKEN 환경변수를 사용하세요.",
+                    code="KEYCHAIN_UNAVAILABLE", retryable=False,
+                ))
+            else:
+                console.print("[red]키체인 오류:[/] OS 키체인에 접근할 수 없습니다 (잠김 또는 비대화형 세션).")
+                console.print(
+                    "[dim]키체인 없는 환경에서는 본인 터미널에서 토큰을 발급한 뒤 "
+                    "KIWOOM_TOKEN 환경변수로 전달하세요. (README '샌드박스 환경' 참고)[/]"
+                )
             ctx.exit(EXIT_INPUT)
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 401:
+            status = e.response.status_code
+            if self._json_mode(ctx):
+                envelope.emit(error=envelope.error_body(f"HTTP {status}", http_status=status))
+            elif status == 401:
                 console.print("[red]인증 오류:[/] 토큰이 만료되었습니다. [dim]kiwoom auth login[/]")
-                ctx.exit(EXIT_AUTH)
             else:
-                console.print(f"[red]HTTP 오류:[/] {e.response.status_code}")
-                ctx.exit(EXIT_API)
+                console.print(f"[red]HTTP 오류:[/] {status}")
+            ctx.exit(EXIT_AUTH if status == 401 else EXIT_API)
         except httpx.ConnectError:
-            console.print("[red]연결 오류:[/] API 서버에 연결할 수 없습니다. 도메인을 확인하세요.")
+            if self._json_mode(ctx):
+                envelope.emit(error=envelope.error_body(
+                    "API 서버에 연결할 수 없습니다. 도메인을 확인하세요.",
+                    code="NETWORK_ERROR", retryable=True,
+                ))
+            else:
+                console.print("[red]연결 오류:[/] API 서버에 연결할 수 없습니다. 도메인을 확인하세요.")
             ctx.exit(EXIT_API)
 
 
@@ -346,7 +364,8 @@ def auth_status(ctx):
 @click.argument("api_id")
 @click.argument("body", default="{}")
 @click.option("--raw", is_flag=True, help="JSON 원본 출력")
-def raw_api(api_id: str, body: str, raw: bool):
+@click.option("--next-key", "next_key", default="", help="연속조회 커서 (이전 응답의 meta.cont.next_key)")
+def raw_api(api_id: str, body: str, raw: bool, next_key: str):
     """Raw API 호출. (예: kiwoom api ka10001 '{"stk_cd":"005930"}')"""
     try:
         body_dict = json.loads(body)
@@ -354,7 +373,11 @@ def raw_api(api_id: str, body: str, raw: bool):
         raise click.ClickException(f"Invalid JSON body: {e}")
 
     with KiwoomClient() as c:
-        data, headers = c.request(api_id, body_dict)
+        data, headers = c.request(
+            api_id, body_dict,
+            cont_yn="Y" if next_key else "",
+            next_key=next_key,
+        )
         if raw:
             console.print_json(json.dumps(data, ensure_ascii=False, indent=2))
         else:

@@ -64,7 +64,7 @@ class TestGenericTableJson:
             print_generic_table(data, title="test")
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert parsed[0]["stk_nm"] == "삼성전자"
+        assert parsed["data"][0]["stk_nm"] == "삼성전자"
 
     def test_dict_json(self, capsys):
         data = {"stk_cd": "005930", "return_code": 0, "return_msg": "OK"}
@@ -72,15 +72,15 @@ class TestGenericTableJson:
             print_generic_table(data, title="test")
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert "stk_cd" in parsed
-        assert "return_code" not in parsed
+        assert "stk_cd" in parsed["data"]
+        assert "return_code" not in parsed["data"]
 
     def test_empty_list_json(self, capsys):
         with _make_ctx("json"):
             print_generic_table([], title="test")
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert parsed == []
+        assert parsed["data"] == []
 
 
 class TestGenericTableCsv:
@@ -108,8 +108,8 @@ class TestStockInfoJson:
             print_stock_info(data)
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert parsed["stk_nm"] == "삼성전자"
-        assert "return_code" not in parsed
+        assert parsed["data"]["stk_nm"] == "삼성전자"
+        assert "return_code" not in parsed["data"]
 
 
 class TestChartDataJson:
@@ -121,5 +121,5 @@ class TestChartDataJson:
             print_chart_data(items, title="test")
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert len(parsed) == 1
-        assert parsed[0]["date"] == "20260101"
+        assert len(parsed["data"]) == 1
+        assert parsed["data"][0]["date"] == "20260101"

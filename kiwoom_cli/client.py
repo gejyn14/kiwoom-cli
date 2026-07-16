@@ -104,6 +104,16 @@ class KiwoomClient:
             "cont-yn": resp.headers.get("cont-yn", ""),
             "next-key": resp.headers.get("next-key", ""),
         }
+
+        # 연속조회 커서를 Click 컨텍스트에 보관 → json envelope의 meta.cont로 노출
+        # (라이브러리로 쓰일 때는 컨텍스트가 없으므로 조용히 건너뜀)
+        ctx = click.get_current_context(silent=True)
+        if ctx is not None and isinstance(ctx.obj, dict):
+            if resp_headers["cont-yn"] == "Y" and resp_headers["next-key"]:
+                ctx.obj["last_cont"] = {"next_key": resp_headers["next-key"]}
+            else:
+                ctx.obj["last_cont"] = None
+
         return data, resp_headers
 
     def request_all(

@@ -206,8 +206,8 @@ def test_auth_status_shows_env_storage_mode(mem_keyring):
     result = runner.invoke(cli, ["-f", "json", "auth", "status"])
     assert result.exit_code == 0
     doc = _json.loads(result.stdout)
-    assert doc["token_storage"] == "env"
-    assert doc["has_token"] is False
+    assert doc["data"]["token_storage"] == "env"
+    assert doc["data"]["has_token"] is False
 
     result = runner.invoke(cli, ["auth", "status"])
     assert result.exit_code == 0
@@ -228,8 +228,8 @@ def test_auth_status_reflects_env_token_with_broken_keyring(monkeypatch):
     result = runner.invoke(cli, ["-f", "json", "auth", "status"])
     assert result.exit_code == 0
     doc = _json.loads(result.stdout)
-    assert doc["has_token"] is True
-    assert doc["token_source"] == "env"
+    assert doc["data"]["has_token"] is True
+    assert doc["data"]["token_source"] == "env"
 
     result = runner.invoke(cli, ["auth", "status"])
     assert result.exit_code == 0
