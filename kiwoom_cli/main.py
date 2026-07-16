@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import click
 import httpx
@@ -265,6 +266,8 @@ def auth_logout(ctx):
             human("[green]토큰 폐기 완료.[/]")
         except KiwoomAPIError as e:
             human(f"[red]토큰 폐기 실패:[/] {e}")
+    if os.environ.get("KIWOOM_TOKEN"):
+        human("[yellow]KIWOOM_TOKEN 환경변수가 설정되어 있어 이 셸에서는 해당 토큰이 계속 사용됩니다. unset KIWOOM_TOKEN 으로 제거하세요.[/]")
 
 
 @auth_cmd.command("status")
@@ -273,22 +276,27 @@ def auth_status(ctx):
     """토큰 상태 확인."""
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     configured = config.is_configured(profile)
-    has_token = configured and auth.load_token(profile=profile) is not None
+    token = auth.load_token(profile=profile)
+    token_source = None
+    if token is not None:
+        token_source = "env" if os.environ.get("KIWOOM_TOKEN") else "keyring"
     if _get_format() == "json":
         cfg = config.load_config()
         _output_json({
             "profile": profile,
             "domain": cfg.get("profiles", {}).get(profile, {}).get("domain", "mock"),
             "configured": configured,
-            "has_token": has_token,
+            "has_token": token is not None,
+            "token_source": token_source,
         })
         return
-    if not configured:
+    if not configured and token is None:
         human("[yellow]설정 필요.[/] 'kiwoom config setup' 으로 설정하세요.")
         return
     human(f"  프로필: [bold]{profile}[/]")
-    if has_token:
-        human("[green]토큰 있음[/] [dim](키체인 저장됨)[/]")
+    if token is not None:
+        source_label = "환경변수 KIWOOM_TOKEN" if token_source == "env" else "키체인 저장됨"
+        human(f"[green]토큰 있음[/] [dim]({source_label})[/]")
     else:
         human("[yellow]토큰 없음.[/] 'kiwoom auth login' 으로 발급하세요.")
 

@@ -110,3 +110,25 @@ def test_readonly_commands_survive_broken_keyring(monkeypatch):
     for argv in (["config", "show"], ["auth", "status"], ["config", "profiles"]):
         result = runner.invoke(cli, argv)
         assert result.exit_code == 0, (argv, result.exception)
+
+
+def test_auth_status_reflects_env_token_with_broken_keyring(monkeypatch):
+    """샌드박스(잠긴 키체인) + KIWOOM_TOKEN: auth status가 토큰을 인식해야 한다."""
+    import json as _json
+
+    def _raise(svc, key):
+        raise keyring.errors.KeyringError("errSecInteractionNotAllowed (-25308)")
+
+    monkeypatch.setattr(keyring, "get_password", _raise)
+    monkeypatch.setenv("KIWOOM_TOKEN", "env-token")
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["-f", "json", "auth", "status"])
+    assert result.exit_code == 0
+    doc = _json.loads(result.stdout)
+    assert doc["has_token"] is True
+    assert doc["token_source"] == "env"
+
+    result = runner.invoke(cli, ["auth", "status"])
+    assert result.exit_code == 0
+    assert "KIWOOM_TOKEN" in result.output
