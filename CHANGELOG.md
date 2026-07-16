@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.2.0 (2026-07-16) — 키체인 없는 환경 지원
+
+### Added
+- **`KIWOOM_TOKEN` 환경변수**: OS 키체인에 접근할 수 없는 환경(샌드박스 셸, CI, 컨테이너, AI 에이전트)에서 접근토큰을 환경변수로 전달할 수 있습니다. 설정 시 키체인 토큰보다 우선하며, `auth status`가 토큰 출처(키체인/환경변수)를 표시합니다. appkey/secretkey는 계속 환경변수를 지원하지 않습니다 — 만료·폐기 가능한 접근토큰만 키체인 밖으로 나갑니다.
+- **토큰 저장 방식 선택 (`token_storage`)**: `config setup`에서 keychain(기본)/env 중 선택합니다. env 모드에서는 `auth login`이 토큰을 키체인에 저장하지 않고 `export KIWOOM_TOKEN=...` 명령을 출력해 사용자가 직접 관리합니다. 이후 전환은 `kiwoom config set token_storage keychain|env`.
+
 ## v2.1.1 (2026-07-16) — 자동화 안정성
 
 ### Fixed
