@@ -5,7 +5,7 @@ from __future__ import annotations
 from ...client import KiwoomClient
 from ...formatters import _find_list, print_chart_data, print_generic_table
 from ...output import err_console
-from ._constants import US_EXCHANGE, US_EXCHANGE_ALL
+from ._constants import US_EXCHANGE_ALL
 from .detect import UsExchangeError, resolve_us_exchange
 
 
@@ -18,12 +18,10 @@ def _resolve_or_exit(client, code: str, exchange: str | None) -> str:
 
 
 def info(code: str, exchange: str | None) -> None:
-    """미국주식 종목 조회 (usa10100)."""
-    body = {"stk_cd": code.upper()}
-    if exchange in US_EXCHANGE:
-        body["stex_tp"] = US_EXCHANGE[exchange]
+    """미국주식 종목 조회 (usa10100). stex_tp 필수 — 미지정 시 자동판별."""
     with KiwoomClient() as c:
-        data, _ = c.request("usa10100", body)
+        stex_tp = _resolve_or_exit(c, code, exchange)
+        data, _ = c.request("usa10100", {"stk_cd": code.upper(), "stex_tp": stex_tp})
         print_generic_table(data, title=f"{code.upper()} 종목정보 (미국)")
 
 

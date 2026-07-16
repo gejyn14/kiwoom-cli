@@ -10,11 +10,14 @@ Strict coverage for all 23 order commands. Tests validate:
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
+
 import pytest
 from click.testing import CliRunner
 
 from kiwoom_cli.client import KiwoomAPIError
-from kiwoom_cli.commands.order import ORDER_TYPES
+from kiwoom_cli.commands.order import KST, ORDER_TYPES
 from kiwoom_cli.main import cli
 from tests.fakes import FakeKiwoomClient
 
@@ -33,6 +36,43 @@ def fake_client(monkeypatch):
         lambda *args, **kwargs: fake,
     )
     return fake
+
+
+@pytest.fixture
+def fake_everywhere(fake_client, monkeypatch):
+    """Inject the same fake into stock/account modules (litmus loop 용)."""
+    for mod in ("stock", "account"):
+        monkeypatch.setattr(
+            f"kiwoom_cli.commands.{mod}.KiwoomClient",
+            lambda *args, **kwargs: fake_client,
+        )
+    return fake_client
+
+
+@pytest.fixture
+def isolated_home(monkeypatch, tmp_path):
+    """config/멱등성 원장을 tmp로 격리 (실제 ~/.kiwoom 오염 방지)."""
+    monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr("kiwoom_cli.config.CONFIG_DIR", tmp_path)
+    monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+    monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+    return tmp_path
+
+
+@pytest.fixture
+def market_open(monkeypatch):
+    """validate의 market_open 휴리스틱을 '장중'으로 고정 (월요일 10:00 KST)."""
+    monkeypatch.setattr(
+        "kiwoom_cli.commands.order._now_kst",
+        lambda: datetime(2020, 1, 6, 10, 0, tzinfo=KST),
+    )
+
+
+def _doc(result):
+    """stdout은 단일 envelope 문서여야 한다."""
+    doc = json.loads(result.stdout)
+    assert doc["schema"] == "v1"
+    return doc
 
 
 # ============================================================
@@ -461,3 +501,325 @@ def test_api_error_returns_nonzero_exit(runner, monkeypatch):
     )
 
     assert result.exit_code == 2
+
+
+# ============================================================
+#  Confirmation contract (--yes alias, CONFIRMATION_REQUIRED)
+# ============================================================
+
+
+def test_json_without_confirm_emits_confirmation_required(runner, fake_client):
+    """json 모드 + --confirm 없음 → 프롬프트 없이 CONFIRMATION_REQUIRED, exit 1, API 호출 0건."""
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "005930", "10", "--type", "market"],
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+    doc = _doc(result)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "CONFIRMATION_REQUIRED"
+    assert doc["error"]["retryable"] is False
+
+
+def test_json_without_confirm_subgroups_also_gated(runner, fake_client):
+    """credit/gold 하위그룹도 동일한 확인 계약을 따른다."""
+    for args in (
+        ["order", "credit", "buy", "005930", "10", "--type", "market"],
+        ["order", "gold", "buy", "730060", "1", "--type", "market"],
+        ["order", "cancel", "0000140", "005930"],
+    ):
+        result = runner.invoke(cli, ["-f", "json", *args])
+        assert result.exit_code == 1
+        assert _doc(result)["error"]["code"] == "CONFIRMATION_REQUIRED"
+    assert fake_client.calls == []
+
+
+def test_yes_is_alias_of_confirm(runner, fake_client):
+    """--yes는 --confirm과 동일하게 프롬프트를 생략한다."""
+    result = runner.invoke(
+        cli,
+        ["order", "buy", "005930", "10", "--type", "market", "--yes"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][0] == "kt10000"
+
+
+# ============================================================
+#  --dry-run
+# ============================================================
+
+
+def test_dry_run_limit_sends_nothing_and_body_matches_real_send(runner, fake_client):
+    """지정가 dry-run: API 호출 0건, body는 실제 전송 시 body와 동일."""
+    dry = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "005930", "10",
+         "--price", "70000", "--type", "limit", "--dry-run"],
+    )
+
+    assert dry.exit_code == 0
+    assert fake_client.calls == []
+    doc = _doc(dry)
+    payload = doc["data"]
+    assert payload["would_send"] is True
+    assert payload["api_id"] == "kt10000"
+    assert payload["side"] == "buy"
+    assert payload["symbol"] == "005930"
+    assert payload["qty"] == 10
+    assert payload["price"] == 70000
+    assert payload["est_cost"] == 700000
+    assert payload["currency"] == "KRW"
+    assert "price_source" not in payload
+
+    real = runner.invoke(
+        cli,
+        ["order", "buy", "005930", "10", "--price", "70000", "--type", "limit", "--confirm"],
+    )
+    assert real.exit_code == 0
+    assert fake_client.calls == [("kt10000", payload["body"])]
+
+
+def test_dry_run_market_resolves_price_from_quote(runner, fake_client):
+    """시장가 dry-run: 현재가(ka10001)로 예상비용 계산, 주문 API는 호출하지 않음."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "-70000", "return_code": 0}
+    )
+    result = runner.invoke(
+        cli,
+        # --confirm과 함께 줘도 --dry-run이 우선한다
+        ["-f", "json", "order", "buy", "005930", "10", "--dry-run", "--confirm"],
+    )
+
+    assert result.exit_code == 0
+    assert [c[0] for c in fake_client.calls] == ["ka10001"]
+    payload = _doc(result)["data"]
+    assert payload["price"] == 70000
+    assert payload["price_source"] == "market_quote"
+    assert payload["est_cost"] == 700000
+    assert payload["body"]["ord_uv"] == ""  # 실제 전송 body는 시장가 그대로
+
+
+def test_dry_run_cancel_sends_nothing(runner, fake_client):
+    """취소 dry-run: 호출 0건, est_cost 0."""
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "cancel", "0000140", "005930", "--dry-run"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls == []
+    payload = _doc(result)["data"]
+    assert payload["api_id"] == "kt10003"
+    assert payload["side"] == "cancel"
+    assert payload["est_cost"] == 0
+    assert payload["body"]["cncl_qty"] == "0"
+
+
+# ============================================================
+#  Idempotency (--client-order-id)
+# ============================================================
+
+
+def test_idempotency_same_key_replays_without_sending(runner, fake_client, isolated_home):
+    """같은 키 재실행 → 재전송 없이 같은 ord_no + idempotent_replay=true."""
+    fake_client.set_response(
+        "kt10000", {"return_code": 0, "ord_no": "0000777", "return_msg": "OK"}
+    )
+    args = ["-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit", "--confirm",
+            "--client-order-id", "k1"]
+
+    first = runner.invoke(cli, args)
+    assert first.exit_code == 0
+    assert len(fake_client.calls) == 1
+    data1 = _doc(first)["data"]
+    assert data1["ord_no"] == "0000777"
+    assert "idempotent_replay" not in data1
+
+    second = runner.invoke(cli, args)
+    assert second.exit_code == 0
+    assert len(fake_client.calls) == 1  # 전송 없음
+    data2 = _doc(second)["data"]
+    assert data2["idempotent_replay"] is True
+    assert data2["ord_no"] == data1["ord_no"]
+
+    ledger = isolated_home / "idempotency" / "default-mock.jsonl"
+    assert ledger.exists()
+    assert len(ledger.read_text().strip().splitlines()) == 1
+
+
+def test_idempotency_different_key_sends(runner, fake_client, isolated_home):
+    """다른 키는 정상 전송된다."""
+    base = ["-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit", "--confirm"]
+
+    runner.invoke(cli, [*base, "--client-order-id", "k1"])
+    result = runner.invoke(cli, [*base, "--client-order-id", "k2"])
+
+    assert result.exit_code == 0
+    assert len(fake_client.calls) == 2
+
+
+# ============================================================
+#  order validate (read-only preflight)
+# ============================================================
+
+
+def test_validate_buy_happy_path(runner, fake_client, market_open):
+    """유효한 매수 사전점검: 주문 API 미호출, valid=true, exit 0."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "+70000", "return_code": 0}
+    )
+    fake_client.set_response(
+        "kt00001", {"ord_alow_amt": "000001000000", "return_code": 0}
+    )
+
+    result = runner.invoke(cli, ["-f", "json", "order", "validate", "buy", "005930", "10"])
+
+    assert result.exit_code == 0
+    assert [c[0] for c in fake_client.calls] == ["ka10001", "kt00001"]
+    doc = _doc(result)
+    assert doc["ok"] is True
+    data = doc["data"]
+    assert data["valid"] is True
+    assert data["checks"] == {
+        "symbol_ok": True, "market_open": True,
+        "sufficient_balance": True, "price_ok": True,
+    }
+    assert data["est_cost"] == 700000
+    assert data["heuristic"] is True
+
+
+def test_validate_buy_insufficient_balance(runner, fake_client, market_open):
+    """주문가능금액 부족 → VALIDATION_FAILED, 실패 체크가 details에 포함, exit 1."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "+70000", "return_code": 0}
+    )
+    fake_client.set_response(
+        "kt00001", {"ord_alow_amt": "000000100000", "return_code": 0}  # 100,000 < 700,000
+    )
+
+    result = runner.invoke(cli, ["-f", "json", "order", "validate", "buy", "005930", "10"])
+
+    assert result.exit_code == 1
+    doc = _doc(result)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "VALIDATION_FAILED"
+    assert doc["error"]["details"] == {"sufficient_balance": False}
+    assert doc["data"]["valid"] is False
+    assert doc["data"]["checks"]["sufficient_balance"] is False
+
+
+def test_validate_sell_checks_holdings(runner, fake_client, market_open):
+    """매도 사전점검: 보유수량(kt00004 rmnd_qty)으로 판단."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "+70000", "return_code": 0}
+    )
+    fake_client.set_response(
+        "kt00004",
+        {"stk_acnt_evlt_prst": [{"stk_cd": "A005930", "rmnd_qty": "000000000005"}],
+         "return_code": 0},
+    )
+
+    ok = runner.invoke(cli, ["-f", "json", "order", "validate", "sell", "005930", "5"])
+    assert ok.exit_code == 0
+    assert _doc(ok)["data"]["valid"] is True
+
+    over = runner.invoke(cli, ["-f", "json", "order", "validate", "sell", "005930", "10"])
+    assert over.exit_code == 1
+    assert _doc(over)["error"]["details"] == {"sufficient_balance": False}
+
+
+# ============================================================
+#  Litmus loop — 전 단계를 stdout JSON 파싱만으로 구동
+# ============================================================
+
+
+def test_litmus_loop_json_driven(runner, fake_everywhere, isolated_home, market_open):
+    """quote → validate → dry-run → buy(멱등키) → pending → balance.
+
+    각 단계는 이전 단계의 stdout JSON만으로 구동되며, 사람 개입(프롬프트) 없이
+    exit code로 성공을 판정한다 — 에이전트가 실제로 밟게 될 경로 그대로.
+    """
+    fake = fake_everywhere
+    fake.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "+70000", "return_code": 0}
+    )
+    fake.set_response("kt00001", {"ord_alow_amt": "000100000000", "return_code": 0})
+    fake.set_response(
+        "kt10000", {"return_code": 0, "ord_no": "0000777", "return_msg": "OK"}
+    )
+
+    # 1. 시세 조회
+    r1 = runner.invoke(cli, ["-f", "json", "stock", "info", "005930"])
+    assert r1.exit_code == 0
+    quote = _doc(r1)["data"]
+    price = int(quote["cur_prc"].lstrip("+-"))
+    assert price == 70000
+
+    # 2. 사전점검 (시세에서 얻은 가격 사용)
+    r2 = runner.invoke(
+        cli, ["-f", "json", "order", "validate", "buy", "005930", "10", "--price", str(price)]
+    )
+    assert r2.exit_code == 0
+    v = _doc(r2)["data"]
+    assert v["valid"] is True
+    assert v["est_cost"] == price * 10
+
+    # 3. dry-run (전송될 body 확보)
+    r3 = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "005930", "10",
+         "--price", str(price), "--type", "limit", "--dry-run"],
+    )
+    assert r3.exit_code == 0
+    dry = _doc(r3)["data"]
+    assert dry["would_send"] is True
+
+    # 4. 멱등키로 실제 매수 — dry-run이 예고한 body 그대로 전송됐는지 확인
+    r4 = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "005930", "10",
+         "--price", str(price), "--type", "limit", "--confirm",
+         "--client-order-id", "litmus-1"],
+    )
+    assert r4.exit_code == 0
+    ord_no = _doc(r4)["data"]["ord_no"]
+    assert ("kt10000", dry["body"]) in fake.calls
+
+    # 5. 미체결 조회 — 방금 주문번호가 보인다
+    fake.set_response(
+        "ka10075",
+        {"oso": [{"ord_no": ord_no, "stk_cd": "005930", "ord_qty": "10"}],
+         "return_code": 0},
+    )
+    r5 = runner.invoke(cli, ["-f", "json", "account", "orders", "pending", "--market", "kr"])
+    assert r5.exit_code == 0
+    pending = _doc(r5)["data"]["kr"]
+    assert any(o["ord_no"] == ord_no for o in pending["oso"])
+
+    # 6. 잔고 조회
+    fake.set_response(
+        "kt00004",
+        {"stk_acnt_evlt_prst": [{"stk_cd": "A005930", "rmnd_qty": "000000000010"}],
+         "return_code": 0},
+    )
+    r6 = runner.invoke(cli, ["-f", "json", "account", "balance", "--market", "kr"])
+    assert r6.exit_code == 0
+    holdings = _doc(r6)["data"]["stk_acnt_evlt_prst"]
+    assert holdings[0]["stk_cd"].removeprefix("A") == "005930"
+
+    # 재실행(같은 멱등키) → 재전송 없음
+    calls_before = len(fake.calls)
+    r7 = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "005930", "10",
+         "--price", str(price), "--type", "limit", "--confirm",
+         "--client-order-id", "litmus-1"],
+    )
+    assert r7.exit_code == 0
+    assert _doc(r7)["data"]["idempotent_replay"] is True
+    assert len(fake.calls) == calls_before
