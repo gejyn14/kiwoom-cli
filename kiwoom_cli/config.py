@@ -7,7 +7,9 @@ keychain via keyring (macOS Keychain / Windows Credential Manager /
 Linux Secret Service). The keychain encrypts secrets at rest; no
 app-level password is required — commands never prompt.
 
-Non-sensitive settings (domain, account) remain in config.toml.
+Non-sensitive settings (domain, account, token_storage) remain in config.toml.
+token_storage: "keychain" (기본, auth login이 토큰을 키체인에 저장) 또는
+"env" (키체인에 저장하지 않음 — 사용자가 KIWOOM_TOKEN 환경변수로 직접 관리).
 
 Environment variables (non-sensitive only):
   KIWOOM_DOMAIN       도메인 (prod / mock)
@@ -19,6 +21,7 @@ Config file: ~/.kiwoom/config.toml
 
 from __future__ import annotations
 
+import copy
 import os
 import sys
 from pathlib import Path
@@ -42,6 +45,8 @@ DOMAINS = {
     "mock": "https://mockapi.kiwoom.com",
 }
 
+TOKEN_STORAGES = ("keychain", "env")
+
 DEFAULT_CONFIG = {
     "general": {"default_profile": "default"},
     "profiles": {"default": {"domain": "mock", "account": ""}},
@@ -57,7 +62,8 @@ def ensure_cache_dir() -> None:
 
 def load_config() -> dict:
     if not CONFIG_FILE.exists():
-        return dict(DEFAULT_CONFIG)
+        # deepcopy: 호출자가 중첩 dict를 수정해도 DEFAULT_CONFIG가 오염되지 않도록
+        return copy.deepcopy(DEFAULT_CONFIG)
     with open(CONFIG_FILE, "rb") as f:
         return tomllib.load(f)
 
@@ -165,6 +171,14 @@ def set_appkey(value: str, profile: str | None = None) -> None:
 def set_secretkey(value: str, profile: str | None = None) -> None:
     p = resolve_profile(profile)
     keyring.set_password(KEYRING_SERVICE, f"{p}:secretkey", value)
+
+
+def get_token_storage(profile: str | None = None) -> str:
+    """토큰 저장 방식: "keychain" (OS 키체인) 또는 "env" (KIWOOM_TOKEN 직접 관리)."""
+    p = resolve_profile(profile)
+    cfg = load_config()
+    value = cfg.get("profiles", {}).get(p, {}).get("token_storage", "keychain")
+    return value if value in TOKEN_STORAGES else "keychain"
 
 
 def get_account(profile: str | None = None) -> str:

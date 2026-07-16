@@ -38,12 +38,14 @@ def test_config_setup_no_password_prompt(mem_keyring):
     result = runner.invoke(
         cli,
         ["config", "setup"],
-        input="my-appkey\nmy-secretkey\nmock\n\n",
+        input="my-appkey\nmy-secretkey\nmock\n\n\n",
     )
     assert result.exit_code == 0, result.output
     assert "비밀번호" not in result.output
     assert mem_keyring[f"{config.KEYRING_SERVICE}:default:appkey"] == "my-appkey"
     assert mem_keyring[f"{config.KEYRING_SERVICE}:default:secretkey"] == "my-secretkey"
+    # Enter만 치면 기본값 keychain
+    assert config.get_token_storage("default") == "keychain"
 
 
 def test_config_setup_purges_legacy_format(mem_keyring):
@@ -56,7 +58,7 @@ def test_config_setup_purges_legacy_format(mem_keyring):
     result = runner.invoke(
         cli,
         ["config", "setup"],
-        input="new-appkey\nnew-secretkey\nmock\n\n",
+        input="new-appkey\nnew-secretkey\nmock\n\n\n",
     )
     assert result.exit_code == 0, result.output
     assert keyring.get_password(config.KEYRING_SERVICE, "_salt") is None
@@ -110,6 +112,106 @@ def test_readonly_commands_survive_broken_keyring(monkeypatch):
     for argv in (["config", "show"], ["auth", "status"], ["config", "profiles"]):
         result = runner.invoke(cli, argv)
         assert result.exit_code == 0, (argv, result.exception)
+
+
+# ── token_storage: keychain vs env (config setup에서 선택) ──────────
+
+
+def test_config_setup_env_storage_choice(mem_keyring):
+    """setup에서 env를 고르면 token_storage=env가 프로필에 저장된다."""
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["config", "setup"],
+        input="my-appkey\nmy-secretkey\nmock\n\nenv\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert config.get_token_storage("default") == "env"
+    assert "KIWOOM_TOKEN" in result.output
+
+
+def test_auth_login_env_storage_prints_export_and_skips_keyring(monkeypatch, mem_keyring):
+    """env 모드: 토큰을 키체인에 저장하지 않고 export 안내를 출력한다."""
+    from kiwoom_cli import auth
+    from kiwoom_cli.client import KiwoomClient as RealClient
+
+    keyring.set_password(config.KEYRING_SERVICE, "default:appkey", "ak")
+    keyring.set_password(config.KEYRING_SERVICE, "default:secretkey", "sk")
+    cfg = config.load_config()
+    cfg.setdefault("profiles", {}).setdefault("default", {})["token_storage"] = "env"
+    config.save_config(cfg)
+
+    def _issue(self):
+        auth.save_token("issued-token-value-12345", profile=self.profile)
+        return "issued-token-value-12345"
+
+    monkeypatch.setattr(RealClient, "issue_token", _issue)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["auth", "login"])
+    assert result.exit_code == 0, result.output
+    assert "export KIWOOM_TOKEN='issued-token-value-12345'" in result.output
+    assert f"{config.KEYRING_SERVICE}:default:token" not in mem_keyring
+
+
+def test_auth_login_keychain_storage_saves_to_keyring(monkeypatch, mem_keyring):
+    """keychain 모드(기본): 토큰이 키체인에 저장되고 마스킹되어 출력된다."""
+    from kiwoom_cli import auth
+    from kiwoom_cli.client import KiwoomClient as RealClient
+
+    keyring.set_password(config.KEYRING_SERVICE, "default:appkey", "ak")
+    keyring.set_password(config.KEYRING_SERVICE, "default:secretkey", "sk")
+
+    def _issue(self):
+        auth.save_token("issued-token-value-12345", profile=self.profile)
+        return "issued-token-value-12345"
+
+    monkeypatch.setattr(RealClient, "issue_token", _issue)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["auth", "login"])
+    assert result.exit_code == 0, result.output
+    assert "issued-token-value-12345" not in result.output  # full token never shown
+    assert mem_keyring[f"{config.KEYRING_SERVICE}:default:token"] == "issued-token-value-12345"
+
+
+def test_config_set_token_storage(mem_keyring):
+    """config set token_storage env/keychain 으로 전환 가능."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["config", "set", "token_storage", "env"])
+    assert result.exit_code == 0, result.output
+    assert config.get_token_storage("default") == "env"
+
+    result = runner.invoke(cli, ["config", "set", "token_storage", "keychain"])
+    assert result.exit_code == 0, result.output
+    assert config.get_token_storage("default") == "keychain"
+
+
+def test_config_set_token_storage_rejects_bad_value(mem_keyring):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["config", "set", "token_storage", "file"])
+    assert result.exit_code == 1
+
+
+def test_auth_status_shows_env_storage_mode(mem_keyring):
+    """env 모드 + 토큰 없음: status가 export 안내를 보여준다."""
+    import json as _json
+
+    keyring.set_password(config.KEYRING_SERVICE, "default:appkey", "ak")
+    cfg = config.load_config()
+    cfg.setdefault("profiles", {}).setdefault("default", {})["token_storage"] = "env"
+    config.save_config(cfg)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-f", "json", "auth", "status"])
+    assert result.exit_code == 0
+    doc = _json.loads(result.stdout)
+    assert doc["token_storage"] == "env"
+    assert doc["has_token"] is False
+
+    result = runner.invoke(cli, ["auth", "status"])
+    assert result.exit_code == 0
+    assert "KIWOOM_TOKEN" in result.output
 
 
 def test_auth_status_reflects_env_token_with_broken_keyring(monkeypatch):
