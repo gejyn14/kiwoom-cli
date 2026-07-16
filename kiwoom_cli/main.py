@@ -89,6 +89,15 @@ class KiwoomGroup(click.Group):
             else:
                 console.print("[red]연결 오류:[/] API 서버에 연결할 수 없습니다. 도메인을 확인하세요.")
             ctx.exit(EXIT_API)
+        except click.ClickException as e:
+            # 인자/옵션 오류(UsageError 포함)도 json 모드에서는 envelope로.
+            # table 모드는 Click 기본 출력 그대로 (re-raise).
+            if self._json_mode(ctx):
+                envelope.emit(error=envelope.error_body(
+                    e.format_message(), code="INVALID_INPUT", retryable=False,
+                ))
+                ctx.exit(e.exit_code)
+            raise
 
 
 @click.group(cls=KiwoomGroup)
@@ -262,6 +271,17 @@ def config_profiles():
     cfg = config.load_config()
     profiles = cfg.get("profiles", {})
     default = config.get_default_profile()
+    if _get_format() == "json":
+        envelope.emit(data=[
+            {
+                "name": name,
+                "domain": settings.get("domain", "mock"),
+                "account": settings.get("account", ""),
+                "default": name == default,
+            }
+            for name, settings in profiles.items()
+        ])
+        return
     if not profiles:
         human("[yellow]등록된 프로필이 없습니다.[/]")
         return
@@ -282,27 +302,43 @@ def auth_cmd():
     pass
 
 
+def _fail_not_configured():
+    msg = "설정이 필요합니다. 먼저 실행: kiwoom config setup"
+    if _get_format() == "json":
+        envelope.emit(error=envelope.error_body(msg, code="NOT_CONFIGURED", retryable=False))
+    else:
+        human(f"[red]{msg}[/]")
+    raise SystemExit(EXIT_INPUT)
+
+
 @auth_cmd.command("login")
 @click.pass_context
 def auth_login(ctx):
     """접근토큰 발급."""
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     if not config.is_configured(profile):
-        human("[red]설정이 필요합니다. 먼저 실행: kiwoom config setup[/]")
-        raise SystemExit(1)
+        _fail_not_configured()
+    # 발급 실패(KiwoomAPIError)는 전역 핸들러가 envelope/exit 2로 처리
     with KiwoomClient() as c:
-        try:
-            token = c.issue_token()
-            human("[green]토큰 발급 완료![/]")
-            if config.get_token_storage(profile) == "env":
-                human("  저장 위치: [bold]없음 (env 모드)[/] — 아래를 셸에서 실행하세요:")
-                human(f"  export KIWOOM_TOKEN='{token}'")
-            else:
-                masked = token[:10] + "..." + token[-4:] if len(token) > 14 else token
-                human(f"  토큰: {masked}")
-                human("  저장 위치: [bold]키체인[/]")
-        except KiwoomAPIError as e:
-            human(f"[red]토큰 발급 실패:[/] {e}")
+        token = c.issue_token()
+    storage = config.get_token_storage(profile)
+    if _get_format() == "json":
+        # env 모드에서는 사용자가 직접 관리해야 하므로 토큰 원문을 포함
+        envelope.emit(data={
+            "profile": profile,
+            "token_storage": storage,
+            "saved": storage != "env",
+            "token": token if storage == "env" else None,
+        })
+        return
+    human("[green]토큰 발급 완료![/]")
+    if storage == "env":
+        human("  저장 위치: [bold]없음 (env 모드)[/] — 아래를 셸에서 실행하세요:")
+        human(f"  export KIWOOM_TOKEN='{token}'")
+    else:
+        masked = token[:10] + "..." + token[-4:] if len(token) > 14 else token
+        human(f"  토큰: {masked}")
+        human("  저장 위치: [bold]키체인[/]")
 
 
 @auth_cmd.command("logout")
@@ -311,14 +347,14 @@ def auth_logout(ctx):
     """접근토큰 폐기."""
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     if not config.is_configured(profile):
-        human("[red]설정이 필요합니다. 먼저 실행: kiwoom config setup[/]")
-        raise SystemExit(1)
+        _fail_not_configured()
+    # 폐기 실패(KiwoomAPIError)는 전역 핸들러가 envelope/exit 2로 처리
     with KiwoomClient() as c:
-        try:
-            c.revoke_token()
-            human("[green]토큰 폐기 완료.[/]")
-        except KiwoomAPIError as e:
-            human(f"[red]토큰 폐기 실패:[/] {e}")
+        c.revoke_token()
+    if _get_format() == "json":
+        envelope.emit(data={"profile": profile, "revoked": True})
+    else:
+        human("[green]토큰 폐기 완료.[/]")
     if os.environ.get("KIWOOM_TOKEN"):
         human("[yellow]KIWOOM_TOKEN 환경변수가 설정되어 있어 이 셸에서는 해당 토큰이 계속 사용됩니다. unset KIWOOM_TOKEN 으로 제거하세요.[/]")
 
@@ -379,7 +415,11 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str):
             next_key=next_key,
         )
         if raw:
-            console.print_json(json.dumps(data, ensure_ascii=False, indent=2))
+            if _get_format() == "json":
+                # --raw는 필드 제거만 생략: stdout은 여전히 단일 envelope 문서
+                envelope.emit(data=data)
+            else:
+                console.print_json(json.dumps(data, ensure_ascii=False, indent=2))
         else:
             from .api_spec import get_description
             title = get_description(api_id)
