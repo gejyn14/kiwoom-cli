@@ -91,7 +91,8 @@ def test_stock_info_json(mock_cls, runner):
     result = runner.invoke(cli, ["-f", "json", "stock", "info", "005930"])
     assert result.exit_code == 0
     parsed = json.loads(result.output)
-    assert parsed["stk_nm"] == "삼성전자"
+    assert parsed["ok"] is True
+    assert parsed["data"]["stk_nm"] == "삼성전자"
 
 
 @patch("kiwoom_cli.commands.stock.KiwoomClient")

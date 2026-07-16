@@ -475,12 +475,57 @@ kiwoom --no-color stock info 005930     # 색상 없이 (파일 저장용)
 ```
 
 ```bash
-# jq로 필터링
-kiwoom -f json market rank volume | jq '.[].stk_nm'
+# jq로 필터링 (본문은 .data 아래)
+kiwoom -f json market rank volume | jq '.data[].stk_nm'
 
 # CSV를 파일로 저장
 kiwoom -f csv stock daily 005930 > samsung_daily.csv
 ```
+
+### JSON 응답 envelope (v1)
+
+`-f json`의 모든 응답은 성공/실패 모두 하나의 안정적인 envelope로 감쌉니다. table/csv 모드는 그대로입니다.
+
+```json
+{
+  "ok": true,
+  "schema": "v1",
+  "data": { "stk_nm": "삼성전자", "cur_prc": "+70000" },
+  "meta": { "profile": "default", "env": "prod", "cont": { "next_key": "..." } },
+  "error": null
+}
+```
+
+- `data` — 기존 응답 본문 그대로 (`return_code`/`return_msg`만 제거)
+- `meta.profile` / `meta.env` — 해석된 프로필과 도메인(`prod`/`mock`)
+- `meta.cont` — 연속조회 커서. 값이 있으면 다음 페이지가 존재: `kiwoom api <api_id> <body> --next-key <meta.cont.next_key>`
+- 실패 시 `ok: false`, `data: null`이고 `error`에 안정적인 코드가 담깁니다:
+
+```json
+{ "code": "TOKEN_EXPIRED", "retryable": false, "message": "Token이 유효하지 않습니다", "upstream_code": 8005 }
+```
+
+`error.code`는 키움 오류코드/HTTP 상태를 분류한 stable enum입니다 — 에이전트는 메시지 문자열 대신 이 코드로 분기하세요:
+
+| code | retryable | 의미 (upstream) |
+| --- | :---: | --- |
+| `INVALID_INPUT` | X | 입력 값/필수 파라미터 오류 (2, 1511, 1512, 1517) |
+| `INVALID_API` | X | 잘못된 API ID (1501, 1504, 1505) |
+| `NOT_FOUND` | X | 시장/종목 정보 없음 (1901, 1902) |
+| `AUTH_REQUIRED` | X | 인증 헤더/토큰 누락 (1513~1516, 토큰 미보유 시 로컬 감지) |
+| `TOKEN_EXPIRED` | X | 토큰 무효·만료 (8005, HTTP 401) |
+| `TOKEN_ISSUE_FAILED` | X | 토큰 발급 실패 (8003, 8006, 8009, 8011, 8012) |
+| `TOKEN_REVOKE_FAILED` | X | 토큰 폐기 실패 (8015, 8016) |
+| `INVALID_CREDENTIALS` | X | appkey/secretkey 검증 실패 (8001, 8002, 8020) |
+| `IP_MISMATCH` | X | 발급 IP와 요청 IP 불일치 (8010) |
+| `ENV_MISMATCH` | X | 실전/모의 구분 불일치 (8030, 8031) |
+| `DEVICE_AUTH_FAILED` | X | 단말기 인증 실패 (8040, 8050, 8103) |
+| `RATE_LIMITED` | 1700·429는 O | 요청 개수 초과 (1700, HTTP 429) / 재귀 호출 제한 (1687) |
+| `NETWORK_ERROR` | O | API 서버 연결 실패 |
+| `KEYCHAIN_UNAVAILABLE` | X | OS 키체인 접근 불가 (샌드박스/CI) |
+| `UPSTREAM_ERROR` | 5xx·1999는 O | 미분류 업스트림 오류 (기본값) |
+
+exit code 계약은 그대로입니다 (0=성공, 1=입력오류, 2=API오류, 3=인증필요).
 
 ## Shell 자동완성
 

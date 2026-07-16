@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 import sys
 from typing import Any
 
@@ -12,6 +11,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from . import envelope
 from .output import console, err_console
 
 
@@ -35,11 +35,11 @@ def human(renderable: Any) -> None:
 
 
 def _output_json(data: Any) -> None:
-    """Write data as JSON to stdout."""
+    """Write data as an enveloped JSON document to stdout."""
     clean = data
     if isinstance(data, dict):
         clean = {k: v for k, v in data.items() if k not in ("return_code", "return_msg")}
-    click.echo(json.dumps(clean, ensure_ascii=False, indent=2))
+    envelope.emit(data=clean)
 
 
 def _output_csv(rows: list[dict], keys: list[str] | None = None) -> None:
