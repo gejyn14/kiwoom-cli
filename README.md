@@ -466,6 +466,29 @@ kiwoom stream types                     # 타입 코드 목록
 | 0w   | `program`       | 프로그램매매 |
 | 1h   | `vi`            | VI발동/해제  |
 
+### 녹화와 조회 (Recording & history)
+
+모든 stream 명령에 `--record`를 붙이면 수신 이벤트를 NDJSON 파일로 저장한다
+(출력 형식과 무관 — 테이블을 보면서도 기록된다). 경로를 생략하면
+`~/.kiwoom/data/<심볼>_<날짜>.ndjson`에 심볼별로 쌓이고, 경로를 주면 한 파일에 모인다.
+저장된 데이터는 `history`로 다시 읽는다.
+
+```bash
+# 1. 캡처 — 장중 30분간 체결 실시간을 녹화
+kiwoom stream quote 005930 --record --duration 30m
+
+# 2. 조회 — 시각 범위/타입으로 필터 (파일은 한 줄씩 스트리밍으로 읽음)
+kiwoom history list                     # 녹화 파일 목록 (심볼·날짜·건수·시작/종료 ts)
+kiwoom history query 005930 --from 2026-07-16T10:00:00 --to 2026-07-16T10:30:00 --type 0B
+
+# 3. 내보내기 — sqlite/csv (parquet은 pandas+pyarrow 설치 시)
+kiwoom history export 005930 --dest sqlite --out samsung.sqlite
+kiwoom history export 005930 --dest csv --from 2026-07-16T09:00:00 --to 2026-07-16T15:30:00
+```
+
+sqlite 내보내기는 `events(ts, symbol, type, price, volume, raw_json)` 테이블과
+`(symbol, ts)` 인덱스를 만든다.
+
 ---
 
 ## dashboard / Raw API

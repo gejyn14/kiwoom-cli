@@ -132,6 +132,22 @@ $ kiwoom -f json stream quote 005930 --max-events 3
   연결/등록 오류는 exit 2, 인증 문제는 exit 3. 진행 배너는 전부 stderr.
 - 국내 전용 소켓입니다 (미국 실시간은 미지원).
 
+### 녹화 (--record)와 history
+
+- 모든 stream 명령의 `--record [경로]`는 정규화 이벤트(NDJSON 한 줄 = 위
+  `data`와 동일한 dict, envelope 없음)를 파일에 기록합니다. 출력 형식과
+  무관하게 동작하며, 경로 생략 시 `<설정 디렉토리>/data/<심볼>_<YYYY-MM-DD>.ndjson`
+  (계좌성 타입 00/04는 심볼 대신 타입명). 시작/종료 시 파일 경로와 건수가
+  stderr로 출력됩니다.
+- `kiwoom history list` — 녹화 파일별 `file`/`symbol`/`date`/`events`/`first_ts`/`last_ts`.
+- `kiwoom history query CODE --from ISO --to ISO [--type 0B]` — ts 범위/타입
+  필터. 파일은 스트리밍으로 읽고, 잘못된 줄은 stderr 경고 후 건너뜁니다.
+- `kiwoom history export CODE --dest sqlite|csv|parquet [--out 경로] [--from --to]`
+  — sqlite는 `events(ts, symbol, type, price, volume, raw_json)` + `(symbol, ts)`
+  인덱스. parquet은 pandas+pyarrow 필요 (없으면 stderr 안내 + exit 1).
+- json 모드 출력: list/query는 `data.items`(raw 없음), export는
+  `{out, format, events}` 요약.
+
 ## describe — CLI 자기서술
 
 ```bash

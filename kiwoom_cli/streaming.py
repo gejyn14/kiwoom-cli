@@ -21,6 +21,7 @@ from . import auth, config, envelope
 from .formatters import _get_format, human
 from .normalize import WS_FIELD_NAMES, normalize_ws_values
 from .output import console, err_console
+from .recorder import NdjsonRecorder, data_dir
 
 EXIT_API = 2   # main.py와 동일 (main import 시 순환 발생하여 별도 정의)
 EXIT_AUTH = 3
@@ -264,18 +265,31 @@ def run_stream(
     max_events: int | None = None,
     duration: str | None = None,
     until: str | None = None,
+    record: str | None = None,
 ) -> None:
     """Connect to WebSocket and stream real-time data.
 
     max_events/duration/until 종료 조건 도달 시 소켓을 닫고 정상 종료(exit 0).
     json 모드에서는 REAL 이벤트를 NDJSON 한 줄씩, 오류는 envelope 오류 한 줄
     (exit 2, 인증은 exit 3)로 출력한다. table/raw 모드 출력은 기존과 동일.
+    record가 None이 아니면 정규화 이벤트를 NDJSON 파일에도 기록한다
+    (""=기본 레이아웃, 그 외=명시 경로. 출력 형식과 무관).
     """
     import asyncio
 
     json_mode = _get_format() == "json"
     # 입력 검증(UsageError -> exit 1)은 연결 시도 전에
     state = new_stream_state(max_events=max_events, duration=duration, until=until)
+
+    recorder: NdjsonRecorder | None = None
+    if record is not None:
+        recorder = NdjsonRecorder(path=record or None)
+        err_console.print(f"[dim]레코딩: {record or data_dir()}[/]")
+
+    def _record(events: list[dict[str, Any]]) -> None:
+        if recorder is not None:
+            for ev in events:
+                recorder.write(ev)
 
     try:
         import websockets
@@ -374,7 +388,7 @@ def run_stream(
 
                     if raw:
                         console.print_json(json.dumps(data, ensure_ascii=False))
-                        handle_message(data, state)  # raw도 종료 조건은 계산
+                        _record(handle_message(data, state))  # raw도 종료 조건/레코딩은 계산
                         if should_stop(state, _now_kst()):
                             break
                         continue
@@ -411,6 +425,7 @@ def run_stream(
 
                     # Handle real-time data
                     events = handle_message(data, state)
+                    _record(events)
                     if events:
                         if json_mode:
                             for ev in events:
@@ -446,7 +461,15 @@ def run_stream(
         exit_code, error = asyncio.run(_stream())
     except KeyboardInterrupt:
         console.print("\n[dim]스트리밍 종료[/]")
-        return
+        exit_code, error = 0, None
+    finally:
+        if recorder is not None:
+            recorder.close()
+            if recorder.counts:
+                for path, count in recorder.counts.items():
+                    err_console.print(f"[dim]레코딩 완료: {path} ({count}건)[/]")
+            else:
+                err_console.print("[dim]레코딩 완료: 수신 이벤트 없음[/]")
     if error is not None:
         _emit_line(error=error, meta=meta, fields=fields)
     if exit_code:

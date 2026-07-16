@@ -13,6 +13,7 @@ from . import __version__, auth, config, envelope
 from .client import KiwoomClient, KiwoomAPIError, KiwoomAuthError
 from .commands.account import account
 from .commands.dashboard import dashboard
+from .commands.history import history
 from .commands.market import market
 from .commands.order import order
 from .commands.stock import stock
@@ -543,6 +544,7 @@ cli.add_command(account)
 cli.add_command(order)
 cli.add_command(market)
 cli.add_command(stream)
+cli.add_command(history)
 cli.add_command(dashboard)
 cli.add_command(watch)
 

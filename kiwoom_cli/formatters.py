@@ -177,6 +177,7 @@ _SIGNED_FIELDS = frozenset({
 # Code fields that should never be number-formatted.
 _CODE_FIELDS = frozenset({
     "stk_cd", "ord_no",
+    "symbol", "order_no",  # 정규화 canonical 이름 (history 등 이벤트 테이블)
 })
 
 # USD decimal fields (up to 4 decimals). Routed to _fmt_usd by _smart_fmt.

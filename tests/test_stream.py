@@ -278,6 +278,7 @@ class TestStreamCommandOptions:
         mock_run.assert_called_once_with(
             ["0B"], ["005930"],
             raw=False, max_events=3, duration="30s", until="2026-07-16T16:00:00",
+            record=None,
         )
 
     @patch("kiwoom_cli.commands.stream.run_stream")
@@ -286,6 +287,7 @@ class TestStreamCommandOptions:
         assert result.exit_code == 0
         mock_run.assert_called_once_with(
             ["00"], [], raw=False, max_events=1, duration=None, until=None,
+            record=None,
         )
 
     @patch("kiwoom_cli.commands.stream.run_stream")
@@ -295,6 +297,7 @@ class TestStreamCommandOptions:
         mock_run.assert_called_once_with(
             ["0B", "0D"], ["005930"],
             raw=False, max_events=None, duration="5m", until=None,
+            record=None,
         )
 
     def test_bad_duration_exits_1_before_connecting(self, runner):
