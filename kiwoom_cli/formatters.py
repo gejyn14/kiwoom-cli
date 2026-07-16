@@ -152,7 +152,11 @@ _ABS_FIELDS = frozenset({
     "tot_pur_amt", "prsm_dpst_aset_amt",
     "rmnd_qty", "ord_qty", "ord_uv", "mdfy_uv",
     "trde_qty", "acc_trde_qty", "now_trde_qty",
-    "10", "16", "17", "18", "27", "28",  # WebSocket field IDs
+    # WebSocket field IDs (시세: 현재가/시고저/호가, 누적거래량·대금)
+    "10", "16", "17", "18", "27", "28", "13", "14",
+    # WebSocket field IDs (주문/잔고: 수량·가격·금액)
+    "900", "901", "902", "903", "910", "911", "920",
+    "930", "931", "932", "933", "941",
     "now_pric", "frgn_stk_book_uv", "cntr_uv", "stop_pric",
     "fpr_sel_bid", "fpr_buy_bid",
     "sel_1bid", "sel_2bid", "sel_3bid", "sel_4bid", "sel_5bid",
@@ -167,6 +171,7 @@ _SIGNED_FIELDS = frozenset({
     "pred_pre", "flu_rt", "pre_rt", "pl_amt", "pl_rt",
     "tdy_lspft", "lspft", "tdy_lspft_rt", "lspft_rt", "lspft_ratio",
     "11", "12", "15",  # WebSocket: 전일대비, 등락율, 거래량(+매수/-매도)
+    "938", "940", "950", "951",  # WebSocket: 당일순매수수량, 당일총매도손익, 당일실현손익(율)
 })
 
 # Code fields that should never be number-formatted.

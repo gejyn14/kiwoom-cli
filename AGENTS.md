@@ -107,6 +107,31 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 권장 주문 순서: **validate → --dry-run → --confirm --client-order-id**.
 항상 `meta.env`를 확인하고, 실거래(`prod`)에서는 dry-run을 생략하지 마세요.
 
+## 실시간 스트리밍 (NDJSON)
+
+`-f json`에서 `kiwoom stream *`은 REAL 이벤트마다 **envelope 한 건을 compact
+JSON 한 줄**(NDJSON)로 stdout에 출력합니다. 줄 단위로 파싱하세요.
+
+```bash
+$ kiwoom -f json stream quote 005930 --max-events 3
+{"ok": true, "schema": "v1", "data": {"type": "0B", "type_name": "주식체결", "symbol": "005930", "ts": "15:30:00+09:00", "price": 70000, "change_direction": "up", "change_pct": 0.72, ...}, "meta": {...}, "error": null}
+... (총 3줄 후 exit 0)
+```
+
+- `data` — 정규화된 이벤트: `type`(실시간 타입 코드), `type_name`, `symbol`,
+  `ts`(ISO-8601 +09:00), 그리고 타입 있는 필드(`price`, `change`, `change_pct`,
+  `volume`, `acc_volume`, `open`/`high`/`low`, `ask`/`bid` 등). 영문 정규명이
+  없는 필드는 한글 이름(예: `주문상태`)으로 제공됩니다.
+- 스트림 이벤트에는 `data.raw`가 **없습니다** (크기 절약). 전역 `--fields`는
+  각 줄의 `data`에 동일하게 적용됩니다.
+- **종료 조건** (모든 stream 명령 공통) — 도달 시 소켓을 닫고 exit 0:
+  - `--max-events N` — N개 이벤트 수신 후 종료 (정확히 N줄 출력)
+  - `--duration 30s|5m|2h` — 경과 시간 후 종료 (이벤트가 없어도 타이머로 종료)
+  - `--until <ISO-8601>` — 지정 시각 도달 시 종료 (타임존 없으면 +09:00 가정)
+- 오류: WebSocket 오류는 envelope 오류 **한 줄**로 stdout에 출력됩니다 —
+  연결/등록 오류는 exit 2, 인증 문제는 exit 3. 진행 배너는 전부 stderr.
+- 국내 전용 소켓입니다 (미국 실시간은 미지원).
+
 ## describe — CLI 자기서술
 
 ```bash

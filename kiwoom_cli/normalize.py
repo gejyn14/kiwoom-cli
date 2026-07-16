@@ -35,6 +35,80 @@ _DATETIME_KEYS = frozenset({"dt", "tm", "cntr_tm"})
 
 _NUMERIC_FIELDS = _ABS_FIELDS | _SIGNED_FIELDS | _USD_FIELDS
 
+# WebSocket 실시간 필드 ID -> 한글 이름 (streaming._format_values에서 이전한 공유 상수)
+WS_FIELD_NAMES: dict[str, str] = {
+    "10": "현재가",
+    "11": "전일대비",
+    "12": "등락율",
+    "13": "누적거래량",
+    "14": "누적거래대금",
+    "15": "거래량",
+    "16": "시가",
+    "17": "고가",
+    "18": "저가",
+    "20": "체결시간",
+    "25": "전일대비기호",
+    "27": "매도호가",
+    "28": "매수호가",
+    "29": "거래대금증감",
+    "30": "전일거래량대비",
+    "31": "거래회전율",
+    "302": "종목명",
+    "900": "주문수량",
+    "901": "주문가격",
+    "902": "미체결수량",
+    "903": "체결누계금액",
+    "904": "원주문번호",
+    "905": "주문구분",
+    "906": "매매구분",
+    "907": "매도수구분",
+    "908": "주문체결시간",
+    "909": "체결번호",
+    "910": "체결가",
+    "911": "체결량",
+    "912": "주문업무분류",
+    "913": "주문상태",
+    "916": "대출일",
+    "917": "신용구분",
+    "920": "체결수량",
+    "930": "보유수량",
+    "931": "매입단가",
+    "932": "총매입가",
+    "933": "주문가능수량",
+    "938": "당일순매수수량",
+    "939": "매도매수구분",
+    "940": "당일총매도손익",
+    "941": "예수금",
+    "950": "당일실현손익",
+    "951": "당일실현손익율",
+    "9001": "종목코드",
+    "9201": "계좌번호",
+    "9203": "주문번호",
+}
+
+# WebSocket 필드 ID -> 정규 영문명 (CANONICAL_NAMES와 같은 축).
+# 미등록 ID는 WS_FIELD_NAMES의 한글 이름으로, 그것도 없으면 ID 그대로 통과.
+WS_CANONICAL: dict[str, str] = {
+    "10": "price",
+    "11": "change",
+    "12": "change_pct",
+    "13": "acc_volume",
+    "14": "acc_amount",
+    "15": "volume",
+    "16": "open",
+    "17": "high",
+    "18": "low",
+    "20": "ts",
+    "27": "ask",
+    "28": "bid",
+    "302": "name",
+    "908": "ts",
+    "9001": "symbol",
+    "9203": "order_no",
+}
+
+_WS_TIME_IDS = frozenset({"20", "908"})
+
 
 def parse_signed(v: Any) -> tuple[int | float | None, str]:
     """키움 숫자 문자열 -> (숫자값, 방향).
@@ -75,6 +149,39 @@ def _iso_datetime(key: str, v: Any) -> Any:
     if len(s) == 6:  # HHMMSS
         return f"{s[0:2]}:{s[2:4]}:{s[4:6]}+09:00"
     return v
+
+
+def normalize_ws_values(values: dict[str, Any]) -> dict[str, Any]:
+    """WebSocket REAL values(숫자 필드 ID)를 이름 있는 타입 값으로 변환.
+
+    - WS_CANONICAL에 있는 ID는 영문명, 아니면 WS_FIELD_NAMES 한글명, 둘 다 없으면 ID 유지
+    - "20"/"908" (체결시간) -> ISO-8601 (+09:00), 키는 "ts"
+    - "9001" (종목코드) -> 선행 시장구분 문자(A 등) 제거
+    - 숫자 분류는 formatters의 _ABS_FIELDS/_SIGNED_FIELDS를 그대로 따름
+      (ABS: 절대값 + 방향 동반 키, SIGNED: 부호 유지)
+    """
+    out: dict[str, Any] = {}
+    for k, v in values.items():
+        canon = WS_CANONICAL.get(k) or WS_FIELD_NAMES.get(k, k)
+        if k in _WS_TIME_IDS:
+            out[canon] = _iso_datetime("tm", v)
+        elif k == "9001":
+            s = str(v).strip()
+            out[canon] = s[1:] if s[:1].isalpha() else s
+        elif isinstance(v, str) and k in _NUMERIC_FIELDS:
+            num, direction = parse_signed(v)
+            if num is None:
+                out[canon] = v
+            elif k in _ABS_FIELDS:
+                out[canon] = abs(num)
+                if direction != "flat":
+                    dir_key = "change_direction" if canon == "price" else f"{canon}_direction"
+                    out[dir_key] = direction
+            else:
+                out[canon] = num
+        else:
+            out[canon] = v
+    return out
 
 
 def normalize_record(d: dict[str, Any]) -> dict[str, Any]:
