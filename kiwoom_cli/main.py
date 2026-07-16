@@ -7,9 +7,10 @@ import os
 
 import click
 import httpx
+import keyring
 
 from . import __version__, auth, config
-from .client import KiwoomClient, KiwoomAPIError
+from .client import KiwoomClient, KiwoomAPIError, KiwoomAuthError
 from .commands.account import account
 from .commands.dashboard import dashboard
 from .commands.market import market
@@ -45,6 +46,21 @@ class KiwoomGroup(click.Group):
             else:
                 console.print(f"[red]API 오류:[/] {e}")
             ctx.exit(EXIT_API)
+        except KiwoomAuthError:
+            fmt = ctx.obj.get("format", "table") if ctx.obj else "table"
+            msg = "토큰이 없습니다. 'kiwoom auth login'으로 발급하세요."
+            if fmt == "json":
+                click.echo(json.dumps({"error": msg, "code": "auth_required"}, ensure_ascii=False))
+            else:
+                console.print("[red]인증 필요:[/] 토큰이 없습니다. [dim]kiwoom auth login[/]")
+            ctx.exit(EXIT_AUTH)
+        except keyring.errors.KeyringError:
+            console.print("[red]키체인 오류:[/] OS 키체인에 접근할 수 없습니다 (잠김 또는 비대화형 세션).")
+            console.print(
+                "[dim]키체인 없는 환경에서는 본인 터미널에서 토큰을 발급한 뒤 "
+                "KIWOOM_TOKEN 환경변수로 전달하세요. (README '샌드박스 환경' 참고)[/]"
+            )
+            ctx.exit(EXIT_INPUT)
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 console.print("[red]인증 오류:[/] 토큰이 만료되었습니다. [dim]kiwoom auth login[/]")

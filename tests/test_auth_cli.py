@@ -234,3 +234,59 @@ def test_auth_status_reflects_env_token_with_broken_keyring(monkeypatch):
     result = runner.invoke(cli, ["auth", "status"])
     assert result.exit_code == 0
     assert "KIWOOM_TOKEN" in result.output
+
+
+# ── 키체인 쓰기 실패 / 토큰 부재 처리 ─────────────────────
+
+
+def test_config_setup_keychain_write_failure_friendly_error(monkeypatch, mem_keyring):
+    """키체인 쓰기 불가(-25308 등): traceback 대신 친절한 안내 + exit 1."""
+
+    def _locked(svc, key, val):
+        raise keyring.errors.KeyringError("errSecInteractionNotAllowed (-25308)")
+
+    monkeypatch.setattr(keyring, "set_password", _locked)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["config", "setup"], input="ak\nsk\nmock\n\n\n"
+    )
+    assert result.exit_code == 1, result.output
+    # 예외가 새어나오지 않고 CLI가 스스로 종료해야 한다
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    combined = result.output + result.stderr
+    assert "키체인" in combined
+    assert "KIWOOM_TOKEN" in combined
+
+
+def test_missing_token_exits_3_before_any_request(monkeypatch, mem_keyring):
+    """토큰이 전혀 없으면 요청을 보내지 않고 exit 3 + auth login 힌트."""
+    import httpx
+
+    monkeypatch.delenv("KIWOOM_TOKEN", raising=False)
+
+    def _no_network(*args, **kwargs):
+        raise AssertionError("token 없이 HTTP 요청이 나가면 안 된다")
+
+    monkeypatch.setattr(httpx.Client, "post", _no_network)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["stock", "info", "005930"])
+    assert result.exit_code == 3, result.output
+    assert "auth login" in result.output + result.stderr
+
+
+def test_missing_token_json_mode_single_json_error_doc(monkeypatch, mem_keyring):
+    """-f json + 토큰 부재: stdout은 단일 JSON 에러 문서, exit 3."""
+    import json as _json
+
+    import httpx
+
+    monkeypatch.delenv("KIWOOM_TOKEN", raising=False)
+    monkeypatch.setattr(
+        httpx.Client, "post",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no request expected")),
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-f", "json", "stock", "info", "005930"])
+    assert result.exit_code == 3, result.output
+    doc = _json.loads(result.stdout)
+    assert "error" in doc
