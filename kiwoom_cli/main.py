@@ -50,13 +50,24 @@ class KiwoomGroup(click.Group):
                 console.print(f"[red]API 오류:[/] {e}")
             ctx.exit(EXIT_API)
         except KiwoomAuthError:
+            keychain_ok = auth.keychain_readable()
             if self._json_mode(ctx):
+                msg = (
+                    "토큰이 없습니다. 'kiwoom auth login'으로 발급하세요."
+                    if keychain_ok else
+                    "토큰이 없습니다. 키체인 접근 불가 환경 — 본인 터미널에서 발급한 토큰을 KIWOOM_TOKEN 환경변수로 전달하세요."
+                )
                 envelope.emit(error=envelope.error_body(
-                    "토큰이 없습니다. 'kiwoom auth login'으로 발급하세요.",
-                    code="AUTH_REQUIRED", retryable=False,
+                    msg, code="AUTH_REQUIRED", retryable=False,
                 ))
-            else:
+            elif keychain_ok:
                 console.print("[red]인증 필요:[/] 토큰이 없습니다. [dim]kiwoom auth login[/]")
+            else:
+                console.print("[red]인증 필요:[/] 토큰이 없습니다 (키체인 접근 불가 환경).")
+                console.print(
+                    "[dim]본인 터미널에서 'kiwoom auth login'으로 발급한 토큰을 "
+                    "KIWOOM_TOKEN 환경변수로 전달하세요. (README '샌드박스 환경' 참고)[/]"
+                )
             ctx.exit(EXIT_AUTH)
         except keyring.errors.KeyringError:
             if self._json_mode(ctx):
@@ -382,7 +393,10 @@ def auth_status(ctx):
         })
         return
     if not configured and token is None:
-        human("[yellow]설정 필요.[/] 'kiwoom config setup' 으로 설정하세요.")
+        if not auth.keychain_readable():
+            human("[yellow]키체인 접근 불가 환경.[/] 본인 터미널에서 발급한 토큰을 KIWOOM_TOKEN 환경변수로 전달하세요.")
+        else:
+            human("[yellow]설정 필요.[/] 'kiwoom config setup' 으로 설정하세요.")
         return
     human(f"  프로필: [bold]{profile}[/]")
     if token is not None:
@@ -390,6 +404,8 @@ def auth_status(ctx):
         human(f"[green]토큰 있음[/] [dim]({source_label})[/]")
     elif token_storage == "env":
         human("[yellow]토큰 없음.[/] 'kiwoom auth login' 으로 발급 후 안내되는 export KIWOOM_TOKEN을 실행하세요.")
+    elif not auth.keychain_readable():
+        human("[yellow]토큰 없음.[/] 키체인 접근 불가 환경 — 본인 터미널에서 발급한 토큰을 KIWOOM_TOKEN 환경변수로 전달하세요.")
     else:
         human("[yellow]토큰 없음.[/] 'kiwoom auth login' 으로 발급하세요.")
 

@@ -290,3 +290,46 @@ def test_missing_token_json_mode_single_json_error_doc(monkeypatch, mem_keyring)
     assert result.exit_code == 3, result.output
     doc = _json.loads(result.stdout)
     assert "error" in doc
+
+
+def test_auth_required_message_hints_env_token_when_keychain_unreadable(monkeypatch):
+    """키체인 접근 불가 + 토큰 부재: AUTH_REQUIRED 메시지가 KIWOOM_TOKEN을 안내한다."""
+    import json as _json
+
+    import httpx
+
+    def _locked(svc, key):
+        raise keyring.errors.KeyringError("locked keychain")
+
+    monkeypatch.setattr(keyring, "get_password", _locked)
+    monkeypatch.delenv("KIWOOM_TOKEN", raising=False)
+    monkeypatch.setattr(
+        httpx.Client, "post",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no request expected")),
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-f", "json", "stock", "info", "005930"])
+    assert result.exit_code == 3, result.output
+    doc = _json.loads(result.stdout)
+    assert doc["error"]["code"] == "AUTH_REQUIRED"
+    assert "KIWOOM_TOKEN" in doc["error"]["message"]
+
+
+def test_auth_required_message_defaults_to_login_when_keychain_readable(monkeypatch):
+    """키체인 정상 + 토큰 부재: 기존 'auth login' 안내 유지."""
+    import json as _json
+
+    import httpx
+
+    monkeypatch.delenv("KIWOOM_TOKEN", raising=False)
+    monkeypatch.setattr(
+        httpx.Client, "post",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no request expected")),
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-f", "json", "stock", "info", "005930"])
+    assert result.exit_code == 3, result.output
+    doc = _json.loads(result.stdout)
+    assert doc["error"]["code"] == "AUTH_REQUIRED"
+    assert "auth login" in doc["error"]["message"]
+    assert "KIWOOM_TOKEN" not in doc["error"]["message"]

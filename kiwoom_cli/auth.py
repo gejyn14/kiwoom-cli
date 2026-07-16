@@ -30,6 +30,19 @@ def save_token(token: str, profile: str | None = None) -> None:
     keyring.set_password(KEYRING_SERVICE, f"{p}:token", token)
 
 
+def keychain_readable() -> bool:
+    """키체인 읽기 가능 여부. 잠김/부재(샌드박스, CI, 에이전트) 환경이면 False.
+
+    load_token은 키체인 오류를 '토큰 없음'으로 강등하므로, 안내 메시지를
+    고를 때 이 함수로 원인을 구분한다 (auth login 안내 vs KIWOOM_TOKEN 안내).
+    """
+    try:
+        keyring.get_password(KEYRING_SERVICE, "__probe__")
+        return True
+    except Exception:
+        return False
+
+
 def load_token(profile: str | None = None) -> str | None:
     env = os.environ.get("KIWOOM_TOKEN")
     if env:
