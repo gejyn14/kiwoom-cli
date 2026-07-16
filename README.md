@@ -129,9 +129,14 @@ kiwoom stock price 005930 || echo "재시도 또는 재인증"
 
 # 주문은 기본 확인 게이트, 자동화 시에만 --confirm으로 명시적 스킵
 kiwoom order buy 005930 10 --type market --confirm
+
+# 주문 3단 안전장치: 사전점검 → dry-run → 멱등 주문
+kiwoom -f json order validate buy 005930 10 --price 70000
+kiwoom -f json order buy 005930 10 --price 70000 --type limit --dry-run
+kiwoom -f json order buy 005930 10 --price 70000 --type limit --confirm --client-order-id run-42
 ```
 
-- 어떤 명령도 비밀번호·생체인증을 요구하지 않으므로 에이전트 세션이 중간에 멈추지 않습니다.
+- 어떤 명령도 비밀번호·생체인증을 요구하지 않으므로 에이전트 세션이 중간에 멈추지 않습니다. json/csv 모드에서는 확인 프롬프트 대신 `CONFIRMATION_REQUIRED` 오류(exit 1)로 응답합니다.
 - 페이지네이션(연속조회)은 자동 처리 — 에이전트가 커서를 관리할 필요가 없습니다.
 - 자세한 패턴은 [Wiki: AI 에이전트 가이드](https://github.com/gejyn14/kiwoom-cli/wiki/AI-Agents) 참고.
 
@@ -337,9 +342,14 @@ kiwoom account exchange apply 1000000 --confirm    # 원화 → 달러 환전
 
 ## order - 주문
 
-주문은 실행 전 미리보기 + 대화형 확인이 기본입니다. 자동화 시에만 `--confirm`으로 스킵하세요.
+주문은 실행 전 미리보기 + 대화형 확인이 기본입니다. 자동화 시에만 `--confirm`(별칭 `--yes`)으로 스킵하세요. `-f json`/`-f csv` 모드는 절대 프롬프트하지 않습니다 — `--confirm` 없이 실행하면 `CONFIRMATION_REQUIRED` 오류(exit 1)로 응답해 에이전트 세션이 멈추지 않습니다.
 
 ```bash
+# 안전장치 (에이전트/자동화)
+kiwoom order validate buy 005930 10 --price 70000 -f json        # 사전점검 (주문 미전송)
+kiwoom order buy 005930 10 --price 70000 --type limit --dry-run  # 전송될 내용만 확인 (미전송)
+kiwoom order buy 005930 10 --price 70000 --type limit --confirm --client-order-id run-42  # 멱등 주문
+
 # 주식
 kiwoom order buy 005930 10 --type market --confirm          # 시장가 매수
 kiwoom order buy 005930 10 --price 70000 --type limit --confirm  # 지정가 매수
@@ -362,6 +372,12 @@ kiwoom order condition search 001 --confirm
 ```
 
 주문유형: `limit` `market` `conditional` `after-hours` `pre-market` `single` `best` `first` `ioc` `market-ioc` `best-ioc` `fok` `market-fok` `best-fok` `stop` `mid` `mid-ioc` `mid-fok`
+
+### 주문 안전장치 (v2.4)
+
+- `--dry-run` — 실제 전송될 request body를 그대로 출력하고 아무것도 전송하지 않습니다. `--confirm`보다 우선합니다. 시장가 주문은 현재가를 조회해 예상비용(`est_cost`)을 계산합니다.
+- `--client-order-id KEY` — 멱등성 키. 같은 키로 재실행하면 재전송 없이 이전 응답을 반환합니다(`idempotent_replay: true`). 네트워크 단절·에이전트 재시도로 인한 중복 주문을 방지합니다. 원장: `~/.kiwoom/idempotency/<프로필>-<환경>.jsonl`
+- `order validate buy|sell CODE QTY` — read-only 사전점검. `symbol_ok` / `market_open`(KST 시계 휴리스틱, 공휴일 미감지) / `sufficient_balance` / `price_ok`를 점검하고, 실패 시 `VALIDATION_FAILED` + 실패 항목을 `error.details`에 담아 exit 1. 국내 주식 전용.
 
 ---
 
