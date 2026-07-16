@@ -18,6 +18,47 @@ $ kiwoom order buy NVDA 10 --price 213.04   # 미국주식도 그대로
 $ kiwoom -f json account balance | jq       # AI 에이전트·스크립트 친화
 ```
 
+## AI-agent native
+
+모든 명령이 `-f json`에서 **하나의 안정된 envelope**를 stdout에 출력한다
+(진행 메시지는 전부 stderr — stdout은 항상 파싱 가능한 단일 문서):
+
+```json
+{"ok": true, "schema": "v1",
+ "data": {"symbol": "005930", "price": 70000, "change_direction": "up"},
+ "meta": {"profile": "default", "env": "mock", "cont": null},
+ "error": null}
+```
+
+`data`는 타입 있는 정규화 필드(부호 문자열 파싱 불필요), `error.code`는
+안정적인 enum 32종(`retryable` 포함), exit code는 0=성공 / 1=입력 / 2=API /
+3=인증으로 고정 — 에이전트가 문자열이 아니라 계약으로 분기한다.
+
+**주문 안전장치** — 에이전트가 돈을 다루는 경로 전체에 가드가 있다:
+
+```bash
+kiwoom -f json order validate buy 005930 10          # read-only 사전점검
+kiwoom -f json order buy 005930 10 --price 70000 --dry-run   # 전송될 body만 확인
+kiwoom -f json order buy 005930 10 --price 70000 --confirm --client-order-id run-42
+# 같은 키 재실행 → 재전송 없이 이전 응답 (idempotent_replay: true)
+```
+
+`--confirm` 없이 json 모드로 주문하면 프롬프트에 멈추는 대신 구조화된
+`CONFIRMATION_REQUIRED` 오류로 즉시 반환된다 — 에이전트가 걸려서 죽지 않는다.
+
+**에이전트 퀵스타트**:
+
+```bash
+price=$(kiwoom -f json --fields price stock info 005930 | jq .data.price)
+kiwoom -f json stream quote 005930 --max-events 10           # NDJSON 10줄 후 exit 0
+kiwoom stream quote 005930 --record --duration 30m           # 녹화 → history query/export
+kiwoom describe order buy -f json                            # 명령 스키마 자기서술
+```
+
+- 기계 계약 전체(envelope·error code·litmus loop): **[AGENTS.md](AGENTS.md)**
+- 재현 가능한 증명 스크립트(모의투자): **[benchmark/litmus.sh](benchmark/litmus.sh)**
+- 공식 CLI(kwcli)와의 정직한 비교: **[docs/vs-official.md](docs/vs-official.md)**
+
 ## 왜 kiwoom-cli인가
 
 - **236개 API 전체 지원** — REST 217개 + WebSocket 실시간 19종. 시세·차트·계좌·주문·순위·업종·테마·ETF·ELW·금현물·미국주식까지 키움 REST API를 빠짐없이 커버합니다.
