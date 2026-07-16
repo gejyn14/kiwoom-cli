@@ -24,6 +24,10 @@ class KiwoomAPIError(Exception):
         super().__init__(f"[{code}] {msg}")
 
 
+class KiwoomAuthError(Exception):
+    """No access token available — the caller must authenticate first."""
+
+
 class KiwoomClient:
     """Synchronous client for the Kiwoom REST API."""
 
@@ -80,6 +84,8 @@ class KiwoomClient:
         next_key: str = "",
     ) -> tuple[dict[str, Any], dict[str, str]]:
         """Make a single API request. Returns (body_json, response_headers)."""
+        if not self.token:
+            raise KiwoomAuthError()
         url_path = get_url(api_id)
         headers = self._headers(api_id, cont_yn, next_key)
         if self._should_spin():
