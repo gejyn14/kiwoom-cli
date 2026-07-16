@@ -440,9 +440,10 @@ def us_stock_fake(monkeypatch, tmp_cache):
 
 
 def test_us_stock_info_dispatch(runner, us_stock_fake):
+    """--exchange 없이도 자동판별된 stex_tp가 채워진다 (usa10100은 stex_tp 필수)."""
     result = runner.invoke(cli, ["stock", "info", "NVDA"])
     assert result.exit_code == 0
-    assert ("usa10100", {"stk_cd": "NVDA"}) in us_stock_fake.calls
+    assert ("usa10100", {"stk_cd": "NVDA", "stex_tp": "ND"}) in us_stock_fake.calls
 
 
 def test_us_stock_price_resolves_exchange(runner, us_stock_fake):
