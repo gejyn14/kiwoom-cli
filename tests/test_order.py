@@ -636,7 +636,7 @@ def test_idempotency_same_key_replays_without_sending(runner, fake_client, isola
     assert first.exit_code == 0
     assert len(fake_client.calls) == 1
     data1 = _doc(first)["data"]
-    assert data1["ord_no"] == "0000777"
+    assert data1["order_no"] == "0000777"  # ord_no → order_no (정규화)
     assert "idempotent_replay" not in data1
 
     second = runner.invoke(cli, args)
@@ -644,7 +644,7 @@ def test_idempotency_same_key_replays_without_sending(runner, fake_client, isola
     assert len(fake_client.calls) == 1  # 전송 없음
     data2 = _doc(second)["data"]
     assert data2["idempotent_replay"] is True
-    assert data2["ord_no"] == data1["ord_no"]
+    assert data2["order_no"] == data1["order_no"]
 
     ledger = isolated_home / "idempotency" / "default-mock.jsonl"
     assert ledger.exists()
@@ -753,12 +753,14 @@ def test_litmus_loop_json_driven(runner, fake_everywhere, isolated_home, market_
         "kt10000", {"return_code": 0, "ord_no": "0000777", "return_msg": "OK"}
     )
 
-    # 1. 시세 조회
+    # 1. 시세 조회 — 정규화된 타입 필드를 그대로 사용 (부호/문자열 파싱 불필요)
     r1 = runner.invoke(cli, ["-f", "json", "stock", "info", "005930"])
     assert r1.exit_code == 0
     quote = _doc(r1)["data"]
-    price = int(quote["cur_prc"].lstrip("+-"))
-    assert price == 70000
+    price = quote["price"]
+    assert price == 70000 and isinstance(price, int)
+    assert quote["change_direction"] == "up"
+    assert quote["raw"]["cur_prc"] == "+70000"
 
     # 2. 사전점검 (시세에서 얻은 가격 사용)
     r2 = runner.invoke(
@@ -787,7 +789,7 @@ def test_litmus_loop_json_driven(runner, fake_everywhere, isolated_home, market_
          "--client-order-id", "litmus-1"],
     )
     assert r4.exit_code == 0
-    ord_no = _doc(r4)["data"]["ord_no"]
+    ord_no = _doc(r4)["data"]["order_no"]
     assert ("kt10000", dry["body"]) in fake.calls
 
     # 5. 미체결 조회 — 방금 주문번호가 보인다
@@ -799,7 +801,7 @@ def test_litmus_loop_json_driven(runner, fake_everywhere, isolated_home, market_
     r5 = runner.invoke(cli, ["-f", "json", "account", "orders", "pending", "--market", "kr"])
     assert r5.exit_code == 0
     pending = _doc(r5)["data"]["kr"]
-    assert any(o["ord_no"] == ord_no for o in pending["oso"])
+    assert any(o["order_no"] == ord_no for o in pending["oso"])
 
     # 6. 잔고 조회
     fake.set_response(
@@ -810,7 +812,8 @@ def test_litmus_loop_json_driven(runner, fake_everywhere, isolated_home, market_
     r6 = runner.invoke(cli, ["-f", "json", "account", "balance", "--market", "kr"])
     assert r6.exit_code == 0
     holdings = _doc(r6)["data"]["stk_acnt_evlt_prst"]
-    assert holdings[0]["stk_cd"].removeprefix("A") == "005930"
+    assert holdings[0]["symbol"].removeprefix("A") == "005930"
+    assert holdings[0]["qty"] == 10  # rmnd_qty "000000000010" → int
 
     # 재실행(같은 멱등키) → 재전송 없음
     calls_before = len(fake.calls)

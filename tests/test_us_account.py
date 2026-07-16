@@ -266,21 +266,21 @@ def test_deposit_json_single_document(runner, acct_fake_full):
     result = runner.invoke(cli, ["--format", "json", "account", "deposit"])
     assert result.exit_code == 0
     payload = json.loads(result.output)   # must parse as ONE document
-    assert set(payload["data"]) == {"kr", "us"}
+    assert set(payload["data"]) == {"kr", "us", "raw"}
 
 
 def test_pnl_today_json_single_document(runner, acct_fake_full):
     result = runner.invoke(cli, ["--format", "json", "account", "pnl", "today", "005930", "--market", "kr"])
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert set(payload["data"]) == {"kr", "us"}
+    assert set(payload["data"]) == {"kr", "us", "raw"}
 
 
 def test_orders_pending_json_single_document(runner, acct_fake_full):
     result = runner.invoke(cli, ["--format", "json", "account", "orders", "pending"])
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert set(payload["data"]) == {"kr", "us"}
+    assert set(payload["data"]) == {"kr", "us", "raw"}
 
 
 def test_orders_executed_json_single_document(runner, acct_fake_full):
@@ -289,7 +289,7 @@ def test_orders_executed_json_single_document(runner, acct_fake_full):
     result = runner.invoke(cli, ["--format", "json", "account", "orders", "executed"])
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert set(payload["data"]) == {"kr", "us"}
+    assert set(payload["data"]) == {"kr", "us", "raw"}
 
 
 def test_history_transactions_json_single_document(runner, acct_fake_full):
@@ -298,7 +298,7 @@ def test_history_transactions_json_single_document(runner, acct_fake_full):
     )
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert set(payload["data"]) == {"kr", "us"}
+    assert set(payload["data"]) == {"kr", "us", "raw"}
 
 
 def test_pnl_by_period_json_single_document(runner, acct_fake_full):
@@ -309,7 +309,7 @@ def test_pnl_by_period_json_single_document(runner, acct_fake_full):
     )
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert set(payload["data"]) == {"kr", "us"}
+    assert set(payload["data"]) == {"kr", "us", "raw"}
 
 
 def test_balance_csv_includes_us_columns(runner, acct_fake):

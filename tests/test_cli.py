@@ -92,7 +92,8 @@ def test_stock_info_json(mock_cls, runner):
     assert result.exit_code == 0
     parsed = json.loads(result.output)
     assert parsed["ok"] is True
-    assert parsed["data"]["stk_nm"] == "삼성전자"
+    assert parsed["data"]["name"] == "삼성전자"          # 정규화된 필드
+    assert parsed["data"]["raw"]["stk_nm"] == "삼성전자"  # 원본 보존
 
 
 @patch("kiwoom_cli.commands.stock.KiwoomClient")

@@ -35,11 +35,26 @@ def human(renderable: Any) -> None:
 
 
 def _output_json(data: Any) -> None:
-    """Write data as an enveloped JSON document to stdout."""
-    clean = data
+    """Write a Kiwoom API response as an enveloped JSON document to stdout.
+
+    data는 정규화(normalize_record)된 타입 있는 필드로 변환되고, 원본은
+    data.raw에 보존됩니다. API 응답이 아닌 페이로드(dry-run, validate 등)는
+    envelope.emit을 직접 호출하므로 이 경로를 타지 않습니다.
+    """
+    from . import normalize  # 순환 import 회피 (normalize가 필드 분류를 여기서 가져감)
+
     if isinstance(data, dict):
         clean = {k: v for k, v in data.items() if k not in ("return_code", "return_msg")}
-    envelope.emit(data=clean)
+        doc = normalize.normalize_record(clean)
+        doc["raw"] = clean
+        envelope.emit(data=doc)
+    elif isinstance(data, list):
+        envelope.emit(data={
+            "items": [normalize.normalize_record(x) if isinstance(x, dict) else x for x in data],
+            "raw": data,
+        })
+    else:
+        envelope.emit(data=data)
 
 
 def _output_csv(rows: list[dict], keys: list[str] | None = None) -> None:

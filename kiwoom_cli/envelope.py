@@ -99,8 +99,38 @@ def build_meta() -> dict[str, Any]:
     return {"profile": profile, "env": env, "cont": obj.get("last_cont") or None}
 
 
+def project_fields(data: Any, fields: list[str]) -> Any:
+    """--fields 투영: 요청된 키만 유지, raw 제거.
+
+    list/dict 컨테이너는 유지하되 내부 요소를 같은 필드 목록으로 투영한다
+    (리스트 응답에서 --fields symbol,price 가 동작하도록).
+    """
+    if isinstance(data, list):
+        return [project_fields(x, fields) if isinstance(x, (dict, list)) else x for x in data]
+    if not isinstance(data, dict):
+        return data
+    out: dict[str, Any] = {}
+    for k, v in data.items():
+        if k == "raw":
+            continue
+        if isinstance(v, list):
+            out[k] = [project_fields(x, fields) if isinstance(x, dict) else x for x in v]
+        elif isinstance(v, dict):
+            sub = project_fields(v, fields)
+            if sub:
+                out[k] = sub
+        elif k in fields:
+            out[k] = v
+    return out
+
+
 def emit(data: Any = None, *, error: dict[str, Any] | None = None) -> None:
     """Envelope 전체를 단일 JSON 문서로 stdout에 출력."""
+    ctx = click.get_current_context(silent=True)
+    obj = ctx.obj if ctx is not None and isinstance(ctx.obj, dict) else {}
+    fields = obj.get("fields")
+    if fields and data is not None:
+        data = project_fields(data, fields)
     doc = {
         "ok": error is None,
         "schema": SCHEMA,
