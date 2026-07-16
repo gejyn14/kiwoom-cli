@@ -21,9 +21,14 @@ from .output import console, err_console
 
 # Exit codes
 EXIT_OK = 0
-EXIT_INPUT = 1   # Click default for bad args
+EXIT_INPUT = 1   # Bad args (invalid option value, missing argument, malformed input)
 EXIT_API = 2     # API or network error
 EXIT_AUTH = 3    # Token missing or expired
+
+# Click's UsageError defaults to exit code 2, which collides with EXIT_API and
+# breaks the documented contract (1=입력오류, 2=API오류). Automation must be able
+# to tell "fix my arguments" from "the API failed".
+click.exceptions.UsageError.exit_code = EXIT_INPUT
 
 
 class KiwoomGroup(click.Group):

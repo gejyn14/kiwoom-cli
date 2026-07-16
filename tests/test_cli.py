@@ -156,3 +156,28 @@ def test_profile_flag_with_show(runner):
     result = runner.invoke(cli, ["-p", "test", "config", "show"])
     assert result.exit_code == 0
     assert "test" in result.output
+
+
+# ── Exit-code contract ───────────────────────────────
+# 0=성공, 1=입력오류, 2=API오류, 3=인증필요. Click's UsageError defaults to
+# exit code 2, which would collide with EXIT_API — main.py overrides it to 1.
+
+
+def test_invalid_option_value_exits_1(runner):
+    result = runner.invoke(cli, ["order", "buy", "005930", "10", "--type", "bogus", "--confirm"])
+    assert result.exit_code == 1
+
+
+def test_missing_argument_exits_1(runner):
+    result = runner.invoke(cli, ["stock", "info"])
+    assert result.exit_code == 1
+
+
+def test_unknown_command_exits_1(runner):
+    result = runner.invoke(cli, ["nonexistent-command"])
+    assert result.exit_code == 1
+
+
+def test_invalid_json_body_exits_1(runner):
+    result = runner.invoke(cli, ["api", "ka10001", "not-json"])
+    assert result.exit_code == 1
