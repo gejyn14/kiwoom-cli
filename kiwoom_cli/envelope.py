@@ -118,15 +118,19 @@ def error_body(
     http_status: int | None = None,
     code: str | None = None,
     retryable: bool | None = None,
+    details: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """에러 dict 구성. code/retryable을 직접 주지 않으면 classify()로 결정."""
     if code is None or retryable is None:
         c, r = classify(upstream_code=upstream_code, http_status=http_status)
         code = code if code is not None else c
         retryable = retryable if retryable is not None else r
-    return {
+    body: dict[str, Any] = {
         "code": code,
         "retryable": retryable,
         "message": message,
         "upstream_code": upstream_code if upstream_code is not None else http_status,
     }
+    if details is not None:
+        body["details"] = details
+    return body
