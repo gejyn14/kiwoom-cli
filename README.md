@@ -71,14 +71,16 @@ kiwoom config show          # 현재 설정 확인
 
 ### 환경변수 설정
 
-도메인과 계좌번호는 환경변수로도 설정 가능합니다.
+도메인, 계좌번호, 프로필, 토큰은 환경변수로도 설정 가능합니다.
 
 ```bash
 export KIWOOM_DOMAIN="prod"       # prod 또는 mock
 export KIWOOM_ACCOUNT="1234567"   # 선택
+export KIWOOM_PROFILE="isa"       # 선택
+export KIWOOM_TOKEN="..."         # 선택: 키체인 대신 사용할 접근토큰 (샌드박스/CI용)
 ```
 
-appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 반드시 `kiwoom config setup`으로 OS 키체인에 저장하세요.
+appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 반드시 `kiwoom config setup`으로 OS 키체인에 저장하세요. `KIWOOM_TOKEN`은 만료·폐기 가능한 접근토큰만 담는 통로로, 키체인에 접근할 수 없는 환경(샌드박스, CI, AI 에이전트)에서 사용합니다 — 설정 시 키체인 토큰보다 우선합니다.
 
 ### 멀티 프로필
 
@@ -122,6 +124,19 @@ kiwoom order buy 005930 10 --type market --confirm
 - 어떤 명령도 비밀번호·생체인증을 요구하지 않으므로 에이전트 세션이 중간에 멈추지 않습니다.
 - 페이지네이션(연속조회)은 자동 처리 — 에이전트가 커서를 관리할 필요가 없습니다.
 - 자세한 패턴은 [Wiki: AI 에이전트 가이드](https://github.com/gejyn14/kiwoom-cli/wiki/AI-Agents) 참고.
+
+### 샌드박스 환경 (키체인 접근 불가)
+
+샌드박스 셸, CI, 컨테이너에서는 OS 키체인을 읽을 수 없습니다. 이때는 본인 터미널에서 토큰을 발급받아 `KIWOOM_TOKEN`으로 전달하세요 — appkey/secretkey는 키체인 밖으로 나가지 않고, 토큰은 만료·폐기 가능합니다.
+
+```bash
+# 본인 터미널에서 (하루 1회 정도)
+kiwoom auth login
+export KIWOOM_TOKEN=$(security find-generic-password -s kiwoom-cli -a "default:token" -w)  # macOS
+
+# 이 셸에서 에이전트를 실행하면 환경변수가 상속되어 모든 명령이 동작
+kiwoom auth status   # 토큰 있음 (환경변수 KIWOOM_TOKEN)
+```
 
 ## 명령어 구조
 

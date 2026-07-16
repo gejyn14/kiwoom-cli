@@ -3,9 +3,15 @@
 Tokens are stored in the OS keychain (plain, not encrypted).
 Tokens are short-lived and can be re-issued, so the security risk
 of plain keychain storage is low compared to appkey/secretkey.
+
+KIWOOM_TOKEN 환경변수가 설정되어 있으면 키체인보다 우선합니다. 키체인에
+접근할 수 없는 샌드박스/CI/AI 에이전트 환경을 위한 통로로, 만료되는
+토큰만 허용됩니다 — appkey/secretkey는 여전히 환경변수를 지원하지 않습니다.
 """
 
 from __future__ import annotations
+
+import os
 
 import keyring
 
@@ -20,6 +26,9 @@ def save_token(token: str, profile: str | None = None) -> None:
 
 
 def load_token(profile: str | None = None) -> str | None:
+    env = os.environ.get("KIWOOM_TOKEN")
+    if env:
+        return env
     p = config.resolve_profile(profile)
     return config._keyring_get(f"{p}:token")
 
