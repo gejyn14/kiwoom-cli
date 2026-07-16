@@ -208,3 +208,168 @@ def test_api_command_next_key_option(runner, monkeypatch):
     assert result.exit_code == 0, result.output
     assert captured.get("cont_yn") == "Y"
     assert captured.get("next_key") == "NK1"
+
+
+# ── Gap 1: human-only 커맨드의 json 모드 envelope ─────
+
+
+@pytest.fixture
+def configured_default(monkeypatch):
+    import keyring
+
+    from kiwoom_cli import config as cfg_mod
+
+    keyring.set_password(cfg_mod.KEYRING_SERVICE, "default:appkey", "ak")
+    keyring.set_password(cfg_mod.KEYRING_SERVICE, "default:secretkey", "sk")
+
+
+def _mock_issue(monkeypatch, token="issued-token-value-12345"):
+    from kiwoom_cli import auth
+    from kiwoom_cli.client import KiwoomClient as RealClient
+
+    def _issue(self):
+        auth.save_token(token, profile=self.profile)
+        return token
+
+    monkeypatch.setattr(RealClient, "issue_token", _issue)
+
+
+def test_auth_login_json_keychain_envelope(runner, monkeypatch, configured_default):
+    """-f json auth login (keychain): envelope, 토큰 원문 미노출."""
+    _mock_issue(monkeypatch)
+    result = runner.invoke(cli, ["-f", "json", "auth", "login"])
+    assert result.exit_code == 0, result.output
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is True
+    assert doc["data"]["token_storage"] == "keychain"
+    assert doc["data"]["saved"] is True
+    assert "issued-token-value-12345" not in result.stdout
+
+
+def test_auth_login_json_env_mode_includes_token(runner, monkeypatch, configured_default):
+    """-f json auth login (env): 사용자가 직접 관리해야 하므로 토큰 포함."""
+    from kiwoom_cli import config as cfg_mod
+
+    cfg = cfg_mod.load_config()
+    cfg.setdefault("profiles", {}).setdefault("default", {})["token_storage"] = "env"
+    cfg_mod.save_config(cfg)
+    _mock_issue(monkeypatch)
+    result = runner.invoke(cli, ["-f", "json", "auth", "login"])
+    assert result.exit_code == 0, result.output
+    doc = json.loads(result.stdout)
+    assert doc["data"]["saved"] is False
+    assert doc["data"]["token"] == "issued-token-value-12345"
+
+
+def test_auth_login_failure_exits_2_with_envelope(runner, monkeypatch, configured_default):
+    """토큰 발급 실패가 더 이상 삼켜지지 않는다: json envelope + exit 2."""
+    from kiwoom_cli.client import KiwoomClient as RealClient
+
+    def _fail(self):
+        raise KiwoomAPIError(8001, "App Key와 Secret Key 검증에 실패했습니다")
+
+    monkeypatch.setattr(RealClient, "issue_token", _fail)
+    result = runner.invoke(cli, ["-f", "json", "auth", "login"])
+    assert result.exit_code == 2, result.output
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "INVALID_CREDENTIALS"
+    assert doc["error"]["upstream_code"] == 8001
+
+
+def test_auth_login_failure_table_mode_exits_2(runner, monkeypatch, configured_default):
+    """table 모드에서도 발급 실패는 exit 2 (기존: 삼켜져서 0)."""
+    from kiwoom_cli.client import KiwoomClient as RealClient
+
+    def _fail(self):
+        raise KiwoomAPIError(8001, "검증 실패")
+
+    monkeypatch.setattr(RealClient, "issue_token", _fail)
+    result = runner.invoke(cli, ["auth", "login"])
+    assert result.exit_code == 2, result.output
+
+
+def test_auth_logout_json_envelope(runner, monkeypatch, configured_default):
+    from kiwoom_cli.client import KiwoomClient as RealClient
+
+    monkeypatch.setattr(RealClient, "revoke_token", lambda self: None)
+    result = runner.invoke(cli, ["-f", "json", "auth", "logout"])
+    assert result.exit_code == 0, result.output
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is True
+    assert doc["data"]["revoked"] is True
+
+
+def test_config_profiles_json_envelope(runner, configured_default):
+    from kiwoom_cli import config as cfg_mod
+
+    cfg = cfg_mod.load_config()
+    cfg.setdefault("profiles", {})["default"] = {"domain": "mock"}
+    cfg["profiles"]["isa"] = {"domain": "prod", "account": "123"}
+    cfg.setdefault("general", {})["default_profile"] = "default"
+    cfg_mod.save_config(cfg)
+    result = runner.invoke(cli, ["-f", "json", "config", "profiles"])
+    assert result.exit_code == 0, result.output
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is True
+    names = {p["name"] for p in doc["data"]}
+    assert names == {"default", "isa"}
+    default_flags = {p["name"]: p["default"] for p in doc["data"]}
+    assert default_flags["default"] is True
+    assert default_flags["isa"] is False
+
+
+def test_auth_login_unconfigured_json_envelope(runner):
+    result = runner.invoke(cli, ["-f", "json", "auth", "login"])
+    assert result.exit_code == 1
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "NOT_CONFIGURED"
+
+
+# ── Gap 2: Click 입력 오류의 json envelope ────────────
+
+
+def test_usage_error_json_envelope(runner):
+    """인자 누락(UsageError): json 모드에서 envelope + exit 1."""
+    result = runner.invoke(cli, ["-f", "json", "stock", "info"])
+    assert result.exit_code == 1
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "INVALID_INPUT"
+    assert doc["error"]["upstream_code"] is None
+
+
+def test_usage_error_table_mode_unchanged(runner):
+    """table 모드 UsageError는 기존 Click 출력 그대로 (envelope 없음)."""
+    result = runner.invoke(cli, ["stock", "info"])
+    assert result.exit_code == 1
+    combined = result.output + result.stderr
+    assert "Usage" in combined or "Error" in combined
+    assert '"schema"' not in combined
+
+
+def test_click_exception_json_envelope(runner):
+    """커맨드 내부 ClickException(잘못된 JSON body): envelope + exit 1."""
+    result = runner.invoke(cli, ["-f", "json", "api", "ka10001", "not-json"])
+    assert result.exit_code == 1
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "INVALID_INPUT"
+    assert "JSON" in doc["error"]["message"]
+
+
+# ── Gap 3: api --raw + json 모드 ──────────────────────
+
+
+def test_api_raw_json_mode_enveloped_unstripped(runner, monkeypatch):
+    """--raw + -f json: envelope로 감싸되 data는 원본 그대로(return_code 포함)."""
+    fake = FakeKiwoomClient()
+    fake.set_response("ka10001", {"return_code": 0, "return_msg": "OK", "stk_nm": "삼성전자"})
+    monkeypatch.setattr("kiwoom_cli.main.KiwoomClient", lambda *a, **k: fake)
+    result = runner.invoke(cli, ["-f", "json", "api", "ka10001", "{}", "--raw"])
+    assert result.exit_code == 0, result.output
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is True
+    assert doc["data"]["return_code"] == 0
+    assert doc["data"]["stk_nm"] == "삼성전자"
