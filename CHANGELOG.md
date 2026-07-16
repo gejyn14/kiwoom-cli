@@ -1,5 +1,48 @@
 # Changelog
 
+## v2.5.0 (2026-07-17) — 에이전트 네이티브: 정규화 데이터·NDJSON 스트리밍·녹화/히스토리
+
+**기존 `-f json` 소비자에게 breaking change**입니다 — API 응답의 `data`가
+정규화된 타입 있는 필드(canonical 영문 이름, 숫자는 number)로 바뀌고 원본은
+`data.raw`로 이동했습니다 (리스트 응답은 `{"items": [...], "raw": [...]}`).
+기존 키를 그대로 쓰던 스크립트는 `data.raw`에서 읽거나 canonical 이름으로
+옮기면 됩니다. table/csv 모드와 exit code 계약(0/1/2/3)은 변경 없습니다.
+
+### Added
+- **정규화된 json data**: `cur_prc→price`, `stk_cd→symbol`, `flu_rt→change_pct` 등
+  canonical 이름 + 타입 변환(부호 문자열 파싱 불필요), ABS 필드는
+  `change_direction`(up/down) 동반, 날짜/시각은 ISO-8601(+09:00).
+- **전역 `--fields a,b`**: json `data`(및 내부 리스트 요소)를 지정 키로 투영하고
+  `raw`를 제거 — 에이전트 토큰 절약.
+- **`kiwoom describe [명령...]`**: 명령 트리/인자/옵션(타입·기본값·choices)
+  자기서술. 도움말 파싱 대신 스키마로.
+- **NDJSON 스트리밍**: `-f json`에서 모든 `stream` 명령이 REAL 이벤트당 compact
+  envelope 한 줄을 출력. 종료조건 `--max-events N` / `--duration 30s|5m|2h` /
+  `--until <ISO-8601>` 도달 시 exit 0. ws 오류는 envelope 오류 한 줄 + exit 2(인증 3).
+- **녹화와 히스토리**: 모든 `stream` 명령의 `--record [경로]`가 이벤트를 NDJSON
+  파일로 저장 (기본 `~/.kiwoom/data/<심볼>_<날짜>.ndjson`). `history list` /
+  `history query CODE --from --to [--type]` / `history export CODE --dest
+  sqlite|csv|parquet`.
+- **AGENTS.md**: envelope·오류코드·안전장치·스트리밍의 기계 계약 문서.
+- **benchmark/litmus.sh** + `docs/vs-official.md`: 모의투자 대상 재현 가능한
+  litmus loop 증명 스크립트와 공식 CLI(kwcli) 대비 비교 문서. README 최상단에
+  "AI-agent native" 섹션.
+
+## v2.4.0 (2026-07-16) — 에이전트 안전 주문 (dry-run · validate · 멱등성)
+
+### Added
+- **`--dry-run`** (buy/sell/modify/cancel): 전송 없이 전송될 body를 출력. `--confirm`보다 우선.
+- **`order validate buy|sell`**: read-only 사전점검 (symbol_ok / market_open /
+  sufficient_balance / price_ok). 실패 시 `VALIDATION_FAILED` + exit 1.
+- **`--client-order-id` 멱등키**: 같은 키 재실행 시 재전송 없이 이전 응답을
+  반환 (`idempotent_replay: true`). 원장: `~/.kiwoom/idempotency/<프로필>-<환경>.jsonl`.
+- **구조화된 확인 게이트**: json/csv 모드에서 `--confirm` 없는 주문은 프롬프트
+  대신 `CONFIRMATION_REQUIRED` 오류 + exit 1로 즉시 반환 (에이전트가 멈추지 않음).
+
+### Fixed
+- 미국주식 `stock info`의 `stex_tp` 오류 수정.
+- 키체인 접근 불가 환경 안내가 `KIWOOM_TOKEN` 경로를 정확히 가리키도록 수정.
+
 ## v2.3.0 (2026-07-16) — JSON 응답 envelope v1
 
 `-f json`의 모든 응답(성공/실패)이 하나의 안정적인 envelope로 통일됩니다. **기존 `-f json` 소비자에게는 breaking change**입니다 — 본문이 `data` 필드 아래로 이동했습니다 (`jq '.[]'` → `jq '.data[]'`). table/csv 모드와 exit code 계약(0/1/2/3)은 변경 없습니다.

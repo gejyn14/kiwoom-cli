@@ -35,11 +35,26 @@ def human(renderable: Any) -> None:
 
 
 def _output_json(data: Any) -> None:
-    """Write data as an enveloped JSON document to stdout."""
-    clean = data
+    """Write a Kiwoom API response as an enveloped JSON document to stdout.
+
+    data는 정규화(normalize_record)된 타입 있는 필드로 변환되고, 원본은
+    data.raw에 보존됩니다. API 응답이 아닌 페이로드(dry-run, validate 등)는
+    envelope.emit을 직접 호출하므로 이 경로를 타지 않습니다.
+    """
+    from . import normalize  # 순환 import 회피 (normalize가 필드 분류를 여기서 가져감)
+
     if isinstance(data, dict):
         clean = {k: v for k, v in data.items() if k not in ("return_code", "return_msg")}
-    envelope.emit(data=clean)
+        doc = normalize.normalize_record(clean)
+        doc["raw"] = clean
+        envelope.emit(data=doc)
+    elif isinstance(data, list):
+        envelope.emit(data={
+            "items": [normalize.normalize_record(x) if isinstance(x, dict) else x for x in data],
+            "raw": data,
+        })
+    else:
+        envelope.emit(data=data)
 
 
 def _output_csv(rows: list[dict], keys: list[str] | None = None) -> None:
@@ -137,7 +152,11 @@ _ABS_FIELDS = frozenset({
     "tot_pur_amt", "prsm_dpst_aset_amt",
     "rmnd_qty", "ord_qty", "ord_uv", "mdfy_uv",
     "trde_qty", "acc_trde_qty", "now_trde_qty",
-    "10", "16", "17", "18", "27", "28",  # WebSocket field IDs
+    # WebSocket field IDs (시세: 현재가/시고저/호가, 누적거래량·대금)
+    "10", "16", "17", "18", "27", "28", "13", "14",
+    # WebSocket field IDs (주문/잔고: 수량·가격·금액)
+    "900", "901", "902", "903", "910", "911", "920",
+    "930", "931", "932", "933", "941",
     "now_pric", "frgn_stk_book_uv", "cntr_uv", "stop_pric",
     "fpr_sel_bid", "fpr_buy_bid",
     "sel_1bid", "sel_2bid", "sel_3bid", "sel_4bid", "sel_5bid",
@@ -152,11 +171,13 @@ _SIGNED_FIELDS = frozenset({
     "pred_pre", "flu_rt", "pre_rt", "pl_amt", "pl_rt",
     "tdy_lspft", "lspft", "tdy_lspft_rt", "lspft_rt", "lspft_ratio",
     "11", "12", "15",  # WebSocket: 전일대비, 등락율, 거래량(+매수/-매도)
+    "938", "940", "950", "951",  # WebSocket: 당일순매수수량, 당일총매도손익, 당일실현손익(율)
 })
 
 # Code fields that should never be number-formatted.
 _CODE_FIELDS = frozenset({
     "stk_cd", "ord_no",
+    "symbol", "order_no",  # 정규화 canonical 이름 (history 등 이벤트 테이블)
 })
 
 # USD decimal fields (up to 4 decimals). Routed to _fmt_usd by _smart_fmt.

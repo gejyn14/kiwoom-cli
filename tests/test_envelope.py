@@ -56,9 +56,11 @@ def test_success_envelope_shape(runner, fake_stock):
     assert doc["ok"] is True
     assert doc["schema"] == "v1"
     assert doc["error"] is None
-    assert doc["data"]["stk_nm"] == "삼성전자"
-    # return_code/return_msg는 기존처럼 제거
+    assert doc["data"]["name"] == "삼성전자"
+    assert doc["data"]["raw"]["stk_nm"] == "삼성전자"
+    # return_code/return_msg는 기존처럼 제거 (raw에서도)
     assert "return_code" not in doc["data"]
+    assert "return_code" not in doc["data"]["raw"]
     assert doc["meta"]["profile"] == "default"
     assert doc["meta"]["env"] == "mock"
     assert doc["meta"]["cont"] is None

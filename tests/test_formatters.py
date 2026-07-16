@@ -64,7 +64,10 @@ class TestGenericTableJson:
             print_generic_table(data, title="test")
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert parsed["data"][0]["stk_nm"] == "삼성전자"
+        # 리스트 응답: data.items = 정규화, data.raw = 원본
+        assert parsed["data"]["items"][0]["name"] == "삼성전자"
+        assert parsed["data"]["items"][0]["symbol"] == "005930"
+        assert parsed["data"]["raw"][0]["stk_nm"] == "삼성전자"
 
     def test_dict_json(self, capsys):
         data = {"stk_cd": "005930", "return_code": 0, "return_msg": "OK"}
@@ -72,7 +75,8 @@ class TestGenericTableJson:
             print_generic_table(data, title="test")
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert "stk_cd" in parsed["data"]
+        assert parsed["data"]["symbol"] == "005930"
+        assert "return_code" not in parsed["data"]["raw"]
         assert "return_code" not in parsed["data"]
 
     def test_empty_list_json(self, capsys):
@@ -80,7 +84,7 @@ class TestGenericTableJson:
             print_generic_table([], title="test")
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert parsed["data"] == []
+        assert parsed["data"] == {"items": [], "raw": []}
 
 
 class TestGenericTableCsv:
@@ -108,8 +112,10 @@ class TestStockInfoJson:
             print_stock_info(data)
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert parsed["data"]["stk_nm"] == "삼성전자"
+        assert parsed["data"]["name"] == "삼성전자"
+        assert parsed["data"]["price"] == 70000  # 문자열 "70000" → int
         assert "return_code" not in parsed["data"]
+        assert "return_code" not in parsed["data"]["raw"]
 
 
 class TestChartDataJson:
@@ -121,5 +127,6 @@ class TestChartDataJson:
             print_chart_data(items, title="test")
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert len(parsed["data"]) == 1
-        assert parsed["data"][0]["date"] == "20260101"
+        assert len(parsed["data"]["items"]) == 1
+        assert parsed["data"]["items"][0]["date"] == "20260101"  # date는 dt가 아니므로 통과
+        assert parsed["data"]["raw"][0]["open_pric"] == "100"

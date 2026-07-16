@@ -13,12 +13,13 @@ from . import __version__, auth, config, envelope
 from .client import KiwoomClient, KiwoomAPIError, KiwoomAuthError
 from .commands.account import account
 from .commands.dashboard import dashboard
+from .commands.history import history
 from .commands.market import market
 from .commands.order import order
 from .commands.stock import stock
 from .commands.stream import stream
 from .commands.watch import watch
-from .formatters import _get_format, _output_json, human, print_generic_table
+from .formatters import _get_format, human, print_generic_table
 from .output import console, err_console
 
 # Exit codes
@@ -117,9 +118,11 @@ class KiwoomGroup(click.Group):
               type=click.Choice(["table", "json", "csv"]),
               default="table", help="출력 형식")
 @click.option("-p", "--profile", default=None, help="사용할 프로필")
+@click.option("--fields", "fields", default=None,
+              help="json 출력의 data에서 유지할 필드 (쉼표구분). raw는 항상 제거 — 토큰 절약용")
 @click.option("--no-color", is_flag=True, help="색상 없이 출력")
 @click.pass_context
-def cli(ctx, output_format, profile, no_color):
+def cli(ctx, output_format, profile, fields, no_color):
     """키움증권 REST API CLI.
 
     사용법:
@@ -138,6 +141,7 @@ def cli(ctx, output_format, profile, no_color):
     ctx.ensure_object(dict)
     ctx.obj["format"] = output_format
     ctx.obj["profile"] = profile
+    ctx.obj["fields"] = [s.strip() for s in fields.split(",") if s.strip()] if fields else None
 
     # Auto-migrate plaintext credentials into the keychain
     if config.migrate_from_plaintext():
@@ -217,7 +221,7 @@ def config_show(ctx):
     profile_cfg = cfg.get("profiles", {}).get(profile, {})
     token_storage = config.get_token_storage(profile)
     if _get_format() == "json":
-        _output_json({
+        envelope.emit(data={
             "profile": profile,
             "config_file": str(config.CONFIG_FILE),
             "domain": profile_cfg.get("domain", "mock"),
@@ -383,7 +387,7 @@ def auth_status(ctx):
         token_source = "env" if os.environ.get("KIWOOM_TOKEN") else "keyring"
     if _get_format() == "json":
         cfg = config.load_config()
-        _output_json({
+        envelope.emit(data={
             "profile": profile,
             "domain": cfg.get("profiles", {}).get(profile, {}).get("domain", "mock"),
             "configured": configured,
@@ -445,6 +449,94 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str):
             err_console.print(f"\n[dim]연속조회 가능 (next-key: {headers.get('next-key', '')})[/]")
 
 
+# ── Describe (CLI 자기서술) ───────────────────────────
+
+def _param_spec(p: click.Parameter) -> dict:
+    default = p.default
+    if callable(default):
+        default = None
+    elif isinstance(default, tuple):
+        default = list(default)
+    if not isinstance(default, (str, int, float, bool, list, type(None))):
+        default = None  # click 내부 Sentinel 등 JSON 비직렬화 값
+    spec: dict = {
+        "name": p.name,
+        "opts": list(p.opts) + list(p.secondary_opts),
+        "type": p.type.name,
+        "required": p.required,
+        "default": default,
+    }
+    if isinstance(p.type, click.Choice):
+        spec["choices"] = list(p.type.choices)
+    if isinstance(p, click.Option):
+        spec["is_flag"] = p.is_flag
+        spec["help"] = p.help
+    return spec
+
+
+def _describe_command(cmd: click.Command, path: str) -> dict:
+    spec: dict = {
+        "path": path,
+        "help": (cmd.help or cmd.short_help or "").strip(),
+        "arguments": [_param_spec(p) for p in cmd.params if isinstance(p, click.Argument)],
+        "options": [_param_spec(p) for p in cmd.params if isinstance(p, click.Option)],
+    }
+    if isinstance(cmd, click.Group):
+        spec["subcommands"] = [
+            _describe_command(sub, f"{path} {name}")
+            for name, sub in sorted(cmd.commands.items())
+            if not sub.hidden
+        ]
+    return spec
+
+
+def _render_describe(spec: dict, depth: int = 0) -> None:
+    from rich.markup import escape
+
+    pad = "  " * depth
+    head = (spec["help"] or "").splitlines()[0] if spec["help"] else ""
+    console.print(f"{pad}[bold]{escape(spec['path'])}[/]  [dim]{escape(head)}[/]", highlight=False)
+    for a in spec["arguments"]:
+        req = " (필수)" if a["required"] else ""
+        choices = f" {'|'.join(a['choices'])}" if a.get("choices") else ""
+        console.print(f"{pad}  [cyan]{escape(a['name'].upper())}[/] <{a['type']}>{escape(choices)}{req}", highlight=False)
+    for o in spec["options"]:
+        parts = "/".join(o["opts"])
+        choices = f" [{'|'.join(o['choices'])}]" if o.get("choices") else ""
+        default = f" (기본: {o['default']})" if o.get("default") not in (None, "", False, 0) else ""
+        console.print(
+            f"{pad}  [green]{escape(parts)}[/]{escape(choices)}{escape(default)}  [dim]{escape(o.get('help') or '')}[/]",
+            highlight=False,
+        )
+    for sub in spec.get("subcommands", []):
+        _render_describe(sub, depth + 1)
+
+
+@cli.command("describe")
+@click.argument("command_path", nargs=-1)
+def describe(command_path: tuple[str, ...]):
+    """CLI 명령 구조 자기서술 — 경로/도움말/인자/옵션(타입·기본값·choices).
+
+    에이전트가 도구 스키마를 파악할 때 사용합니다.
+
+    \b
+    예: kiwoom describe                  # 전체 트리
+        kiwoom describe order buy -f json
+    """
+    cmd: click.Command = cli
+    path = "kiwoom"
+    for name in command_path:
+        if not isinstance(cmd, click.Group) or name not in cmd.commands:
+            raise click.ClickException(f"명령을 찾을 수 없습니다: {' '.join(command_path)}")
+        cmd = cmd.commands[name]
+        path += f" {name}"
+    spec = _describe_command(cmd, path)
+    if _get_format() == "json":
+        envelope.emit(data=spec)
+        return
+    _render_describe(spec)
+
+
 # ── Register subcommands ─────────────────────────────
 
 cli.add_command(stock)
@@ -452,6 +544,7 @@ cli.add_command(account)
 cli.add_command(order)
 cli.add_command(market)
 cli.add_command(stream)
+cli.add_command(history)
 cli.add_command(dashboard)
 cli.add_command(watch)
 
