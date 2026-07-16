@@ -123,7 +123,11 @@ def config_cmd():
 @click.option("--secretkey", prompt="Secret Key", hide_input=True, help="키움 API Secret Key")
 @click.option("--domain", prompt="도메인 (prod=실거래, mock=모의투자)", type=click.Choice(["prod", "mock"]), default="mock", help="도메인")
 @click.option("--account", prompt="계좌번호 (없으면 Enter)", default="", help="계좌번호")
-def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account: str):
+@click.option("--token-storage", "token_storage",
+              prompt="토큰 저장 방식 (keychain=OS 키체인, env=KIWOOM_TOKEN 직접 관리)",
+              type=click.Choice(list(config.TOKEN_STORAGES)), default="keychain",
+              help="접근토큰 저장 방식")
+def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account: str, token_storage: str):
     """초기 설정 (App Key, Secret Key, 도메인)."""
     if config.is_legacy_encrypted():
         # Old password-encrypted entries are unusable — purge before writing new keys
@@ -135,6 +139,7 @@ def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account
     cfg.setdefault("profiles", {}).setdefault(profile, {})["domain"] = domain
     if account:
         cfg["profiles"][profile]["account"] = account
+    cfg["profiles"][profile]["token_storage"] = token_storage
     if "default_profile" not in cfg.get("general", {}):
         cfg.setdefault("general", {})["default_profile"] = profile
     cfg.pop("auth", None)
@@ -142,6 +147,10 @@ def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account
     console.print(f"[green]설정 완료![/] (프로필: {profile})")
     console.print("  App Key/Secret Key: [bold]OS 키체인에 저장됨[/]")
     console.print(f"  도메인: [bold]{config.DOMAINS[domain]}[/]")
+    if token_storage == "env":
+        console.print("  토큰 저장: [bold]환경변수 (KIWOOM_TOKEN)[/] — auth login 후 안내되는 export를 실행하세요")
+    else:
+        console.print("  토큰 저장: [bold]OS 키체인[/]")
 
 
 @config_cmd.command("show")
@@ -152,6 +161,7 @@ def config_show(ctx):
     cfg = config.load_config()
     configured = config.is_configured(profile)
     profile_cfg = cfg.get("profiles", {}).get(profile, {})
+    token_storage = config.get_token_storage(profile)
     if _get_format() == "json":
         _output_json({
             "profile": profile,
@@ -159,6 +169,7 @@ def config_show(ctx):
             "domain": profile_cfg.get("domain", "mock"),
             "configured": configured,
             "account": profile_cfg.get("account", ""),
+            "token_storage": token_storage,
         })
         return
     human(f"  프로필: [bold]{profile}[/]")
@@ -166,11 +177,12 @@ def config_show(ctx):
     human(f"  도메인: {profile_cfg.get('domain', 'mock')}")
     human(f"  App Key: {'[dim]설정됨 (키체인)[/]' if configured else '(미설정)'}")
     human(f"  계좌번호: {profile_cfg.get('account', '(미설정)')}")
+    human(f"  토큰 저장: {'환경변수 (KIWOOM_TOKEN)' if token_storage == 'env' else 'OS 키체인'}")
     human(f"  보안: [bold]{'OS 키체인 저장' if configured else '미설정'}[/]")
 
 
 @config_cmd.command("set")
-@click.argument("key", type=click.Choice(["domain", "account"]))
+@click.argument("key", type=click.Choice(["domain", "account", "token_storage"]))
 @click.argument("value")
 @click.pass_context
 def config_set(ctx, key: str, value: str):
@@ -178,6 +190,9 @@ def config_set(ctx, key: str, value: str):
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     if key == "domain" and value not in ("prod", "mock"):
         console.print("[red]domain은 prod 또는 mock만 가능합니다.[/]")
+        raise SystemExit(1)
+    if key == "token_storage" and value not in config.TOKEN_STORAGES:
+        console.print("[red]token_storage는 keychain 또는 env만 가능합니다.[/]")
         raise SystemExit(1)
     cfg = config.load_config()
     cfg.setdefault("profiles", {}).setdefault(profile, {})[key] = value
@@ -244,10 +259,14 @@ def auth_login(ctx):
     with KiwoomClient() as c:
         try:
             token = c.issue_token()
-            masked = token[:10] + "..." + token[-4:] if len(token) > 14 else token
             human("[green]토큰 발급 완료![/]")
-            human(f"  토큰: {masked}")
-            human("  저장 위치: [bold]키체인[/]")
+            if config.get_token_storage(profile) == "env":
+                human("  저장 위치: [bold]없음 (env 모드)[/] — 아래를 셸에서 실행하세요:")
+                human(f"  export KIWOOM_TOKEN='{token}'")
+            else:
+                masked = token[:10] + "..." + token[-4:] if len(token) > 14 else token
+                human(f"  토큰: {masked}")
+                human("  저장 위치: [bold]키체인[/]")
         except KiwoomAPIError as e:
             human(f"[red]토큰 발급 실패:[/] {e}")
 
@@ -276,6 +295,7 @@ def auth_status(ctx):
     """토큰 상태 확인."""
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     configured = config.is_configured(profile)
+    token_storage = config.get_token_storage(profile)
     token = auth.load_token(profile=profile)
     token_source = None
     if token is not None:
@@ -288,6 +308,7 @@ def auth_status(ctx):
             "configured": configured,
             "has_token": token is not None,
             "token_source": token_source,
+            "token_storage": token_storage,
         })
         return
     if not configured and token is None:
@@ -297,6 +318,8 @@ def auth_status(ctx):
     if token is not None:
         source_label = "환경변수 KIWOOM_TOKEN" if token_source == "env" else "키체인 저장됨"
         human(f"[green]토큰 있음[/] [dim]({source_label})[/]")
+    elif token_storage == "env":
+        human("[yellow]토큰 없음.[/] 'kiwoom auth login' 으로 발급 후 안내되는 export KIWOOM_TOKEN을 실행하세요.")
     else:
         human("[yellow]토큰 없음.[/] 'kiwoom auth login' 으로 발급하세요.")
 

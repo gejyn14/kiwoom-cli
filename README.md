@@ -47,6 +47,7 @@ $ kiwoom -f json account balance | jq       # AI 에이전트·스크립트 친�
 
 ```bash
 # 1. 초기 설정 (appkey, secretkey → OS 키체인)
+#    토큰 저장 방식도 여기서 선택: keychain (기본) 또는 env (KIWOOM_TOKEN 직접 관리)
 kiwoom config setup
 
 # 2. 토큰 발급
@@ -81,6 +82,15 @@ export KIWOOM_TOKEN="..."         # 선택: 키체인 대신 사용할 접근토
 ```
 
 appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 반드시 `kiwoom config setup`으로 OS 키체인에 저장하세요. `KIWOOM_TOKEN`은 만료·폐기 가능한 접근토큰만 담는 통로로, 키체인에 접근할 수 없는 환경(샌드박스, CI, AI 에이전트)에서 사용합니다 — 설정 시 키체인 토큰보다 우선합니다.
+
+### 토큰 저장 방식 (keychain vs env)
+
+`config setup`에서 토큰 저장 방식을 선택합니다.
+
+- **keychain** (기본): `auth login`이 토큰을 OS 키체인에 저장합니다. 본인 터미널에서 쓰는 일반적인 방식.
+- **env**: 토큰을 키체인에 저장하지 않습니다. `auth login`이 토큰과 `export KIWOOM_TOKEN=...` 명령을 출력하면 셸에서 실행하세요. 키체인 접근이 불가능한 환경(샌드박스, CI, 컨테이너)이 주 작업 환경일 때 적합합니다.
+
+이후 전환은 `kiwoom config set token_storage keychain|env`.
 
 ### 멀티 프로필
 
@@ -130,12 +140,19 @@ kiwoom order buy 005930 10 --type market --confirm
 샌드박스 셸, CI, 컨테이너에서는 OS 키체인을 읽을 수 없습니다. 이때는 본인 터미널에서 토큰을 발급받아 `KIWOOM_TOKEN`으로 전달하세요 — appkey/secretkey는 키체인 밖으로 나가지 않고, 토큰은 만료·폐기 가능합니다.
 
 ```bash
-# 본인 터미널에서 (하루 1회 정도)
+# 본인 터미널에서 (하루 1회 정도) — env 모드라면 login이 export 명령을 그대로 출력
+kiwoom config set token_storage env
 kiwoom auth login
-export KIWOOM_TOKEN=$(security find-generic-password -s kiwoom-cli -a "default:token" -w)  # macOS
+export KIWOOM_TOKEN='...'   # login 출력의 export 라인을 복사해 실행
 
 # 이 셸에서 에이전트를 실행하면 환경변수가 상속되어 모든 명령이 동작
 kiwoom auth status   # 토큰 있음 (환경변수 KIWOOM_TOKEN)
+```
+
+keychain 모드를 유지하면서 일회성으로 꺼내 쓰려면:
+
+```bash
+export KIWOOM_TOKEN=$(security find-generic-password -s kiwoom-cli -a "default:token" -w)  # macOS
 ```
 
 ## 명령어 구조
@@ -491,11 +508,11 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 
 모든 인증정보(appkey, secretkey, 토큰)는 **OS 키체인**(macOS Keychain / Windows Credential Manager / Linux Secret Service)에 저장됩니다. 파일로 존재하지 않으며, 키체인이 디스크 저장 시 암호화를 담당합니다. `gh`, `aws`, `docker` CLI와 동일한 모델입니다.
 
-| 항목               | 저장 방식          | 프롬프트 |
-| ------------------ | ------------------ | :------: |
-| appkey / secretkey | OS 키체인          |    X     |
-| 토큰               | OS 키체인          |    X     |
-| config.toml        | 도메인, 계좌번호만 |    X     |
+| 항목               | 저장 방식                                  | 프롬프트 |
+| ------------------ | ------------------------------------------ | :------: |
+| appkey / secretkey | OS 키체인                                  |    X     |
+| 토큰               | OS 키체인 또는 KIWOOM_TOKEN 환경변수 (선택) |    X     |
+| config.toml        | 도메인, 계좌번호, 토큰 저장 방식만         |    X     |
 
 - 모든 명령어는 비밀번호/생체인증 프롬프트 없이 동작 (AI 에이전트·자동화 친화적)
 - 앱 자체 암호화 계층은 의도적으로 두지 않음 — 추가 계층은 명령마다 잠금 해제 프롬프트를 요구하게 되어 CLI 사용성을 해침
@@ -508,9 +525,9 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 
 | 항목             | 값                                       |
 | ---------------- | ---------------------------------------- |
-| 설정 파일        | `~/.kiwoom/config.toml` (도메인, 계좌만) |
+| 설정 파일        | `~/.kiwoom/config.toml` (도메인, 계좌, 토큰 저장 방식만) |
 | appkey/secretkey | OS 키체인                                |
-| 토큰             | OS 키체인                                |
+| 토큰             | OS 키체인 또는 KIWOOM_TOKEN 환경변수 (setup에서 선택) |
 | 캐시 디렉터리    | `~/.kiwoom/cache/`                       |
 | 운영 도메인      | `https://api.kiwoom.com`                 |
 | 모의투자 도메인  | `https://mockapi.kiwoom.com`             |
