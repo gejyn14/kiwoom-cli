@@ -72,6 +72,15 @@ kiwoom describe order buy -f json                            # 명령 스키마 
 
 ## 최근 업데이트
 
+### v2.5 — 에이전트 네이티브: 정규화 데이터·NDJSON 스트리밍·녹화 (2026-07)
+
+`-f json`의 `data`가 정규화된 타입 있는 필드로 바뀌고 원본은 `data.raw`로
+이동했습니다 (**기존 `-f json` 소비자에게는 breaking** — 기존 키는 `data.raw`
+아래에 그대로 있습니다). 전역 `--fields` 투영, `kiwoom describe` 자기서술,
+NDJSON 스트리밍(`--max-events`/`--duration`/`--until` 종료조건),
+`--record` 녹화 + `history query/export`, [AGENTS.md](AGENTS.md) 기계 계약이
+추가됐습니다. 위 [AI-agent native](#ai-agent-native) 섹션 참고.
+
 ### v2.1 — 비밀번호 프롬프트 완전 제거 (2026-07)
 
 앱 자체 암호화 계층을 걷어내고 모든 인증정보를 OS 키체인에 직접 저장합니다. `config setup`, `auth login` 어디서도 더 이상 비밀번호를 묻지 않습니다. 기존 사용자는 업그레이드 후 `kiwoom config setup` 한 번만 다시 실행하면 됩니다.
