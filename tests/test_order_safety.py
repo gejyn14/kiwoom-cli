@@ -246,3 +246,49 @@ def test_fx_apply_yes_alias(runner, isolated_env):
         result = runner.invoke(cli, ["-f", "json", "account", "exchange", "apply",
                                      "1000000", "--yes"])
     assert result.exit_code == 0
+
+
+# ── Task 7: credit/gold safety parity ────────────────────
+
+def test_credit_buy_dry_run_sends_nothing(runner, isolated_env):
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        result = runner.invoke(cli, ["-f", "json", "order", "credit", "buy",
+                                     "005930", "10", "--price", "70000", "--dry-run"])
+    assert result.exit_code == 0
+    doc = json.loads(result.stdout)
+    assert doc["data"]["would_send"] is True
+    assert doc["data"]["api_id"] == "kt10006"
+    assert doc["data"]["body"]["trde_tp"] == "0"   # price implies limit
+    mock_cls.assert_not_called()
+
+
+def test_gold_sell_client_order_id_replays(runner, isolated_env):
+    args = ["-f", "json", "order", "gold", "sell", "M04020000", "1",
+            "--price", "90000", "--confirm", "--client-order-id", "gold-k1"]
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(_ok_order_response)
+        first = runner.invoke(cli, args)
+    assert first.exit_code == 0
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls2:
+        second = runner.invoke(cli, args)
+    assert second.exit_code == 0
+    doc = json.loads(second.stdout)
+    assert doc["data"]["idempotent_replay"] is True
+    mock_cls2.assert_not_called()
+
+
+def test_credit_modify_preview_before_confirm(runner, isolated_env, monkeypatch):
+    calls = []
+    monkeypatch.setattr("kiwoom_cli.commands.order._show_modify_preview",
+                        lambda *a, **k: calls.append("preview"))
+
+    def abort_confirm(*a, **k):
+        calls.append("confirm")
+        raise click.Abort()
+    monkeypatch.setattr("kiwoom_cli.commands._mutation.click.confirm", abort_confirm)
+
+    with patch("kiwoom_cli.commands.order.KiwoomClient"):
+        result = runner.invoke(cli, ["order", "credit", "modify",
+                                     "0000139", "005930", "1", "70000"])
+    assert result.exit_code != 0
+    assert calls == ["preview", "confirm"]
