@@ -50,3 +50,15 @@ def test_resolve_ws_target_uses_ctx_profile(isolated_config):
         profile, ws_url = streaming.resolve_ws_target()
     assert profile == "live"
     assert ws_url == streaming.WS_DOMAINS["prod"]
+
+
+def test_build_meta_env_matches_domain_key(isolated_config, monkeypatch):
+    from kiwoom_cli import envelope
+
+    monkeypatch.setenv("KIWOOM_DOMAIN", "nonsense")
+    config.CONFIG_FILE.write_bytes(
+        b'[general]\ndefault_profile = "default"\n\n'
+        b'[profiles.default]\ndomain = "prod"\n'
+    )
+    meta = envelope.build_meta()
+    assert meta["env"] == config.get_domain_key() == "mock"
