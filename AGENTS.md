@@ -94,6 +94,7 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 | `INVALID_CREDENTIALS` / `TOKEN_ISSUE_FAILED` / `TOKEN_REVOKE_FAILED` | ✗ | 키/발급 문제 |
 | `KEYCHAIN_UNAVAILABLE` | ✗ | OS 키체인 접근 불가 — `KIWOOM_TOKEN` 사용 |
 | `NETWORK_ERROR` | ✓ | 연결 실패 |
+| `DEPENDENCY_MISSING` | ✗ | 선택적 패키지 미설치 (예: `websockets` 없이 `stream`) |
 | `UPSTREAM_ERROR` | ✓/✗ | 분류되지 않은 서버 오류 (`upstream_code` 참고) |
 
 ## 주문 안전장치

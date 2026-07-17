@@ -615,6 +615,7 @@ kiwoom -f csv stock daily 005930 > samsung_daily.csv
 | `NETWORK_ERROR` | O | API 서버 연결 실패 |
 | `KEYCHAIN_UNAVAILABLE` | X | OS 키체인 접근 불가 (샌드박스/CI) |
 | `NOT_CONFIGURED` | X | `config setup` 미실행 (CLI 로컬 감지) |
+| `DEPENDENCY_MISSING` | X | 선택적 패키지 미설치 (예: `websockets` 없이 `stream`) |
 | `UPSTREAM_ERROR` | 5xx·1999는 O | 미분류 업스트림 오류 (기본값) |
 
 CLI 수준의 인자/옵션 오류(잘못된 값, 인자 누락 등)도 json 모드에서는 `INVALID_INPUT` envelope로 출력됩니다 (`upstream_code: null`, exit 1). `kiwoom api --raw`는 json 모드에서도 envelope로 감싸되 `data`에 응답 원본을 그대로(`return_code` 포함) 담습니다. `auth login`은 json 모드에서 `{profile, token_storage, saved, token}`을 반환하며, `token` 원문은 env 모드에서만 포함됩니다.

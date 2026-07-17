@@ -286,6 +286,11 @@ def run_stream(
     import asyncio
 
     json_mode = _get_format() == "json"
+    if raw and json_mode:
+        _emit_line(error=envelope.error_body(
+            "--raw는 json 모드와 함께 사용할 수 없습니다 (NDJSON 한 줄 계약 위반).",
+            code="INVALID_INPUT", retryable=False))
+        raise SystemExit(1)
     # 입력 검증(UsageError -> exit 1)은 연결 시도 전에
     state = new_stream_state(max_events=max_events, duration=duration, until=until)
 
@@ -302,8 +307,12 @@ def run_stream(
     try:
         import websockets
     except ImportError:
-        human("[red]websockets 패키지가 필요합니다: pip install websockets[/]")
-        return
+        msg = "websockets 패키지가 필요합니다: pip install websockets"
+        if json_mode:
+            _emit_line(error=envelope.error_body(msg, code="DEPENDENCY_MISSING", retryable=False))
+        else:
+            err_console.print(f"[red]{msg}[/]")
+        raise SystemExit(1)
 
     profile, ws_url = resolve_ws_target()
     token = auth.load_token(profile=profile)
@@ -465,7 +474,7 @@ def run_stream(
     try:
         exit_code, error = asyncio.run(_stream())
     except KeyboardInterrupt:
-        console.print("\n[dim]스트리밍 종료[/]")
+        err_console.print("\n[dim]스트리밍 종료[/]")
         exit_code, error = 0, None
     finally:
         if recorder is not None:

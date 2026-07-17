@@ -244,3 +244,28 @@ def test_stream_types_json_envelope(runner, isolated_env):
     assert result.exit_code == 0
     doc = _doc(result)
     assert isinstance(doc["data"], list) and len(doc["data"]) == 19
+
+
+# ── Task 8: stream edge paths ────────────────────────────
+
+def test_stream_missing_websockets_json_error(runner, isolated_env, monkeypatch):
+    import builtins
+    real_import = builtins.__import__
+
+    def no_websockets(name, *a, **k):
+        if name == "websockets":
+            raise ImportError("No module named 'websockets'")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", no_websockets)
+    result = runner.invoke(cli, ["-f", "json", "stream", "quote", "005930", "--max-events", "1"])
+    assert result.exit_code == 1
+    doc = json.loads(result.stdout.strip().splitlines()[-1])
+    assert doc["error"]["code"] == "DEPENDENCY_MISSING"
+
+
+def test_stream_raw_with_json_rejected(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "stream", "quote", "005930", "--raw"])
+    assert result.exit_code == 1
+    doc = json.loads(result.stdout.strip().splitlines()[-1])
+    assert doc["error"]["code"] == "INVALID_INPUT"
