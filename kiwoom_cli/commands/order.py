@@ -622,7 +622,7 @@ def gold():
 def gold_buy(code: str, qty: int, price: float, order_type: str | None, confirm: bool, dry_run: bool, client_order_id: str | None):
     """금현물 매수주문 (kt50000).
 
-    예: kiwoom order gold buy 730060 10 --type limit --price 90000 --confirm
+    예: kiwoom order gold buy M04020000 10 --type limit --price 90000 --confirm
     """
     order_type = _resolve_order_type(order_type, price)
     kr_price = _kr_price_or_exit(price)
@@ -652,7 +652,7 @@ def gold_buy(code: str, qty: int, price: float, order_type: str | None, confirm:
 def gold_sell(code: str, qty: int, price: float, order_type: str | None, confirm: bool, dry_run: bool, client_order_id: str | None):
     """금현물 매도주문 (kt50001).
 
-    예: kiwoom order gold sell 730060 10 --type market --confirm
+    예: kiwoom order gold sell M04020000 10 --type market --confirm
     """
     order_type = _resolve_order_type(order_type, price)
     kr_price = _kr_price_or_exit(price)
@@ -682,7 +682,7 @@ def gold_sell(code: str, qty: int, price: float, order_type: str | None, confirm
 def gold_modify(orig_order_no: str, code: str, qty: int, price: float, confirm: bool, dry_run: bool, client_order_id: str | None):
     """금현물 정정주문 (kt50002).
 
-    예: kiwoom order gold modify 0000139 730060 1 90000 --confirm
+    예: kiwoom order gold modify 0000139 M04020000 1 90000 --confirm
     """
     kr_price = _kr_price_or_exit(price)
     body = {
@@ -710,7 +710,7 @@ def gold_modify(orig_order_no: str, code: str, qty: int, price: float, confirm: 
 def gold_cancel(orig_order_no: str, code: str, qty: int, confirm: bool, dry_run: bool, client_order_id: str | None):
     """금현물 취소주문 (kt50003).
 
-    예: kiwoom order gold cancel 0000140 730060 --confirm
+    예: kiwoom order gold cancel 0000140 M04020000 --confirm
     """
     body = {
         "orig_ord_no": orig_order_no,

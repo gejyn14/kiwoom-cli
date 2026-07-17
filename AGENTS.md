@@ -92,6 +92,11 @@ kiwoom -f json --all-pages market rank volume
 종목은 거래소 판별 호출일 수 있음)에 주입되므로 페이지네이션은 `--market kr|us`처럼
 단일 API 경로에서 사용하세요.
 
+미국 심볼 거래소 자동판별 보조 호출(usa10098)과 주문 `--dry-run`의 시세 조회
+보조 호출(`_quote_price_kr`/`_quote_price_us`)은 내부(`internal`) 호출로 표시되어
+전역 `--next-key`/`--all-pages`가 적용되지 않고 `meta.cont`도 기록하지 않습니다 —
+커서는 항상 명령의 본 조회가 소비/기록합니다.
+
 ## Exit codes
 
 | code | 의미 | 대응 |
@@ -123,6 +128,10 @@ kiwoom -f json --all-pages market rank volume
 | `NETWORK_ERROR` | ✓ | 연결 실패·타임아웃 등 전송 오류 (`httpx.RequestError` 전반을 포괄) |
 | `DEPENDENCY_MISSING` | ✗ | 선택적 패키지 미설치 (예: `websockets` 없이 `stream`). exit 1 |
 | `UPSTREAM_ERROR` | ✓/✗ | 분류되지 않은 서버 오류 (`upstream_code` 참고) |
+
+통합 명령(`account balance/deposit/pnl/orders --market all`)에서 국내·미국이 모두
+실패하면 json 모드는 `UPSTREAM_ERROR` envelope + exit 2를 반환합니다. table 모드도
+동일한 경우 빨간 stderr 메시지와 함께 exit 2로 종료합니다(이전에는 조용히 exit 0).
 
 ## 주문 안전장치
 
@@ -204,6 +213,11 @@ required, choices, is_flag)를 반환합니다. 도움말 파싱 대신 이걸 �
   먼저 훑어볼 때 토큰 절약). `--depth N`은 전체 스키마 모드에서만 적용되며 `--paths`와 함께 쓰면 무시됩니다.
 - `market` 명령들은 docstring에 사용하는 API ID를 명시하므로(예:
   `순위 정보 조회. (ka10016)`) `describe`의 `help` 필드에서 바로 확인됩니다.
+
+### find / api list — 키워드 발견
+
+- `kiwoom find <키워드> -f json` → `data = {"commands": [{"path","help"}], "apis": [{"api_id","description"}]}` (결과 없음 = 빈 배열, exit 0)
+- `kiwoom api list [키워드] -f json` → `data = [{"api_id","url_path","description"}]` (토큰 불필요)
 
 ## 인증 (비대화형 환경)
 
