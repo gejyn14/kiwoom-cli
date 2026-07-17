@@ -21,7 +21,22 @@ from ..formatters import (
     print_unified_balance,
 )
 from ..output import err_console
-from ._constants import EXCHANGE_ALL_ZERO
+from ._constants import (
+    ALL_STOCK_QRY,
+    ASSET_TYPE,
+    CASH_CREDIT,
+    DELIST_QRY,
+    EXCHANGE_ALL_ZERO,
+    FILLED_QRY,
+    HOLDINGS_EVAL_QRY,
+    HumanChoice,
+    MARKET_STATUS_KOSPI,
+    ODD_LOT_QRY,
+    ORDER_DETAIL_QRY,
+    PRODUCT_TYPE,
+    TRADE_SIDE,
+    TRANSACTION_TYPE,
+)
 from .us import account_ops as us_account_ops
 from .us import order_ops as us_order_ops
 from .us._constants import US_EXCHANGE
@@ -111,7 +126,7 @@ def account_list():
 @account.command("balance")
 @click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장 (all=통합, kr=국내, us=미국)")
 @click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="국내 거래소 구분")
-@click.option("--delist", "qry_tp", default="0", type=click.Choice(["0", "1"]), help="상장폐지조회구분 (0=전체, 1=제외)")
+@click.option("--delist", "qry_tp", default="all", type=HumanChoice(DELIST_QRY), help="상장폐지조회구분 (all=전체, exclude=제외)")
 def balance(market: str, dmst_stex_tp: str, qry_tp: str):
     """계좌 평가현황 — 국내+미국 통합. (kt00004 + ust21070)"""
     kr_data = us_data = None
@@ -163,7 +178,7 @@ def deposit(market: str, qry_type: str):
 
 
 @account.command("asset")
-@click.option("--delist", "qry_tp", default="0", type=click.Choice(["0", "1"]), help="상장폐지조회구분 (0=전체, 1=제외)")
+@click.option("--delist", "qry_tp", default="all", type=HumanChoice(DELIST_QRY), help="상장폐지조회구분 (all=전체, exclude=제외)")
 def asset(qry_tp: str):
     """추정자산 조회. (kt00003)"""
     with KiwoomClient() as c:
@@ -357,8 +372,8 @@ def orders():
 
 @orders.command("pending")
 @click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장")
-@click.option("--all-stocks", "all_stk_tp", default="0", type=click.Choice(["0", "1"]), help="전체종목구분 (국내 전용)")
-@click.option("--trade", "trde_tp", default="0", type=click.Choice(["0", "1", "2"]), help="매매구분 (0=전체, 1=매도, 2=매수)")
+@click.option("--all-stocks", "all_stk_tp", default="all", type=HumanChoice(ALL_STOCK_QRY), help="전체종목구분 (all=전체, stock=종목; 국내 전용)")
+@click.option("--trade", "trde_tp", default="all", type=HumanChoice(TRADE_SIDE), help="매매구분 (all=전체, sell=매도, buy=매수)")
 @click.option("--code", "stk_cd", default="", help="종목코드 (미입력시 전체)")
 @click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="국내 거래소구분")
 def orders_pending(market: str, all_stk_tp: str, trde_tp: str, stk_cd: str, stex_tp: str):
@@ -401,8 +416,8 @@ def orders_pending(market: str, all_stk_tp: str, trde_tp: str, stk_cd: str, stex
 @orders.command("executed")
 @click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장")
 @click.option("--code", "stk_cd", default="", help="종목코드 (미입력시 전체)")
-@click.option("--qry-type", "qry_tp", default="0", type=click.Choice(["0", "1"]), help="조회구분 (0=전체, 1=종목, 국내 전용)")
-@click.option("--side", "sell_tp", default="0", type=click.Choice(["0", "1", "2"]), help="매도수구분 (0=전체, 1=매도, 2=매수)")
+@click.option("--qry-type", "qry_tp", default="all", type=HumanChoice(ALL_STOCK_QRY), help="조회구분 (all=전체, stock=종목; 국내 전용)")
+@click.option("--side", "sell_tp", default="all", type=HumanChoice(TRADE_SIDE), help="매도수구분 (all=전체, sell=매도, buy=매수)")
 @click.option("--order-no", "ord_no", default="", help="주문번호 (국내 전용)")
 @click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="국내 거래소구분")
 def orders_executed(market: str, stk_cd: str, qry_tp: str, sell_tp: str, ord_no: str, stex_tp: str):
@@ -450,9 +465,9 @@ def orders_split_detail(order_no: str):
 
 @orders.command("detail")
 @click.option("--date", "ord_dt", default="", help="주문일자 (YYYYMMDD, 미입력시 당일)")
-@click.option("--qry-type", "qry_tp", default="1", type=click.Choice(["1", "2", "3", "4"]), help="조회구분 (1=주문순, 2=역순, 3=미체결, 4=체결내역만)")
-@click.option("--asset", "stk_bond_tp", default="0", type=click.Choice(["0", "1", "2"]), help="주식채권구분 (0=전체, 1=주식, 2=채권)")
-@click.option("--side", "sell_tp", default="0", type=click.Choice(["0", "1", "2"]), help="매도수구분 (0=전체, 1=매도, 2=매수)")
+@click.option("--qry-type", "qry_tp", default="order", type=HumanChoice(ORDER_DETAIL_QRY), help="조회구분 (order=주문순, reverse=역순, unfilled=미체결, filled=체결내역만)")
+@click.option("--asset", "stk_bond_tp", default="all", type=HumanChoice(ASSET_TYPE), help="주식채권구분 (all=전체, stock=주식, bond=채권)")
+@click.option("--side", "sell_tp", default="all", type=HumanChoice(TRADE_SIDE), help="매도수구분 (all=전체, sell=매도, buy=매수)")
 @click.option("--code", "stk_cd", default="", help="종목코드")
 @click.option("--from-order", "fr_ord_no", default="", help="시작주문번호")
 @click.option("--exchange", "dmst_stex_tp", default="%", type=click.Choice(["%", "KRX", "NXT", "SOR"]), help="거래소구분 (%=전체)")
@@ -477,10 +492,10 @@ def orders_detail(ord_dt: str, qry_tp: str, stk_bond_tp: str, sell_tp: str, stk_
 
 @orders.command("status")
 @click.option("--date", "ord_dt", default="", help="주문일자 (YYYYMMDD, 미입력시 당일)")
-@click.option("--asset", "stk_bond_tp", default="0", type=click.Choice(["0", "1", "2"]), help="주식채권구분 (0=전체, 1=주식, 2=채권)")
-@click.option("--market", "mrkt_tp", default="0", type=click.Choice(["0", "1", "2"]), help="시장구분 (0=전체, 1=코스피, 2=코스닥)")
-@click.option("--side", "sell_tp", default="0", type=click.Choice(["0", "1", "2"]), help="매도수구분 (0=전체, 1=매도, 2=매수)")
-@click.option("--qry-type", "qry_tp", default="0", type=click.Choice(["0", "1"]), help="조회구분 (0=전체, 1=체결)")
+@click.option("--asset", "stk_bond_tp", default="all", type=HumanChoice(ASSET_TYPE), help="주식채권구분 (all=전체, stock=주식, bond=채권)")
+@click.option("--market", "mrkt_tp", default="all", type=HumanChoice(MARKET_STATUS_KOSPI), help="시장구분 (all=전체, kospi=코스피, kosdaq=코스닥)")
+@click.option("--side", "sell_tp", default="all", type=HumanChoice(TRADE_SIDE), help="매도수구분 (all=전체, sell=매도, buy=매수)")
+@click.option("--qry-type", "qry_tp", default="all", type=HumanChoice(FILLED_QRY), help="조회구분 (all=전체, filled=체결)")
 @click.option("--code", "stk_cd", default="", help="종목코드")
 @click.option("--from-order", "fr_ord_no", default="", help="시작주문번호")
 @click.option("--exchange", "dmst_stex_tp", default="%", type=click.Choice(["%", "KRX", "NXT", "SOR"]), help="거래소구분 (%=전체)")
@@ -514,7 +529,7 @@ def holdings():
 
 
 @holdings.command("eval")
-@click.option("--qry-type", "qry_tp", default="1", type=click.Choice(["1", "2"]), help="조회구분 (1=합산, 2=개별)")
+@click.option("--qry-type", "qry_tp", default="sum", type=HumanChoice(HOLDINGS_EVAL_QRY), help="조회구분 (sum=합산, each=개별)")
 @click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 구분")
 def holdings_eval(qry_tp: str, dmst_stex_tp: str):
     """계좌평가 잔고내역. (kt00018)"""
@@ -627,16 +642,16 @@ def history():
 @click.option("--market", "market", default="all", type=click.Choice(["all", "kr", "us"]), help="시장")
 @click.option("--from", "strt_dt", required=True, help="시작일자 (YYYYMMDD)")
 @click.option("--to", "end_dt", required=True, help="종료일자 (YYYYMMDD)")
-@click.option("--type", "tp", default="0", type=click.Choice(["0", "1", "2", "3", "4", "5", "6", "7"]), help="구분 (0=전체, 1=입출금, 2=입출고, 3=매매, 4=매수, 5=매도, 6=입금, 7=출금; 6/7은 국내 전용)")
+@click.option("--type", "tp", default="all", type=HumanChoice(TRANSACTION_TYPE), help="구분 (all=전체, cash=입출금, securities=입출고, trade=매매, buy=매수, sell=매도, deposit=입금, withdraw=출금; deposit/withdraw는 국내 전용)")
 @click.option("--code", "stk_cd", default="", help="종목코드 (국내 전용)")
 @click.option("--currency", "crnc_cd", default="", help="통화코드 (국내 전용)")
-@click.option("--product", "gds_tp", default="0", type=click.Choice(["0", "1"]), help="상품구분 (0=전체, 1=국내주식, 국내 전용)")
+@click.option("--product", "gds_tp", default="all", type=HumanChoice(PRODUCT_TYPE), help="상품구분 (all=전체, stock=국내주식; 국내 전용)")
 @click.option("--foreign-exchange", "frgn_stex_code", default="", help="해외거래소코드 (국내 전용)")
 @click.option("--exchange", "dmst_stex_tp", default="%", type=click.Choice(["%", "KRX", "NXT"]), help="국내 거래소구분 (%=전체)")
 def history_transactions(market: str, strt_dt: str, end_dt: str, tp: str, stk_cd: str, crnc_cd: str, gds_tp: str, frgn_stex_code: str, dmst_stex_tp: str):
     """위탁 종합거래내역 — 국내(kt00015) + 미국(ust21100)."""
     if market == "us" and tp in ("6", "7"):
-        fail_input("입금/출금 구분(6/7)은 국내 전용입니다. --market us 에서는 사용할 수 없습니다.")
+        fail_input("입금/출금 구분(deposit/withdraw)은 국내 전용입니다. --market us 에서는 사용할 수 없습니다.")
 
     with KiwoomClient() as c:
         def kr_fetch():
@@ -677,8 +692,8 @@ def history_transactions(market: str, strt_dt: str, end_dt: str, tp: str, stk_cd
 
 @history.command("journal")
 @click.option("--date", "base_dt", default="", help="기준일자 (YYYYMMDD, 미입력시 당일)")
-@click.option("--odd-lot", "ottks_tp", default="1", type=click.Choice(["1", "2"]), help="단주구분 (1=당일매수에 대한 당일매도, 2=당일매도 전체)")
-@click.option("--cash-credit", "ch_crd_tp", default="0", type=click.Choice(["0", "1", "2"]), help="현금신용구분 (0=전체, 1=현금매매만, 2=신용매매만)")
+@click.option("--odd-lot", "ottks_tp", default="same-day-buy", type=HumanChoice(ODD_LOT_QRY), help="단주구분 (same-day-buy=당일매수에 대한 당일매도, all=당일매도 전체)")
+@click.option("--cash-credit", "ch_crd_tp", default="all", type=HumanChoice(CASH_CREDIT), help="현금신용구분 (all=전체, cash=현금매매만, credit=신용매매만)")
 def history_journal(base_dt: str, ottks_tp: str, ch_crd_tp: str):
     """당일 매매일지 조회. (ka10170)"""
     with KiwoomClient() as c:

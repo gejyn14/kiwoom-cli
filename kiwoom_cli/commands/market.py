@@ -8,9 +8,11 @@ from ..client import KiwoomClient
 from ..formatters import print_api_response
 from ._constants import (
     EXCHANGE_TWO,
+    HOT_PERIOD,
     MARKET_ALL,
     MARKET_KOSPI_KOSDAQ,
     MARKET_TWO,
+    HumanChoice,
 )
 
 
@@ -609,8 +611,8 @@ def rank_foreign_inst(mrkt_tp, amt_qty_tp, qry_dt_tp, date, stex_tp):
 
 
 @rank.command("hot")
-@click.option("--period", "qry_tp", type=click.Choice(["1", "2", "3", "4", "5"]), default="4",
-              help="구분 (1=1분, 2=10분, 3=1시간, 4=당일누적, 5=30초)")
+@click.option("--period", "qry_tp", type=HumanChoice(HOT_PERIOD), default="today",
+              help="구분 (1m=1분, 10m=10분, 1h=1시간, today=당일누적, 30s=30초)")
 def rank_hot(qry_tp):
     """실시간 종목 조회 순위. (ka00198)"""
     with KiwoomClient() as c:

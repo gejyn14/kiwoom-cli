@@ -183,3 +183,79 @@ def test_api_list_needs_no_auth(runner, isolated_env):
     result = runner.invoke(cli, ["api", "list", "미체결"])
     assert result.exit_code == 0
     assert "ka10075" in result.output
+
+
+# ── Task 6: human-readable option values ─────────────────
+
+def _capture_client(captured):
+    def fake(api_id, body=None, **kwargs):
+        captured.setdefault("calls", []).append((api_id, body))
+        return {"return_code": 0}, {}
+    return _mock_kiwoom_client(fake)
+
+
+def test_human_option_converts_to_api_code(runner, isolated_env):
+    captured = {}
+    with patch("kiwoom_cli.commands.account.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _capture_client(captured)
+        result = runner.invoke(cli, ["-f", "json", "account", "orders", "pending",
+                                     "--market", "kr", "--trade", "sell"])
+    assert result.exit_code == 0
+    api_id, body = captured["calls"][0]
+    assert api_id == "ka10075"
+    assert body["trde_tp"] == "1"
+
+
+def test_human_option_accepts_legacy_numeric_code(runner, isolated_env):
+    captured = {}
+    with patch("kiwoom_cli.commands.account.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _capture_client(captured)
+        result = runner.invoke(cli, ["-f", "json", "account", "orders", "pending",
+                                     "--market", "kr", "--trade", "1"])
+    assert result.exit_code == 0
+    assert captured["calls"][0][1]["trde_tp"] == "1"
+
+
+def test_human_option_default_converts(runner, isolated_env):
+    captured = {}
+    with patch("kiwoom_cli.commands.account.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _capture_client(captured)
+        result = runner.invoke(cli, ["-f", "json", "account", "orders", "pending",
+                                     "--market", "kr"])
+    assert result.exit_code == 0
+    assert captured["calls"][0][1]["trde_tp"] == "0"
+
+
+def test_human_option_invalid_value_lists_human_names(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "account", "orders", "pending",
+                                 "--trade", "9"])
+    assert result.exit_code == 1
+    doc = _doc(result)
+    assert doc["error"]["code"] == "INVALID_INPUT"
+    assert "sell" in doc["error"]["message"]
+
+
+def test_describe_shows_human_choices(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "describe", "account", "orders", "pending"])
+    doc = _doc(result)
+    opt = next(o for o in doc["data"]["options"] if o["name"] == "trde_tp")
+    assert opt["choices"] == ["all", "sell", "buy"]
+    assert opt["default"] == "all"
+
+
+def test_market_rank_hot_period_human(runner, isolated_env):
+    captured = {}
+    with patch("kiwoom_cli.commands.market.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _capture_client(captured)
+        result = runner.invoke(cli, ["-f", "json", "market", "rank", "hot",
+                                     "--period", "1h"])
+    assert result.exit_code == 0
+    assert captured["calls"][0][1]["qry_tp"] == "3"
+
+
+def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "account", "history", "transactions",
+                                 "--market", "us", "--from", "20260101",
+                                 "--to", "20260131", "--type", "deposit"])
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
