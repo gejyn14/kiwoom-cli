@@ -62,6 +62,14 @@ WS_DOMAINS = {
 }
 
 
+def resolve_ws_target() -> tuple[str, str]:
+    """(profile, ws_url) — REST 경로와 동일하게 --profile(ctx)과 KIWOOM_DOMAIN을 존중한다."""
+    ctx = click.get_current_context(silent=True)
+    cli_profile = ctx.obj.get("profile") if ctx is not None and isinstance(ctx.obj, dict) else None
+    profile = config.resolve_profile(cli_profile)
+    return profile, WS_DOMAINS[config.get_domain_key(profile)]
+
+
 def _build_register_msg(
     types: list[str],
     items: list[str],
@@ -297,10 +305,7 @@ def run_stream(
         human("[red]websockets 패키지가 필요합니다: pip install websockets[/]")
         return
 
-    profile = config.resolve_profile(None)
-    cfg = config.load_config()
-    domain_key = cfg.get("profiles", {}).get(profile, {}).get("domain", "mock")
-    ws_url = WS_DOMAINS.get(domain_key, WS_DOMAINS["mock"])
+    profile, ws_url = resolve_ws_target()
     token = auth.load_token(profile=profile)
     if not token:
         if json_mode:
