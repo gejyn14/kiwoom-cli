@@ -645,17 +645,19 @@ def find_cmd(keyword: str):
     if _get_format() == "json":
         envelope.emit(data={"commands": cmd_rows, "apis": api_rows})
         return
+    from rich.markup import escape
+
     if not cmd_rows and not api_rows:
-        console.print(f"[yellow]'{keyword}'에 대한 결과가 없습니다.[/]")
+        console.print(f"[yellow]'{escape(keyword)}'에 대한 결과가 없습니다.[/]")
         return
     if cmd_rows:
         console.print(f"[bold]명령어 ({len(cmd_rows)})[/]")
         for r in cmd_rows:
-            console.print(f"  {r['path']}  [dim]{r['help']}[/]", highlight=False)
+            console.print(f"  {escape(r['path'])}  [dim]{escape(r['help'])}[/]", highlight=False)
     if api_rows:
         console.print(f"[bold]API ({len(api_rows)}) — kiwoom api <id>로 호출[/]")
         for r in api_rows:
-            console.print(f"  {r['api_id']}  [dim]{r['description']}[/]", highlight=False)
+            console.print(f"  {escape(r['api_id'])}  [dim]{escape(r['description'])}[/]", highlight=False)
 
 
 # ── Register subcommands ─────────────────────────────

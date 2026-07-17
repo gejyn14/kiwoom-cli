@@ -151,3 +151,9 @@ def test_find_table_output(runner, isolated_env):
     assert result.exit_code == 0
     assert "ka10075" in result.output
     assert "account orders pending" in result.output
+
+
+def test_find_markup_in_keyword_does_not_crash(runner, isolated_env):
+    result = runner.invoke(cli, ["find", "[/]"])
+    assert result.exit_code == 0
+    assert "결과가 없습니다" in result.output
