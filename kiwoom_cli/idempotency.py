@@ -60,6 +60,7 @@ def locked():
     같은 --client-order-id로 동시에 두 프로세스가 진입해 둘 다 미기록 상태를
     보고 둘 다 전송하는 중복 주문을 막는다. 프로필+환경 원장 단위 잠금이므로
     같은 프로필의 서로 다른 주문도 잠금 구간 동안 직렬화된다 (정확성 우선).
+    재진입 불가(같은 프로세스에서 중첩 사용 시 데드락) — send_order 외에서 사용하지 말 것.
     """
     ledger = _ledger_file()
     ledger.parent.mkdir(parents=True, exist_ok=True)
