@@ -138,9 +138,13 @@ class KiwoomGroup(click.Group):
 @click.option("-p", "--profile", default=None, help="사용할 프로필")
 @click.option("--fields", "fields", default=None,
               help="json 출력의 data에서 유지할 필드 (쉼표구분). raw는 항상 제거 — 토큰 절약용")
+@click.option("--next-key", "next_key", default=None,
+              help="연속조회 커서 — 이전 응답 meta.cont.next_key를 전달하면 첫 API 요청이 해당 페이지부터 조회")
+@click.option("--all-pages", "all_pages", is_flag=True,
+              help="연속조회를 끝까지 자동 반복해 리스트를 병합 (최대 50페이지)")
 @click.option("--no-color", is_flag=True, help="색상 없이 출력")
 @click.pass_context
-def cli(ctx, output_format, profile, fields, no_color):
+def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
     """키움증권 REST API CLI.
 
     사용법:
@@ -160,6 +164,11 @@ def cli(ctx, output_format, profile, fields, no_color):
     ctx.obj["format"] = output_format
     ctx.obj["profile"] = profile
     ctx.obj["fields"] = [s.strip() for s in fields.split(",") if s.strip()] if fields else None
+
+    if next_key and all_pages:
+        raise click.UsageError("--next-key와 --all-pages는 함께 사용할 수 없습니다.")
+    ctx.obj["next_key"] = next_key
+    ctx.obj["all_pages"] = all_pages
 
     # Auto-migrate plaintext credentials into the keychain
     if config.migrate_from_plaintext():

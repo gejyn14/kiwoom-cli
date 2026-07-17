@@ -142,3 +142,10 @@ def test_krw_on_domestic_symbol_json_envelope(runner, isolated_env):
     result = runner.invoke(cli, ["-f", "json", "stock", "chart", "tick", "005930", "--krw"])
     assert result.exit_code == 1
     assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
+def test_next_key_and_all_pages_mutually_exclusive(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "--next-key", "X", "--all-pages",
+                                 "stock", "info", "005930"])
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"

@@ -75,7 +75,7 @@ class KiwoomClient:
             return False
         return True
 
-    def request(
+    def _request_once(
         self,
         api_id: str,
         body: dict[str, Any] | None = None,
@@ -116,31 +116,39 @@ class KiwoomClient:
 
         return data, resp_headers
 
-    def request_all(
+    _ALL_PAGES_CAP = 50
+
+    def request(
         self,
         api_id: str,
         body: dict[str, Any] | None = None,
         *,
-        max_pages: int = 10,
-    ) -> list[dict[str, Any]]:
-        """Auto-paginate through cont-yn/next-key. Returns list of all response bodies."""
-        results = []
-        cont_yn = ""
-        next_key = ""
+        cont_yn: str = "",
+        next_key: str = "",
+    ) -> tuple[dict[str, Any], dict[str, str]]:
+        """단일 요청 + 전역 페이지네이션 플래그 처리.
 
-        for _ in range(max_pages):
-            data, headers = self.request(
-                api_id, body, cont_yn=cont_yn, next_key=next_key
-            )
-            results.append(data)
-
-            if headers.get("cont-yn") == "Y" and headers.get("next-key"):
-                cont_yn = headers["cont-yn"]
-                next_key = headers["next-key"]
-            else:
-                break
-
-        return results
+        --next-key: 명령의 첫 API 요청에만 커서를 주입한다 (소비형).
+        --all-pages: cont-yn이 끝날 때까지 반복, 리스트 필드를 병합한다.
+        """
+        ctx = click.get_current_context(silent=True)
+        obj = ctx.obj if ctx is not None and isinstance(ctx.obj, dict) else None
+        if obj and not next_key and obj.get("next_key"):
+            next_key = obj.pop("next_key")
+            cont_yn = "Y"
+        data, headers = self._request_once(api_id, body, cont_yn=cont_yn, next_key=next_key)
+        if not (obj and obj.get("all_pages")):
+            return data, headers
+        pages = 1
+        while headers.get("cont-yn") == "Y" and headers.get("next-key") and pages < self._ALL_PAGES_CAP:
+            page, headers = self._request_once(api_id, body, cont_yn="Y", next_key=headers["next-key"])
+            for k, v in page.items():
+                if isinstance(v, list) and isinstance(data.get(k), list):
+                    data[k].extend(v)
+            pages += 1
+        if headers.get("cont-yn") == "Y":
+            err_console.print(f"[dim]--all-pages 상한({self._ALL_PAGES_CAP}페이지) 도달 — meta.cont로 계속 조회 가능[/]")
+        return data, headers
 
     def issue_token(self, appkey: str | None = None, secretkey: str | None = None) -> str:
         """Issue an access token via au10001."""

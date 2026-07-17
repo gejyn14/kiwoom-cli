@@ -72,40 +72,6 @@ def test_request_pagination_headers(mock_client):
     assert resp_headers["next-key"] == "abc123"
 
 
-def test_request_all_paginates(mock_client):
-    client, httpx_mock = mock_client
-    # Page 1
-    httpx_mock.add_response(
-        url="https://mock.test/api/dostk/stkinfo",
-        json={"page": 1, "return_code": 0},
-        headers={"cont-yn": "Y", "next-key": "key2"},
-    )
-    # Page 2
-    httpx_mock.add_response(
-        url="https://mock.test/api/dostk/stkinfo",
-        json={"page": 2, "return_code": 0},
-        headers={"cont-yn": "N", "next-key": ""},
-    )
-    results = client.request_all("ka10001", {"stk_cd": "005930"})
-    assert len(results) == 2
-    assert results[0]["page"] == 1
-    assert results[1]["page"] == 2
-
-
-def test_request_all_respects_max_pages(mock_client):
-    client, httpx_mock = mock_client
-    for i in range(2):
-        httpx_mock.add_response(
-            url="https://mock.test/api/dostk/stkinfo",
-            json={"page": i, "return_code": 0},
-            headers={"cont-yn": "Y", "next-key": f"key{i+1}"},
-        )
-    results = client.request_all("ka10001", {"stk_cd": "005930"}, max_pages=2)
-    assert len(results) == 2
-    assert results[0]["page"] == 0
-    assert results[1]["page"] == 1
-
-
 def test_client_init_loads_from_config_and_auth(monkeypatch):
     monkeypatch.setattr(client_mod.config, "get_domain", lambda profile=None: "https://mock.test")
     monkeypatch.setattr(client_mod.auth, "load_token", lambda profile=None: "stored-token")
