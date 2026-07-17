@@ -467,6 +467,11 @@ def print_pending_orders(items: list[dict[str, Any]]) -> None:
     console.print(t)
 
 
+# 터미널 테이블 표시 상한. 초과분은 잘리되 반드시 안내 문구를 출력한다.
+_TABLE_ROW_CAP = 50
+_CHART_ROW_CAP = 30
+
+
 def print_chart_data(items: list[dict[str, Any]], title: str = "차트") -> None:
     """Format chart data (OHLCV)."""
     fmt = _get_format()
@@ -488,7 +493,7 @@ def print_chart_data(items: list[dict[str, Any]], title: str = "차트") -> None
     t.add_column("종가", justify="right")
     t.add_column("거래량", justify="right")
 
-    for item in items[:30]:
+    for item in items[:_CHART_ROW_CAP]:
         t.add_row(
             item.get("dt", item.get("date", "")),
             _fmt_number(item.get("open_pric", item.get("strt_pric", "")), strip_sign=True),
@@ -498,6 +503,10 @@ def print_chart_data(items: list[dict[str, Any]], title: str = "차트") -> None
             _fmt_number(item.get("trde_qty", item.get("acml_trde_qty", "")), strip_sign=True),
         )
     console.print(t)
+    if len(items) > _CHART_ROW_CAP:
+        console.print(
+            f"[dim]{len(items)}행 중 {_CHART_ROW_CAP}행 표시 — 전체 데이터는 -f json 또는 -f csv 사용[/]"
+        )
 
 
 _FIELD_LABELS: dict[str, str] = {
@@ -761,7 +770,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
         all_keys = list(data[0].keys())
         keys = [
             k for k in all_keys
-            if any(str(item.get(k, "")).strip() for item in data[:50])
+            if any(str(item.get(k, "")).strip() for item in data[:_TABLE_ROW_CAP])
         ]
         if not keys:
             keys = all_keys
@@ -777,7 +786,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
                 "now_trde_qty", "pre_rt",
             ) else "left"
             t.add_column(label, justify=justify)
-        for item in data[:50]:
+        for item in data[:_TABLE_ROW_CAP]:
             row = []
             for k in keys:
                 v = str(item.get(k, ""))
@@ -787,6 +796,10 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
                     row.append(v)
             t.add_row(*row)
         console.print(t)
+        if len(data) > _TABLE_ROW_CAP:
+            console.print(
+                f"[dim]{len(data)}행 중 {_TABLE_ROW_CAP}행 표시 — 전체 데이터는 -f json 또는 -f csv 사용[/]"
+            )
     elif isinstance(data, dict):
         scalar = {k: v for k, v in data.items() if not isinstance(v, (list, dict)) and k not in ("return_code", "return_msg")}
         lists = {k: v for k, v in data.items() if isinstance(v, list)}

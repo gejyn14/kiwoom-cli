@@ -96,3 +96,27 @@ def test_no_color_mutates_shared_console_instances(runner, isolated_env, reset_n
     assert output.console.no_color is True
     assert output.err_console.no_color is True
     assert fmt_console.no_color is True    # 실제 회귀: 재바인딩은 이 단언에서 실패
+
+
+# ── Task 3: truncation notice ────────────────────────────
+
+def test_generic_table_truncation_notice(capsys):
+    from kiwoom_cli.formatters import print_generic_table
+    rows = [{"stk_cd": f"{i:06d}"} for i in range(60)]
+    print_generic_table(rows, title="t")
+    out = capsys.readouterr().out
+    assert "60행 중 50행 표시" in out
+
+
+def test_generic_table_no_notice_at_cap(capsys):
+    from kiwoom_cli.formatters import print_generic_table
+    rows = [{"stk_cd": f"{i:06d}"} for i in range(50)]
+    print_generic_table(rows, title="t")
+    assert "행 표시" not in capsys.readouterr().out
+
+
+def test_chart_truncation_notice(capsys):
+    from kiwoom_cli.formatters import print_chart_data
+    items = [{"dt": f"202601{i:02d}", "open_pric": "1"} for i in range(1, 41)]
+    print_chart_data(items, title="t")
+    assert "40행 중 30행 표시" in capsys.readouterr().out
