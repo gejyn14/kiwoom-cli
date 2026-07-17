@@ -184,3 +184,45 @@ def test_kr_cancel_preview_before_confirm(runner, isolated_env, monkeypatch):
     assert result.exit_code != 0
     assert calls == ["preview", "confirm"]
     mock_cls.assert_not_called()
+
+
+# ── Task 5: --price implies limit; market+price rejected ─
+
+def test_price_without_type_sends_limit(runner, isolated_env):
+    captured = {}
+
+    def capture(api_id, body=None, **kwargs):
+        captured["api_id"], captured["body"] = api_id, body
+        return {"ord_no": "1", "return_code": 0}, {}
+
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(capture)
+        result = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                     "--price", "70000", "--confirm"])
+    assert result.exit_code == 0
+    assert captured["body"]["trde_tp"] == "0"      # limit
+    assert captured["body"]["ord_uv"] == "70000"
+
+
+def test_no_price_no_type_sends_market(runner, isolated_env):
+    captured = {}
+
+    def capture(api_id, body=None, **kwargs):
+        captured["body"] = body
+        return {"ord_no": "1", "return_code": 0}, {}
+
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(capture)
+        result = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                     "--confirm"])
+    assert result.exit_code == 0
+    assert captured["body"]["trde_tp"] == "3"      # market
+    assert captured["body"]["ord_uv"] == ""
+
+
+def test_explicit_market_with_price_rejected(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                 "--price", "70000", "--type", "market", "--confirm"])
+    assert result.exit_code == 1
+    doc = json.loads(result.stdout)
+    assert doc["error"]["code"] == "INVALID_INPUT"

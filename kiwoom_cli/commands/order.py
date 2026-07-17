@@ -77,6 +77,25 @@ def _kr_type_or_exit(order_type: str) -> str:
     return ORDER_TYPES[order_type]
 
 
+_MARKET_TYPES = frozenset({"market", "market-ioc", "market-fok"})
+
+
+def _resolve_order_type(order_type: str | None, price: float) -> str:
+    """--type 미지정 시 가격 유무로 결정한다. 시장가 계열 + 가격 지정은 모순.
+
+    조용히 가격을 버리고 시장가로 나가는 사고(가격 지정 매수가 시장가 체결)를
+    막는 안전장치다.
+    """
+    if order_type is None:
+        return "limit" if price else "market"
+    if price and order_type in _MARKET_TYPES:
+        raise click.UsageError(
+            f"'{order_type}' 주문유형은 가격을 사용하지 않습니다. "
+            "--price를 빼거나 --type limit을 지정하세요."
+        )
+    return order_type
+
+
 def _order_type_help() -> str:
     lines = []
     for k, v in ORDER_TYPES.items():
@@ -185,18 +204,19 @@ def order():
 @click.argument("code")
 @click.argument("qty", type=int)
 @click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략, 미국주식은 소수점 4자리까지)")
-@click.option("--type", "order_type", default="market", type=click.Choice(ALL_ORDER_TYPES), help="주문유형")
+@click.option("--type", "order_type", default=None, type=click.Choice(ALL_ORDER_TYPES), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
 @click.option("--exchange", "exchange", default=None, type=click.Choice(ORDER_EXCHANGES), help="거래소 (기본: 국내 KRX / 미국 자동판별)")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (국내 전용)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 @click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
 @click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
-def buy(code: str, qty: int, price: float, order_type: str, exchange: str | None, cond_uv: int, confirm: bool, dry_run: bool, client_order_id: str | None):
+def buy(code: str, qty: int, price: float, order_type: str | None, exchange: str | None, cond_uv: int, confirm: bool, dry_run: bool, client_order_id: str | None):
     """주식 매수주문 (국내 kt10000 / 미국 ust20000).
 
     예: kiwoom order buy 005930 10 --price 70000 --type limit --confirm
         kiwoom order buy NVDA 10 --price 213.04 --confirm
     """
+    order_type = _resolve_order_type(order_type, price)
     if is_us_symbol(code, exchange):
         if cond_uv:
             err_console.print("[red]--cond-price는 국내 주문에서만 사용합니다.[/]")
@@ -228,19 +248,20 @@ def buy(code: str, qty: int, price: float, order_type: str, exchange: str | None
 @click.argument("code")
 @click.argument("qty", type=int)
 @click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략, 미국주식은 소수점 4자리까지)")
-@click.option("--type", "order_type", default="market", type=click.Choice(ALL_ORDER_TYPES), help="주문유형")
+@click.option("--type", "order_type", default=None, type=click.Choice(ALL_ORDER_TYPES), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
 @click.option("--exchange", "exchange", default=None, type=click.Choice(ORDER_EXCHANGES), help="거래소 (기본: 국내 KRX / 미국 자동판별)")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (국내 전용)")
 @click.option("--stop", "stop", type=float, default=0, help="STOP가격 (미국 stop/stop-limit 전용)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 @click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
 @click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
-def sell(code: str, qty: int, price: float, order_type: str, exchange: str | None, cond_uv: int, stop: float, confirm: bool, dry_run: bool, client_order_id: str | None):
+def sell(code: str, qty: int, price: float, order_type: str | None, exchange: str | None, cond_uv: int, stop: float, confirm: bool, dry_run: bool, client_order_id: str | None):
     """주식 매도주문 (국내 kt10001 / 미국 ust20001).
 
     예: kiwoom order sell 005930 10 --type market --confirm
         kiwoom order sell NVDA 5 --type stop-limit --price 200.5 --stop 199.99 --confirm
     """
+    order_type = _resolve_order_type(order_type, price)
     if is_us_symbol(code, exchange):
         if cond_uv:
             err_console.print("[red]--cond-price는 국내 주문에서만 사용합니다.[/]")
