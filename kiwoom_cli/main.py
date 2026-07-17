@@ -346,6 +346,11 @@ def config_domain(ctx, domain: str):
 @click.argument("profile_name")
 def config_use(profile_name: str):
     """기본 프로필 변경."""
+    if not config.is_valid_profile_name(profile_name):
+        fail_input(
+            f"잘못된 프로필 이름 '{profile_name}' — "
+            "영문자/숫자/하이픈/언더스코어 1~64자만 허용됩니다."
+        )
     profiles = config.get_profiles()
     if profile_name not in profiles:
         fail_input(f"프로필 '{profile_name}'을(를) 찾을 수 없습니다.")
@@ -538,6 +543,11 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str, confirm: bool):
             )
             err_console.print(json.dumps(body_dict, ensure_ascii=False, indent=2))
         confirm_gate(confirm)
+        # 주문 전송은 페이지네이션 대상이 아님 — 전역 --all-pages/--next-key를 무시한다
+        ctx = click.get_current_context(silent=True)
+        if ctx is not None and isinstance(ctx.obj, dict):
+            ctx.obj["all_pages"] = False
+            ctx.obj.pop("next_key", None)
 
     with KiwoomClient() as c:
         data, headers = c.request(

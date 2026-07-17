@@ -62,6 +62,7 @@ DEFAULT_CONFIG = {
     "profiles": {"default": {"domain": "mock", "account": ""}},
 }
 
+
 def secure_dir(path: Path) -> None:
     """디렉토리를 생성하고 소유자 전용(0700)으로 강제한다. 이미 있어도 매번 조인다."""
     path.mkdir(parents=True, exist_ok=True)
@@ -89,19 +90,44 @@ def harden_permissions() -> None:
 
     계좌번호(config.toml)·주문 원장(idempotency/)·레코딩(data/)이 v2.7 이하에서
     0755/0644로 생성되어 다른 로컬 사용자가 읽을 수 있었다. 아무것도 생성하지 않는다.
+
+    best-effort: root 소유 잔재 파일 등 chmod가 실패(OSError)해도 무시하고 계속
+    조인다 — 파일 하나가 다른 사용자 소유라고 해서 매 명령이 죽으면 안 된다.
     """
     if os.name != "posix" or not CONFIG_DIR.exists():
         return
-    CONFIG_DIR.chmod(0o700)
-    secure_file(CONFIG_FILE)
+
+    failed = False
+
+    def _try_chmod(path: Path, mode: int) -> None:
+        nonlocal failed
+        try:
+            path.chmod(mode)
+        except OSError:
+            failed = True
+
+    _try_chmod(CONFIG_DIR, 0o700)
+    if CONFIG_FILE.exists():
+        _try_chmod(CONFIG_FILE, 0o600)
     for sub in ("idempotency", "data", "cache"):
         d = CONFIG_DIR / sub
         if not d.is_dir():
             continue
-        d.chmod(0o700)
-        for f in d.iterdir():
+        _try_chmod(d, 0o700)
+        try:
+            entries = list(d.iterdir())
+        except OSError:
+            failed = True
+            continue
+        for f in entries:
             if f.is_file():
-                f.chmod(0o600)
+                _try_chmod(f, 0o600)
+
+    if failed:
+        from .output import err_console
+        err_console.print(
+            "[dim]일부 파일/디렉토리 권한을 조이지 못했습니다 (다른 사용자 소유 등) — 무시하고 계속합니다.[/]"
+        )
 
 
 def load_config() -> dict:

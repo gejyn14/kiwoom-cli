@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
-from kiwoom_cli import config
+from kiwoom_cli import config, idempotency
 from kiwoom_cli.main import cli
+from kiwoom_cli.recorder import NdjsonRecorder
+from tests.fakes import FakeKiwoomClient
 
 posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX file modes only")
 
@@ -97,6 +101,24 @@ def test_harden_permissions_noop_when_dir_missing(isolated_config):
 
 
 @posix_only
+def test_harden_permissions_survives_chmod_permission_error(isolated_config, monkeypatch, runner):
+    """foreign-owned 파일 등으로 chmod가 OSError를 내도 전체 명령이 죽으면 안 된다."""
+    config.ensure_config_dir()
+
+    def _raise(self, mode):
+        raise PermissionError("Operation not permitted")
+
+    monkeypatch.setattr(Path, "chmod", _raise)
+
+    # 직접 호출해도 예외가 새지 않아야 한다.
+    config.harden_permissions()
+
+    # 루트 콜백 경유(매 명령 실행)에서도 동일하게 살아남아야 한다.
+    result = runner.invoke(cli, ["config", "show"])
+    assert result.exit_code == 0
+
+
+@posix_only
 def test_cli_run_hardens_existing_install(runner, isolated_config):
     """아무 커맨드나 한 번 실행하면 기존 0755 디렉토리가 조여진다."""
     isolated_config.chmod(0o755)
@@ -106,9 +128,6 @@ def test_cli_run_hardens_existing_install(runner, isolated_config):
 
 
 # ── Task 2: ledger + recorder permissions ────────────────
-
-from kiwoom_cli import idempotency
-from kiwoom_cli.recorder import NdjsonRecorder
 
 
 @posix_only
@@ -189,14 +208,29 @@ def test_config_setup_rejects_traversal_profile(runner, isolated_config):
     assert doc["error"]["code"] == "INVALID_INPUT"
 
 
+def test_config_use_rejects_traversal_profile(runner, isolated_config):
+    """config use는 allowlist 검사를 프로필 존재 검사보다 먼저 해야 한다.
+
+    "../evil"는 allowlist에도 걸리고(무효 문자) 프로필 목록에도 없다(존재하지 않음) —
+    두 경로 모두 INVALID_INPUT/exit 1이라 code만으로는 어느 검사가 실행됐는지
+    구분되지 않으므로, allowlist 전용 메시지("영문자/숫자/하이픈/언더스코어")가
+    나왔는지까지 확인해 존재-검사 메시지("찾을 수 없습니다")로 새는 회귀를 잡는다.
+    """
+    result = runner.invoke(cli, ["-f", "json", "config", "use", "../evil"])
+    assert result.exit_code == 1
+    doc = json.loads(result.output)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "INVALID_INPUT"
+    assert "영문자/숫자/하이픈/언더스코어" in doc["error"]["message"]
+    assert "찾을 수 없습니다" not in doc["error"]["message"]
+
+
 def test_valid_profile_flag_still_works(runner, isolated_config):
     result = runner.invoke(cli, ["-p", "my_profile-2", "config", "show"])
     assert result.exit_code == 0
 
 
 # ── Task 4: raw api mutation gate ────────────────────────
-
-from tests.fakes import FakeKiwoomClient
 
 
 @pytest.fixture
@@ -244,6 +278,70 @@ def test_raw_api_table_shows_body_before_prompt(runner, isolated_config, fake_cl
     assert result.exit_code == 0
     assert "kt10003" in result.output
     assert "orig_ord_no" in result.output
+
+
+def test_raw_api_mutation_ignores_global_all_pages(runner, isolated_config, monkeypatch):
+    """--all-pages 지정 + 주문성 API cont-yn=Y 응답 → 재전송 없이 정확히 1회만 호출."""
+    captured: dict = {}
+
+    class SnapshotClient(FakeKiwoomClient):
+        def request(self, api_id, body=None, **kwargs):
+            ctx = click.get_current_context(silent=True)
+            captured["all_pages"] = ctx.obj.get("all_pages") if ctx and ctx.obj else None
+            return super().request(api_id, body, **kwargs)
+
+    fake = SnapshotClient()
+    fake.set_response("kt10000", {"return_code": 0}, {"cont-yn": "Y", "next-key": "K"})
+    monkeypatch.setattr("kiwoom_cli.main.KiwoomClient", lambda: fake)
+
+    result = runner.invoke(cli, [
+        "-f", "json", "--all-pages", "api", "kt10000", '{"stk_cd":"005930"}', "--confirm",
+    ])
+    assert result.exit_code == 0
+    assert len(fake.calls) == 1
+    # confirm_gate 통과 후 mutation 분기가 ctx.obj["all_pages"]를 False로 되돌렸어야 한다.
+    assert captured["all_pages"] is False
+
+
+def test_raw_api_mutation_clears_global_next_key(runner, isolated_config, monkeypatch):
+    """전역 --next-key 지정 + 주문성 API → mutation 분기에서 ctx.obj의 next_key가 제거된다."""
+    captured: dict = {}
+
+    class SnapshotClient(FakeKiwoomClient):
+        def request(self, api_id, body=None, **kwargs):
+            ctx = click.get_current_context(silent=True)
+            captured["has_next_key"] = bool(ctx and ctx.obj and ("next_key" in ctx.obj))
+            return super().request(api_id, body, **kwargs)
+
+    fake = SnapshotClient()
+    monkeypatch.setattr("kiwoom_cli.main.KiwoomClient", lambda: fake)
+
+    result = runner.invoke(cli, [
+        "-f", "json", "--next-key", "PREV", "api", "kt10000", '{"stk_cd":"005930"}', "--confirm",
+    ])
+    assert result.exit_code == 0
+    assert len(fake.calls) == 1
+    assert captured["has_next_key"] is False
+
+
+def test_raw_api_readonly_all_pages_unaffected(runner, isolated_config, monkeypatch):
+    """읽기전용 api id는 전역 --all-pages 처리를 그대로 유지한다 (ctx.obj 건드리지 않음)."""
+    captured: dict = {}
+
+    class SnapshotClient(FakeKiwoomClient):
+        def request(self, api_id, body=None, **kwargs):
+            ctx = click.get_current_context(silent=True)
+            captured["all_pages"] = ctx.obj.get("all_pages") if ctx and ctx.obj else None
+            return super().request(api_id, body, **kwargs)
+
+    fake = SnapshotClient()
+    monkeypatch.setattr("kiwoom_cli.main.KiwoomClient", lambda: fake)
+
+    result = runner.invoke(cli, [
+        "-f", "json", "--all-pages", "api", "ka10001", '{"stk_cd":"005930"}',
+    ])
+    assert result.exit_code == 0
+    assert captured["all_pages"] is True
 
 
 def test_mutation_apis_cover_all_order_ids():
