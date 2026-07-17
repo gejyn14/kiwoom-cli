@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import click
 
+from .. import envelope
+from ..formatters import _get_format
 from ..streaming import REALTIME_TYPES, run_stream
 
 
@@ -249,6 +251,12 @@ def custom(type_codes: str, codes: tuple[str, ...], raw: bool, max_events: int |
 @stream.command("types")
 def list_types():
     """사용 가능한 실시간 타입 코드 목록."""
+    if _get_format() == "json":
+        envelope.emit(data=[
+            {"type": code, "name": name, "description": desc}
+            for code, (name, desc) in REALTIME_TYPES.items()
+        ])
+        return
     from rich.table import Table
     from ..output import console
 

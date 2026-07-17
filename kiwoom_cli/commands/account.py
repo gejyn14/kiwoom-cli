@@ -6,10 +6,13 @@ from datetime import datetime
 
 import click
 
+from .. import envelope
 from ..client import KiwoomAPIError, KiwoomClient
 from ..formatters import (
     _find_list,
+    _get_format,
     fail_input,
+    human,
     print_account_eval,
     print_api_response,
     print_deposit,
@@ -97,7 +100,10 @@ def account_list():
         data, _ = c.request("ka00001", {})
         acct = data.get("acctNo", "")
         if acct:
-            click.echo(f"계좌번호: {acct}")
+            if _get_format() == "json":
+                envelope.emit(data={"account": acct})
+                return
+            human(f"계좌번호: {acct}")
         else:
             print_generic_table(data, title="계좌번호")
 

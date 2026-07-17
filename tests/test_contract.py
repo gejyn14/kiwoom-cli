@@ -207,3 +207,40 @@ def test_all_market_commands_expose_api_id():
         return missing
 
     assert walk(market) == []
+
+
+# ── Task 7: purity long tail ─────────────────────────────
+
+def test_config_setup_json_never_prompts_and_emits_envelope(runner, isolated_env, monkeypatch):
+    calls = []
+    monkeypatch.setattr("click.prompt", lambda *a, **k: calls.append("prompt") or "x")
+    result = runner.invoke(cli, ["-f", "json", "config", "setup"])
+    assert calls == []                      # 프롬프트 금지
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
+def test_config_setup_json_with_keys_succeeds(runner, isolated_env, monkeypatch):
+    monkeypatch.setattr("kiwoom_cli.config.set_appkey", lambda *a, **k: None)
+    monkeypatch.setattr("kiwoom_cli.config.set_secretkey", lambda *a, **k: None)
+    result = runner.invoke(cli, ["-f", "json", "config", "setup",
+                                 "--appkey", "AK", "--secretkey", "SK"])
+    assert result.exit_code == 0
+    doc = _doc(result)
+    assert doc["ok"] is True
+    assert doc["data"]["profile"] == "default"
+    assert doc["data"]["domain"] == "mock"
+
+
+def test_config_set_success_json_envelope(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "config", "set", "domain", "mock"])
+    assert result.exit_code == 0
+    doc = _doc(result)
+    assert doc["data"] == {"key": "domain", "value": "mock", "profile": "default"}
+
+
+def test_stream_types_json_envelope(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "stream", "types"])
+    assert result.exit_code == 0
+    doc = _doc(result)
+    assert isinstance(doc["data"], list) and len(doc["data"]) == 19

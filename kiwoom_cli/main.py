@@ -204,16 +204,37 @@ def config_cmd():
 
 @config_cmd.command("setup")
 @click.option("--profile", default="default", help="프로필 이름")
-@click.option("--appkey", prompt="App Key", help="키움 API App Key")
-@click.option("--secretkey", prompt="Secret Key", hide_input=True, help="키움 API Secret Key")
-@click.option("--domain", prompt="도메인 (prod=실거래, mock=모의투자)", type=click.Choice(["prod", "mock"]), default="mock", help="도메인")
-@click.option("--account", prompt="계좌번호 (없으면 Enter)", default="", help="계좌번호")
-@click.option("--token-storage", "token_storage",
-              prompt="토큰 저장 방식 (keychain=OS 키체인, env=KIWOOM_TOKEN 직접 관리)",
-              type=click.Choice(list(config.TOKEN_STORAGES)), default="keychain",
+@click.option("--appkey", default=None, help="키움 API App Key")
+@click.option("--secretkey", default=None, help="키움 API Secret Key")
+@click.option("--domain", default=None, type=click.Choice(["prod", "mock"]), help="도메인")
+@click.option("--account", default="", help="계좌번호")
+@click.option("--token-storage", "token_storage", default=None,
+              type=click.Choice(list(config.TOKEN_STORAGES)),
               help="접근토큰 저장 방식")
-def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account: str, token_storage: str):
+def config_setup(profile: str, appkey: str | None, secretkey: str | None,
+                 domain: str | None, account: str, token_storage: str | None):
     """초기 설정 (App Key, Secret Key, 도메인)."""
+    interactive = _get_format() == "table"
+    if not interactive:
+        missing = [n for n, v in (("--appkey", appkey), ("--secretkey", secretkey)) if not v]
+        if missing:
+            fail_input("config setup 필수 옵션 누락: " + ", ".join(missing))
+        domain = domain or "mock"
+        token_storage = token_storage or "keychain"
+    else:
+        if appkey is None:
+            appkey = click.prompt("App Key", err=True)
+        if secretkey is None:
+            secretkey = click.prompt("Secret Key", hide_input=True, err=True)
+        if domain is None:
+            domain = click.prompt("도메인 (prod=실거래, mock=모의투자)",
+                                  type=click.Choice(["prod", "mock"]), default="mock", err=True)
+        if not account:
+            account = click.prompt("계좌번호 (없으면 Enter)", default="", err=True)
+        if token_storage is None:
+            token_storage = click.prompt(
+                "토큰 저장 방식 (keychain=OS 키체인, env=KIWOOM_TOKEN 직접 관리)",
+                type=click.Choice(list(config.TOKEN_STORAGES)), default="keychain", err=True)
     if config.is_legacy_encrypted():
         # Old password-encrypted entries are unusable — purge before writing new keys
         config.purge_legacy_credentials()
@@ -229,6 +250,12 @@ def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account
         cfg.setdefault("general", {})["default_profile"] = profile
     cfg.pop("auth", None)
     config.save_config(cfg)
+    if _get_format() == "json":
+        envelope.emit(data={
+            "profile": profile, "domain": domain,
+            "account": account or "", "token_storage": token_storage,
+        })
+        return
     console.print(f"[green]설정 완료![/] (프로필: {profile})")
     console.print("  App Key/Secret Key: [bold]OS 키체인에 저장됨[/]")
     console.print(f"  도메인: [bold]{config.DOMAINS[domain]}[/]")
@@ -280,6 +307,9 @@ def config_set(ctx, key: str, value: str):
     cfg = config.load_config()
     cfg.setdefault("profiles", {}).setdefault(profile, {})[key] = value
     config.save_config(cfg)
+    if _get_format() == "json":
+        envelope.emit(data={"key": key, "value": value, "profile": profile})
+        return
     display = config.DOMAINS[value] if key == "domain" else value
     console.print(f"[green]{key} 변경:[/] {display} (프로필: {profile})")
 
@@ -301,6 +331,9 @@ def config_use(profile_name: str):
     if profile_name not in profiles:
         fail_input(f"프로필 '{profile_name}'을(를) 찾을 수 없습니다.")
     config.set_default_profile(profile_name)
+    if _get_format() == "json":
+        envelope.emit(data={"default_profile": profile_name})
+        return
     console.print(f"[green]기본 프로필 변경:[/] {profile_name}")
 
 
