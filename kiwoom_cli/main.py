@@ -498,7 +498,7 @@ def _param_spec(p: click.Parameter) -> dict:
     return spec
 
 
-def _describe_command(cmd: click.Command, path: str) -> dict:
+def _describe_command(cmd: click.Command, path: str, depth: int | None = None) -> dict:
     spec: dict = {
         "path": path,
         "help": (cmd.help or cmd.short_help or "").strip(),
@@ -506,12 +506,26 @@ def _describe_command(cmd: click.Command, path: str) -> dict:
         "options": [_param_spec(p) for p in cmd.params if isinstance(p, click.Option)],
     }
     if isinstance(cmd, click.Group):
-        spec["subcommands"] = [
-            _describe_command(sub, f"{path} {name}")
-            for name, sub in sorted(cmd.commands.items())
-            if not sub.hidden
-        ]
+        if depth is not None and depth <= 0:
+            spec["subcommands"] = []
+        else:
+            next_depth = None if depth is None else depth - 1
+            spec["subcommands"] = [
+                _describe_command(sub, f"{path} {name}", next_depth)
+                for name, sub in sorted(cmd.commands.items())
+                if not sub.hidden
+            ]
     return spec
+
+
+def _collect_paths(cmd: click.Command, path: str) -> list[dict]:
+    head = ((cmd.help or cmd.short_help or "").strip().splitlines() or [""])[0]
+    rows = [{"path": path, "help": head}]
+    if isinstance(cmd, click.Group):
+        for name, sub in sorted(cmd.commands.items()):
+            if not sub.hidden:
+                rows.extend(_collect_paths(sub, f"{path} {name}"))
+    return rows
 
 
 def _render_describe(spec: dict, depth: int = 0) -> None:
@@ -538,14 +552,19 @@ def _render_describe(spec: dict, depth: int = 0) -> None:
 
 @cli.command("describe")
 @click.argument("command_path", nargs=-1)
-def describe(command_path: tuple[str, ...]):
+@click.option("--paths", "paths_only", is_flag=True,
+              help="경로+한줄설명 평면 목록만 출력 (전체 트리 대비 토큰 절약 — 발견용)")
+@click.option("--depth", type=int, default=None,
+              help="하위 명령 재귀 깊이 제한 (예: --depth 1 = 한 단계만)")
+def describe(command_path: tuple[str, ...], paths_only: bool, depth: int | None):
     """CLI 명령 구조 자기서술 — 경로/도움말/인자/옵션(타입·기본값·choices).
 
     에이전트가 도구 스키마를 파악할 때 사용합니다.
 
     \b
-    예: kiwoom describe                  # 전체 트리
-        kiwoom describe order buy -f json
+    예: kiwoom describe --paths -f json   # 전체 경로 목록 (저비용 발견)
+        kiwoom describe order buy -f json # 단일 명령 상세 스키마
+        kiwoom describe order --depth 1
     """
     cmd: click.Command = cli
     path = "kiwoom"
@@ -554,7 +573,15 @@ def describe(command_path: tuple[str, ...]):
             raise click.ClickException(f"명령을 찾을 수 없습니다: {' '.join(command_path)}")
         cmd = cmd.commands[name]
         path += f" {name}"
-    spec = _describe_command(cmd, path)
+    if paths_only:
+        rows = _collect_paths(cmd, path)
+        if _get_format() == "json":
+            envelope.emit(data=rows)
+            return
+        for r in rows:
+            console.print(f"[bold]{r['path']}[/]  [dim]{r['help']}[/]", highlight=False)
+        return
+    spec = _describe_command(cmd, path, depth)
     if _get_format() == "json":
         envelope.emit(data=spec)
         return

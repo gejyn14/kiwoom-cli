@@ -149,3 +149,42 @@ def test_next_key_and_all_pages_mutually_exclusive(runner, isolated_env):
                                  "stock", "info", "005930"])
     assert result.exit_code == 1
     assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
+# ── Task 5: describe discovery modes ─────────────────────
+
+def test_describe_paths_flat_list(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "describe", "--paths"])
+    assert result.exit_code == 0
+    doc = _doc(result)
+    assert isinstance(doc["data"], list)
+    assert len(doc["data"]) > 100
+    sample = doc["data"][0]
+    assert set(sample.keys()) == {"path", "help"}
+
+
+def test_describe_depth_limits_recursion(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "describe", "--depth", "1"])
+    assert result.exit_code == 0
+    top = _doc(result)["data"]
+    by_name = {sub["path"].split()[-1]: sub for sub in top["subcommands"]}
+
+    # order는 그룹(하위 8개 커맨드)이지만 --depth 1이 자식 재귀를 끊는다
+    order_sub = by_name["order"]
+    assert order_sub["subcommands"] == []
+
+    # 깊이 제한과 무관하게, 잘린 그 자리(depth=0)의 자체 옵션/인자는 그대로 채워진다
+    describe_sub = by_name["describe"]
+    assert "subcommands" not in describe_sub  # describe는 그룹이 아니므로 키 자체가 없음
+    assert {o["name"] for o in describe_sub["options"]} >= {"paths_only", "depth"}
+
+    # --depth 없이 같은 그룹을 조회하면 실제로 하위 커맨드가 채워진다는 대조군
+    full = runner.invoke(cli, ["-f", "json", "describe", "order"])
+    assert len(_doc(full)["data"]["subcommands"]) == 8
+
+
+def test_describe_full_tree_still_default(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "describe", "order", "buy"])
+    assert result.exit_code == 0
+    spec = _doc(result)["data"]
+    assert any(o["name"] == "client_order_id" for o in spec["options"])
