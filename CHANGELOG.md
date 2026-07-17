@@ -5,7 +5,7 @@
 ### Added
 - `kiwoom find <키워드>` — 명령어 + API 통합 검색
 - `kiwoom api list [키워드]` — API 레지스트리 목록/검색 (토큰 불필요)
-- 사람이 읽는 옵션 값 (`--side sell`, `--period 1h` 등, account/market 18개 옵션) — 기존 숫자 코드도 계속 허용
+- 사람이 읽는 옵션 값 (`--side sell`, `--period 1h` 등, account/market 19개 옵션) — 기존 숫자 코드도 계속 허용
 - `--all-pages` 상한 도달 테스트, 통합 명령 양쪽 실패 시 json 모드는 `UPSTREAM_ERROR` envelope + exit 2, table 모드도 동일하게 빨간 stderr 메시지 + exit 2 (이전엔 조용히 exit 0)
 
 ### Fixed
@@ -14,7 +14,7 @@
 - 테이블 50행(차트 30행) 초과 시 무언 절단 → 안내 문구 표시
 - `config setup`이 루트 `-p/--profile`을 무시하던 문제
 - 미국 거래소 자동판별 호출(usa10098)과 주문 `--dry-run`의 시세 보조 호출이 전역 `--next-key`/`--all-pages` 커서를 소비하거나 `meta.cont`를 남기던 문제 — 두 호출 모두 `internal`로 표시해 커서 계약에서 제외
-- `find`/`api list`가 사용자 입력·레지스트리 값의 Rich 마크업을 이스케이프하지 않던 문제 (예: `kiwoom find "[/]"`)
+- `find`가 사용자 입력·매칭 결과 값의 Rich 마크업을 이스케이프하지 않던 문제 (예: `kiwoom find "[/]"`가 `MarkupError`로 크래시)
 - 금현물 주문 예시 종목코드 통일 (`M04020000`)
 
 ### Changed
