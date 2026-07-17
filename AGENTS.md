@@ -88,8 +88,8 @@ kiwoom -f json --all-pages market rank volume
   `--next-key`로 이어서 조회할 수 있습니다.
 
 여러 API를 연속 호출하는 명령(`account balance --market all`, `dashboard` 등)에서는
-`meta.cont`가 마지막 하위 호출 기준이며, `--next-key`는 명령의 첫 물리적 요청(미국
-종목은 거래소 판별 호출일 수 있음)에 주입되므로 페이지네이션은 `--market kr|us`처럼
+`meta.cont`가 마지막 하위 호출 기준이며, `--next-key`는 명령의 첫 물리적 요청(내부
+보조 호출 제외 — 아래 참조)에 주입되므로 페이지네이션은 `--market kr|us`처럼
 단일 API 경로에서 사용하세요.
 
 미국 심볼 거래소 자동판별 보조 호출(usa10098)과 주문 `--dry-run`의 시세 조회

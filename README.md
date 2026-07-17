@@ -190,7 +190,7 @@ kiwoom -f json order buy 005930 10 --price 70000 --type limit --confirm --client
 - 페이지네이션(연속조회)은 전역 `--all-pages`(끝까지 자동 수집·리스트 병합) 또는 `--next-key <값>`(특정 페이지부터 재조회)로 명시 제어합니다 — 커서를 직접 다루지 않아도 됩니다.
 - `kiwoom describe --paths -f json`으로 전체 명령 경로를 저비용에 훑어본 뒤, 필요한 명령만 `kiwoom describe <경로> -f json`으로 상세 스키마를 조회하세요.
 - 테이블 출력은 50행(차트는 30행)에서 잘리며, 잘린 경우 안내 문구가 표시됩니다 — 전체 데이터가 필요하면 `-f json` 또는 `-f csv`를 사용하세요.
-- 옵션 값은 사람이 읽는 이름(`--side sell`, `--period 1h` 등)이 표준이며, 기존 숫자 코드(`--side 1`)도 계속 허용됩니다.
+- `account`/`market`의 옵션 19개(`--side sell`, `--period 1h` 등)는 사람이 읽는 이름이 표준이며, 기존 숫자 코드(`--side 1`)도 계속 허용됩니다 (`stock` 등 나머지 명령의 숫자 옵션은 이번 티어의 범위 밖).
 - 자세한 패턴은 [Wiki: AI 에이전트 가이드](https://github.com/gejyn14/kiwoom-cli/wiki/AI-Agents) 참고.
 
 ### 명령어/API 찾기
