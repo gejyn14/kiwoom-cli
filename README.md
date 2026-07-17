@@ -187,7 +187,8 @@ kiwoom -f json order buy 005930 10 --price 70000 --type limit --confirm --client
 ```
 
 - 어떤 명령도 비밀번호·생체인증을 요구하지 않으므로 에이전트 세션이 중간에 멈추지 않습니다. json/csv 모드에서는 확인 프롬프트 대신 `CONFIRMATION_REQUIRED` 오류(exit 1)로 응답합니다.
-- 페이지네이션(연속조회)은 자동 처리 — 에이전트가 커서를 관리할 필요가 없습니다.
+- 페이지네이션(연속조회)은 전역 `--all-pages`(끝까지 자동 수집·리스트 병합) 또는 `--next-key <값>`(특정 페이지부터 재조회)로 명시 제어합니다 — 커서를 직접 다루지 않아도 됩니다.
+- `kiwoom describe --paths -f json`으로 전체 명령 경로를 저비용에 훑어본 뒤, 필요한 명령만 `kiwoom describe <경로> -f json`으로 상세 스키마를 조회하세요.
 - 자세한 패턴은 [Wiki: AI 에이전트 가이드](https://github.com/gejyn14/kiwoom-cli/wiki/AI-Agents) 참고.
 
 ### 샌드박스 환경 (키체인 접근 불가)

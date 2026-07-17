@@ -278,10 +278,12 @@ def run_stream(
     """Connect to WebSocket and stream real-time data.
 
     max_events/duration/until 종료 조건 도달 시 소켓을 닫고 정상 종료(exit 0).
-    json 모드에서는 REAL 이벤트를 NDJSON 한 줄씩, 오류는 envelope 오류 한 줄
-    (exit 2, 인증은 exit 3)로 출력한다. table/raw 모드 출력은 기존과 동일.
-    record가 None이 아니면 정규화 이벤트를 NDJSON 파일에도 기록한다
-    (""=기본 레이아웃, 그 외=명시 경로. 출력 형식과 무관).
+    json 모드에서는 REAL 이벤트를 NDJSON 한 줄씩, 오류는 envelope 오류 한 줄로
+    출력한다: 연결/등록 오류는 exit 2, 인증 문제는 exit 3. `websockets` 패키지가
+    없으면 DEPENDENCY_MISSING으로 exit 1, `--raw`를 json 모드와 함께 쓰면
+    INVALID_INPUT으로 exit 1(둘 다 소켓 연결 이전에 검증). table/raw 모드
+    출력은 기존과 동일. record가 None이 아니면 정규화 이벤트를 NDJSON 파일에도
+    기록한다 (""=기본 레이아웃, 그 외=명시 경로. 출력 형식과 무관).
     """
     import asyncio
 
