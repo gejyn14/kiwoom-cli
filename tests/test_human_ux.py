@@ -334,3 +334,10 @@ def test_balance_both_fail_table_still_exit_2(runner, isolated_env):
         mock_cls.return_value = _mock_kiwoom_client(_raise_api_error)
         result = runner.invoke(cli, ["account", "balance"])
     assert result.exit_code == 2
+
+
+def test_deposit_both_fail_table_exits_2(runner, isolated_env):
+    with patch("kiwoom_cli.commands.account.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(_raise_api_error)
+        result = runner.invoke(cli, ["account", "deposit"])
+    assert result.exit_code == 2

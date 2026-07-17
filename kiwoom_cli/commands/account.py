@@ -51,13 +51,15 @@ def _today() -> str:
 
 
 def _run_unified(market: str, kr_fn, us_fn) -> None:
-    """국내/미국 섹션을 순차 실행. all이면 한쪽 실패는 경고로 강등."""
+    """국내/미국 섹션을 순차 실행. all이면 한쪽 실패는 경고로 강등, 양쪽 실패는 오류."""
+    kr_failed = us_failed = False
     if market in ("all", "kr"):
         try:
             kr_fn()
         except KiwoomAPIError as e:
             if market == "kr":
                 raise
+            kr_failed = True
             err_console.print(f"[dim]국내 조회 실패: {e}[/]")
     if market in ("all", "us"):
         try:
@@ -65,7 +67,10 @@ def _run_unified(market: str, kr_fn, us_fn) -> None:
         except KiwoomAPIError as e:
             if market == "us":
                 raise
+            us_failed = True
             err_console.print(f"[dim]미국 조회 실패 (미국주식 미개설 계좌일 수 있음): {e}[/]")
+    if market == "all" and kr_failed and us_failed:
+        fail_api("국내/미국 조회가 모두 실패했습니다.")
 
 
 def _unified_structured(market: str, kr_fetch, us_fetch) -> bool:
