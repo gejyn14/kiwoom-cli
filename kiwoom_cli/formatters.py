@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import sys
-from typing import Any
+from typing import Any, NoReturn
 
 import click
 from rich.panel import Panel
@@ -34,7 +34,7 @@ def human(renderable: Any) -> None:
         err_console.print(renderable)
 
 
-def fail_input(message: str, *, code: str = "INVALID_INPUT") -> None:
+def fail_input(message: str, *, code: str = "INVALID_INPUT") -> NoReturn:
     """입력 오류 계약 종료: table=stderr 빨간 메시지, json/csv=envelope 오류. exit 1.
 
     커맨드 본문에서 err_console.print + SystemExit(1) 패턴 대신 사용한다 —
@@ -45,6 +45,19 @@ def fail_input(message: str, *, code: str = "INVALID_INPUT") -> None:
     else:
         envelope.emit(error=envelope.error_body(message, code=code, retryable=False))
     raise SystemExit(1)
+
+
+def fail_api(message: str, *, code: str = "UPSTREAM_ERROR") -> NoReturn:
+    """API 계열 오류 계약 종료: table=stderr 빨간 메시지, json/csv=envelope 오류. exit 2.
+
+    통합 명령(국내+미국)에서 양쪽 모두 실패한 경우처럼, 전역 핸들러를 타지
+    않는 API 실패 경로에서 사용한다 — json 모드 stdout이 비지 않게 한다.
+    """
+    if _get_format() == "table":
+        err_console.print(f"[red]{message}[/]")
+    else:
+        envelope.emit(error=envelope.error_body(message, code=code, retryable=False))
+    raise SystemExit(2)
 
 
 def _output_json(data: Any) -> None:

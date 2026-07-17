@@ -11,6 +11,7 @@ from ..client import KiwoomAPIError, KiwoomClient
 from ..formatters import (
     _find_list,
     _get_format,
+    fail_api,
     fail_input,
     human,
     print_account_eval,
@@ -93,8 +94,7 @@ def _unified_structured(market: str, kr_fetch, us_fetch) -> bool:
                 raise
             err_console.print(f"[dim]미국 조회 실패: {e}[/]")
     if market == "all" and kr_data is None and us_data is None:
-        err_console.print("[red]국내/미국 잔고 조회가 모두 실패했습니다.[/]")
-        raise SystemExit(2)
+        fail_api("국내/미국 조회가 모두 실패했습니다.")
     _output_json({"kr": kr_data, "us": us_data})
     return True
 
@@ -146,8 +146,7 @@ def balance(market: str, dmst_stex_tp: str, qry_tp: str):
                     raise
                 err_console.print(f"[dim]미국 잔고 조회 실패 (미국주식 미개설 계좌일 수 있음): {e}[/]")
     if market == "all" and kr_data is None and us_data is None:
-        err_console.print("[red]국내/미국 잔고 조회가 모두 실패했습니다.[/]")
-        raise SystemExit(2)
+        fail_api("국내/미국 잔고 조회가 모두 실패했습니다.")
     if market == "kr":
         print_account_eval(kr_data or {})
     else:

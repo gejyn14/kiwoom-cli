@@ -299,3 +299,38 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # by one relative to its own itemized decorator list; this assertion pins the verified
     # ground truth instead. See task-6-report.md for the full recount.
     assert len(converted) == 19
+
+
+# ── Task 8: both-fail envelope (fail_api) ────────────────
+
+def _raise_api_error(api_id, body=None, **kwargs):
+    raise KiwoomAPIError(1999, "server down")
+
+
+def test_balance_both_fail_json_emits_envelope_exit_2(runner, isolated_env):
+    with patch("kiwoom_cli.commands.account.KiwoomClient") as mock_cls, \
+         patch("kiwoom_cli.commands.us.account_ops.fetch_balance",
+               side_effect=KiwoomAPIError(1999, "us down")):
+        mock_cls.return_value = _mock_kiwoom_client(_raise_api_error)
+        result = runner.invoke(cli, ["-f", "json", "account", "balance"])
+    assert result.exit_code == 2
+    doc = _doc(result)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "UPSTREAM_ERROR"
+
+
+def test_deposit_both_fail_json_emits_envelope_exit_2(runner, isolated_env):
+    with patch("kiwoom_cli.commands.account.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(_raise_api_error)
+        result = runner.invoke(cli, ["-f", "json", "account", "deposit"])
+    assert result.exit_code == 2
+    assert _doc(result)["error"]["code"] == "UPSTREAM_ERROR"
+
+
+def test_balance_both_fail_table_still_exit_2(runner, isolated_env):
+    with patch("kiwoom_cli.commands.account.KiwoomClient") as mock_cls, \
+         patch("kiwoom_cli.commands.us.account_ops.fetch_balance",
+               side_effect=KiwoomAPIError(1999, "us down")):
+        mock_cls.return_value = _mock_kiwoom_client(_raise_api_error)
+        result = runner.invoke(cli, ["account", "balance"])
+    assert result.exit_code == 2
