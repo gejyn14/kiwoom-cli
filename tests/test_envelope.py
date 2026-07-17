@@ -79,10 +79,11 @@ def _patch_raising_client(monkeypatch, exc):
     monkeypatch.setattr("kiwoom_cli.commands.stock.KiwoomClient", lambda *a, **k: fake)
 
 
-def test_kiwoom_api_error_envelope_exit_2(runner, monkeypatch):
+def test_kiwoom_api_error_token_expired_envelope_exit_3(runner, monkeypatch):
+    # 8005는 TOKEN_EXPIRED로 분류되므로 exit 3 (Tier-2 Task 1: auth-aware exit code).
     _patch_raising_client(monkeypatch, KiwoomAPIError(8005, "Token이 유효하지 않습니다"))
     result = runner.invoke(cli, ["-f", "json", "stock", "info", "005930"])
-    assert result.exit_code == 2
+    assert result.exit_code == 3
     doc = json.loads(result.stdout)
     assert doc["ok"] is False
     assert doc["data"] is None

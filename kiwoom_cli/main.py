@@ -39,17 +39,25 @@ class KiwoomGroup(click.Group):
 
     @staticmethod
     def _json_mode(ctx) -> bool:
-        return (ctx.obj.get("format", "table") if ctx.obj else "table") == "json"
+        # 알 수 없는 하위 명령 등 ctx.obj가 채워지기 전의 오류에서도 -f json을 인식해야
+        # envelope 계약이 지켜진다 (루트 파라미터는 이미 파싱되어 있음).
+        if ctx.obj and ctx.obj.get("format"):
+            return ctx.obj["format"] == "json"
+        return ctx.params.get("output_format") == "json"
 
     def invoke(self, ctx):
         try:
             return super().invoke(ctx)
         except KiwoomAPIError as e:
+            stable_code, _ = envelope.classify(upstream_code=e.code)
+            auth_related = stable_code in ("TOKEN_EXPIRED", "AUTH_REQUIRED")
             if self._json_mode(ctx):
                 envelope.emit(error=envelope.error_body(e.msg, upstream_code=e.code))
+            elif auth_related:
+                console.print(f"[red]인증 오류:[/] {e} [dim]kiwoom auth login[/]")
             else:
                 console.print(f"[red]API 오류:[/] {e}")
-            ctx.exit(EXIT_API)
+            ctx.exit(EXIT_AUTH if auth_related else EXIT_API)
         except KiwoomAuthError:
             keychain_ok = auth.keychain_readable()
             if self._json_mode(ctx):
@@ -100,6 +108,16 @@ class KiwoomGroup(click.Group):
                 ))
             else:
                 console.print("[red]연결 오류:[/] API 서버에 연결할 수 없습니다. 도메인을 확인하세요.")
+            ctx.exit(EXIT_API)
+        except httpx.RequestError as e:
+            # 타임아웃 등 나머지 전송 오류 — traceback 대신 계약대로 종료
+            if self._json_mode(ctx):
+                envelope.emit(error=envelope.error_body(
+                    f"네트워크 오류: {type(e).__name__}. 잠시 후 재시도하세요.",
+                    code="NETWORK_ERROR", retryable=True,
+                ))
+            else:
+                console.print(f"[red]네트워크 오류:[/] {type(e).__name__} — 잠시 후 재시도하세요.")
             ctx.exit(EXIT_API)
         except click.ClickException as e:
             # 인자/옵션 오류(UsageError 포함)도 json 모드에서는 envelope로.
