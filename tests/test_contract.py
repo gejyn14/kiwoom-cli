@@ -87,3 +87,35 @@ def test_read_timeout_emits_network_error_exit_2(runner, isolated_env):
     doc = _doc(result)
     assert doc["error"]["code"] == "NETWORK_ERROR"
     assert doc["error"]["retryable"] is True
+
+
+# ── Task 2: fail_input sweep (order paths) ───────────────
+
+def test_kr_float_price_json_envelope(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                 "--price", "70000.5", "--type", "limit", "--dry-run"])
+    assert result.exit_code == 1
+    doc = _doc(result)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "INVALID_INPUT"
+
+
+def test_us_partial_cancel_json_envelope(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "order", "cancel", "0001", "NVDA",
+                                 "--qty", "5", "--confirm"])
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
+def test_cond_price_on_us_symbol_json_envelope(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "order", "buy", "NVDA", "10",
+                                 "--cond-price", "100", "--confirm"])
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
+def test_fail_input_table_mode_stderr_only(runner, isolated_env):
+    result = runner.invoke(cli, ["order", "buy", "005930", "10",
+                                 "--price", "70000.5", "--type", "limit", "--dry-run"])
+    assert result.exit_code == 1
+    assert result.stdout.strip() == ""
