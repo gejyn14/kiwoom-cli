@@ -82,6 +82,7 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 |---|---|---|
 | `CONFIRMATION_REQUIRED` | ✗ | 변이 명령에 `--confirm`/`--yes` 누락 (json/csv 모드) |
 | `VALIDATION_FAILED` | ✗ | `order validate` 실패 — 실패 항목은 `error.details` |
+| `IDEMPOTENCY_CONFLICT` | ✗ | 같은 `--client-order-id`가 다른 주문 내용으로 이미 사용됨. 재시도라면 인자가 이전 실행과 동일한지 확인, 새 주문이면 새 키 사용. exit 1, 전송되지 않음 |
 | `AUTH_REQUIRED` | ✗ | 토큰 없음. 키체인 불가 환경이면 메시지가 `KIWOOM_TOKEN` 안내 |
 | `TOKEN_EXPIRED` | ✗ | 재로그인 필요 |
 | `INVALID_INPUT` | ✗ | 파라미터 형식/누락 (upstream 1511/1512/1517/2) |
@@ -103,6 +104,10 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 | `--dry-run` | 전송될 body를 그대로 출력, **아무것도 전송하지 않음**. `--confirm`보다 우선 |
 | `--client-order-id KEY` | 멱등키. 같은 키 재실행 → 재전송 없이 이전 응답 + `idempotent_replay: true` |
 | `order validate buy\|sell CODE QTY` | read-only 사전점검: `symbol_ok` / `market_open`(KST 시계 휴리스틱, `heuristic: true`) / `sufficient_balance` / `price_ok` |
+
+멱등키는 주문 내용(api_id+body)의 fingerprint에 바인딩되며, 조회→전송→기록
+구간은 원장 파일 잠금으로 프로세스 간 직렬화된다. 같은 키로 다른 내용을
+보내면 `IDEMPOTENCY_CONFLICT`.
 
 권장 주문 순서: **validate → --dry-run → --confirm --client-order-id**.
 항상 `meta.env`를 확인하고, 실거래(`prod`)에서는 dry-run을 생략하지 마세요.

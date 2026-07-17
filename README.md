@@ -423,6 +423,8 @@ kiwoom order condition search 001 --confirm
 
 주문유형: `limit` `market` `conditional` `after-hours` `pre-market` `single` `best` `first` `ioc` `market-ioc` `best-ioc` `fok` `market-fok` `best-fok` `stop` `mid` `mid-ioc` `mid-fok`
 
+`--price`를 지정하고 `--type`을 생략하면 지정가(limit)로 주문됩니다. 시장가 주문은 `--price` 없이 실행하세요.
+
 ### 주문 안전장치 (v2.4)
 
 - `--dry-run` — 실제 전송될 request body를 그대로 출력하고 아무것도 전송하지 않습니다. `--confirm`보다 우선합니다. 시장가 주문은 현재가를 조회해 예상비용(`est_cost`)을 계산합니다.

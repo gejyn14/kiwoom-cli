@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed — 주문 안전 (v2.5.0 전수 리뷰 Tier 1)
+- 모든 주문 명령(주식/신용/금현물/미국)에서 주문 **미리보기가 확인 프롬프트보다 먼저** 표시되도록 수정. 미국 주문은 자동 판별된 거래소까지 확인 전에 표시.
+- `--price` 지정 + `--type` 미지정 시 **limit으로 추론** (기존: 조용히 시장가 전송). `--price` + 시장가 계열 `--type`은 INVALID_INPUT으로 거부.
+- `account exchange apply`(환전)가 공용 confirm_gate를 사용하도록 수정 — json/csv 모드에서 프롬프트 없이 CONFIRMATION_REQUIRED(exit 1), `--yes` 별칭 추가.
+- 멱등성 원장 강화: `--client-order-id`가 주문 내용 fingerprint에 바인딩되어 같은 키+다른 주문은 **IDEMPOTENCY_CONFLICT**(exit 1)로 거부. 조회→전송→기록 구간 파일 잠금으로 동시 실행 시 중복 주문 방지.
+- `stream`/`watch`가 `--profile`과 `KIWOOM_DOMAIN`을 REST 경로와 동일하게 존중 (기존: 항상 기본 프로필/설정 도메인으로 접속).
+
+### Added
+- 신용/금현물 주문에 `--dry-run`, `--client-order-id` 지원 (주식/미국 주문과 동일한 안전장치).
+
 ## v2.5.0 (2026-07-17) — 에이전트 네이티브: 정규화 데이터·NDJSON 스트리밍·녹화/히스토리
 
 **기존 `-f json` 소비자에게 breaking change**입니다 — API 응답의 `data`가
