@@ -17,7 +17,7 @@ import pytest
 from click.testing import CliRunner
 
 from kiwoom_cli.client import KiwoomAPIError
-from kiwoom_cli.commands.order import KST, ORDER_TYPES
+from kiwoom_cli.commands.order import _MARKET_TYPES, KST, ORDER_TYPES
 from kiwoom_cli.main import cli
 from tests.fakes import FakeKiwoomClient
 
@@ -467,11 +467,15 @@ def test_condition_stop_sends_trnm_cnsrclr(runner, fake_client):
 
 @pytest.mark.parametrize("type_name,api_code", list(ORDER_TYPES.items()))
 def test_order_type_translation(runner, fake_client, type_name, api_code):
-    """Each of 18 order types maps to correct API code in trde_tp field."""
-    result = runner.invoke(
-        cli,
-        ["order", "buy", "005930", "10", "--type", type_name, "--price", "70000", "--confirm"],
-    )
+    """Each of 18 order types maps to correct API code in trde_tp field.
+
+    시장가 계열(market/market-ioc/market-fok)은 --price와 함께 쓰면 모순으로
+    거부되므로(Task 5), 이 파라미터들만 --price 없이 호출한다.
+    """
+    args = ["order", "buy", "005930", "10", "--type", type_name, "--confirm"]
+    if type_name not in _MARKET_TYPES:
+        args += ["--price", "70000"]
+    result = runner.invoke(cli, args)
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["trde_tp"] == api_code

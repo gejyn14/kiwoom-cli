@@ -5,9 +5,10 @@ Order commands prompt for confirmation by default (table mode). Use
 --confirm the command fails with CONFIRMATION_REQUIRED (exit 1) so
 non-interactive/agent runs never hang.
 
-buy/sell/modify/cancel additionally support:
+buy/sell/modify/cancel (주식/신용/금현물/미국) 공통 지원:
   --dry-run           전송될 body를 구성만 하고 전송하지 않음 (--confirm보다 우선)
-  --client-order-id   멱등성 키 — 같은 키 재실행 시 재전송 없이 이전 응답 반환
+  --client-order-id   멱등성 키 — 같은 키+같은 내용 재실행 시 재전송 없이 이전 응답
+                      반환, 같은 키+다른 내용이면 IDEMPOTENCY_CONFLICT(exit 1)
 
 Subgroups:
   order buy/sell/modify/cancel     - Stock orders (kt10000-kt10003)
@@ -26,11 +27,11 @@ from typing import Any
 import click
 from rich.panel import Panel
 
-from .. import envelope, idempotency
+from .. import envelope
 from ..client import KiwoomAPIError, KiwoomClient
-from ..formatters import _get_format, human, print_order_result, print_generic_table
+from ..formatters import _get_format, human, print_generic_table
 from ..output import err_console
-from ._mutation import confirm_gate, dry_run_payload, finish_dry_run
+from ._mutation import confirm_gate, dry_run_payload, finish_dry_run, send_order
 from .us import order_ops as us_order_ops
 from .us._constants import US_ORDER_TYPES
 from .us.detect import is_us_symbol
@@ -77,6 +78,25 @@ def _kr_type_or_exit(order_type: str) -> str:
     return ORDER_TYPES[order_type]
 
 
+_MARKET_TYPES = frozenset({"market", "market-ioc", "market-fok"})
+
+
+def _resolve_order_type(order_type: str | None, price: float) -> str:
+    """--type 미지정 시 가격 유무로 결정한다. 시장가 계열 + 가격 지정은 모순.
+
+    조용히 가격을 버리고 시장가로 나가는 사고(가격 지정 매수가 시장가 체결)를
+    막는 안전장치다.
+    """
+    if order_type is None:
+        return "limit" if price else "market"
+    if price and order_type in _MARKET_TYPES:
+        raise click.UsageError(
+            f"'{order_type}' 주문유형은 가격을 사용하지 않습니다. "
+            "--price를 빼거나 --type limit을 지정하세요."
+        )
+    return order_type
+
+
 def _order_type_help() -> str:
     lines = []
     for k, v in ORDER_TYPES.items():
@@ -115,22 +135,6 @@ def _dry_run_kr(api_id: str, side: str, code: str, qty: int, kr_price: int,
         order_type=order_type, exchange=dmst_stex_tp, currency="KRW",
         body=body, price_source=src,
     ), show_preview)
-
-
-def _send_order(api_id: str, body: dict[str, Any], action: str,
-                client_order_id: str | None) -> None:
-    """주문 전송 + 멱등성 처리. 키가 원장에 있으면 전송 없이 이전 응답 반환."""
-    if client_order_id:
-        hit = idempotency.lookup(client_order_id)
-        if hit is not None:
-            human(f"[dim]멱등성 키 '{client_order_id}' 기존 기록 — 재전송하지 않고 이전 응답을 반환합니다.[/]")
-            print_order_result({**hit["response"], "idempotent_replay": True}, action)
-            return
-    with KiwoomClient() as c:
-        data, _ = c.request(api_id, body)
-    if client_order_id:
-        idempotency.record(client_order_id, api_id, data)
-    print_order_result(data, action)
 
 
 def _show_order_preview(action: str, code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str | None = None) -> None:
@@ -201,18 +205,19 @@ def order():
 @click.argument("code")
 @click.argument("qty", type=int)
 @click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략, 미국주식은 소수점 4자리까지)")
-@click.option("--type", "order_type", default="market", type=click.Choice(ALL_ORDER_TYPES), help="주문유형")
+@click.option("--type", "order_type", default=None, type=click.Choice(ALL_ORDER_TYPES), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
 @click.option("--exchange", "exchange", default=None, type=click.Choice(ORDER_EXCHANGES), help="거래소 (기본: 국내 KRX / 미국 자동판별)")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (국내 전용)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 @click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
 @click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
-def buy(code: str, qty: int, price: float, order_type: str, exchange: str | None, cond_uv: int, confirm: bool, dry_run: bool, client_order_id: str | None):
+def buy(code: str, qty: int, price: float, order_type: str | None, exchange: str | None, cond_uv: int, confirm: bool, dry_run: bool, client_order_id: str | None):
     """주식 매수주문 (국내 kt10000 / 미국 ust20000).
 
     예: kiwoom order buy 005930 10 --price 70000 --type limit --confirm
         kiwoom order buy NVDA 10 --price 213.04 --confirm
     """
+    order_type = _resolve_order_type(order_type, price)
     if is_us_symbol(code, exchange):
         if cond_uv:
             err_console.print("[red]--cond-price는 국내 주문에서만 사용합니다.[/]")
@@ -235,29 +240,29 @@ def buy(code: str, qty: int, price: float, order_type: str, exchange: str | None
         _dry_run_kr("kt10000", "buy", code, qty, kr_price, order_type, dmst_stex_tp, body,
                     lambda: _show_order_preview("매수", code, qty, kr_price, order_type, dmst_stex_tp))
         return
-    confirm_gate(confirm)
-
     _show_order_preview("매수", code, qty, kr_price, order_type, dmst_stex_tp)
-    _send_order("kt10000", body, "매수", client_order_id)
+    confirm_gate(confirm)
+    send_order("kt10000", body, "매수", client_order_id, client_cls=KiwoomClient)
 
 
 @order.command("sell")
 @click.argument("code")
 @click.argument("qty", type=int)
 @click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략, 미국주식은 소수점 4자리까지)")
-@click.option("--type", "order_type", default="market", type=click.Choice(ALL_ORDER_TYPES), help="주문유형")
+@click.option("--type", "order_type", default=None, type=click.Choice(ALL_ORDER_TYPES), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
 @click.option("--exchange", "exchange", default=None, type=click.Choice(ORDER_EXCHANGES), help="거래소 (기본: 국내 KRX / 미국 자동판별)")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격 (국내 전용)")
 @click.option("--stop", "stop", type=float, default=0, help="STOP가격 (미국 stop/stop-limit 전용)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 @click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
 @click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
-def sell(code: str, qty: int, price: float, order_type: str, exchange: str | None, cond_uv: int, stop: float, confirm: bool, dry_run: bool, client_order_id: str | None):
+def sell(code: str, qty: int, price: float, order_type: str | None, exchange: str | None, cond_uv: int, stop: float, confirm: bool, dry_run: bool, client_order_id: str | None):
     """주식 매도주문 (국내 kt10001 / 미국 ust20001).
 
     예: kiwoom order sell 005930 10 --type market --confirm
         kiwoom order sell NVDA 5 --type stop-limit --price 200.5 --stop 199.99 --confirm
     """
+    order_type = _resolve_order_type(order_type, price)
     if is_us_symbol(code, exchange):
         if cond_uv:
             err_console.print("[red]--cond-price는 국내 주문에서만 사용합니다.[/]")
@@ -283,10 +288,9 @@ def sell(code: str, qty: int, price: float, order_type: str, exchange: str | Non
         _dry_run_kr("kt10001", "sell", code, qty, kr_price, order_type, dmst_stex_tp, body,
                     lambda: _show_order_preview("매도", code, qty, kr_price, order_type, dmst_stex_tp))
         return
-    confirm_gate(confirm)
-
     _show_order_preview("매도", code, qty, kr_price, order_type, dmst_stex_tp)
-    _send_order("kt10001", body, "매도", client_order_id)
+    confirm_gate(confirm)
+    send_order("kt10001", body, "매도", client_order_id, client_cls=KiwoomClient)
 
 
 @order.command("modify")
@@ -330,10 +334,9 @@ def modify(orig_order_no: str, code: str, qty: int, price: float, exchange: str 
         _dry_run_kr("kt10002", "modify", code, qty, kr_price, None, dmst_stex_tp, body,
                     lambda: _show_modify_preview("정정", orig_order_no, code, qty, kr_price, dmst_stex_tp))
         return
-    confirm_gate(confirm)
-
     _show_modify_preview("정정", orig_order_no, code, qty, kr_price, dmst_stex_tp)
-    _send_order("kt10002", body, "정정", client_order_id)
+    confirm_gate(confirm)
+    send_order("kt10002", body, "정정", client_order_id, client_cls=KiwoomClient)
 
 
 @order.command("cancel")
@@ -365,10 +368,9 @@ def cancel(orig_order_no: str, code: str, qty: int, exchange: str | None, confir
         _dry_run_kr("kt10003", "cancel", code, qty, 0, None, dmst_stex_tp, body,
                     lambda: _show_cancel_preview("취소", orig_order_no, code, qty, dmst_stex_tp))
         return
-    confirm_gate(confirm)
-
     _show_cancel_preview("취소", orig_order_no, code, qty, dmst_stex_tp)
-    _send_order("kt10003", body, "취소", client_order_id)
+    confirm_gate(confirm)
+    send_order("kt10003", body, "취소", client_order_id, client_cls=KiwoomClient)
 
 
 # ────────────────────────────────────────────────────────
@@ -480,88 +482,102 @@ def credit():
 @credit.command("buy")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
-@click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
+@click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략)")
+@click.option("--type", "order_type", default=None, type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
 @click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def credit_buy(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str, cond_uv: int, confirm: bool):
+@click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
+@click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
+def credit_buy(code: str, qty: int, price: float, order_type: str | None, dmst_stex_tp: str, cond_uv: int, confirm: bool, dry_run: bool, client_order_id: str | None):
     """신용 매수주문 (kt10006).
 
     예: kiwoom order credit buy 005930 10 --type limit --price 70000 --confirm
     """
+    order_type = _resolve_order_type(order_type, price)
+    kr_price = _kr_price_or_exit(price)
+    body = {
+        "dmst_stex_tp": dmst_stex_tp,
+        "stk_cd": code,
+        "ord_qty": str(qty),
+        "ord_uv": str(kr_price) if kr_price else "",
+        "trde_tp": ORDER_TYPES[order_type],
+        "cond_uv": str(cond_uv) if cond_uv else "",
+    }
+    if dry_run:
+        _dry_run_kr("kt10006", "buy", code, qty, kr_price, order_type, dmst_stex_tp, body,
+                    lambda: _show_order_preview("신용 매수", code, qty, kr_price, order_type, dmst_stex_tp))
+        return
+    _show_order_preview("신용 매수", code, qty, kr_price, order_type, dmst_stex_tp)
     confirm_gate(confirm)
-
-    _show_order_preview("신용 매수", code, qty, price, order_type, dmst_stex_tp)
-
-    with KiwoomClient() as c:
-        data, _ = c.request("kt10006", {
-            "dmst_stex_tp": dmst_stex_tp,
-            "stk_cd": code,
-            "ord_qty": str(qty),
-            "ord_uv": str(price) if price else "",
-            "trde_tp": ORDER_TYPES[order_type],
-            "cond_uv": str(cond_uv) if cond_uv else "",
-        })
-        print_order_result(data, "신용 매수")
+    send_order("kt10006", body, "신용 매수", client_order_id, client_cls=KiwoomClient)
 
 
 @credit.command("sell")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
-@click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
+@click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략)")
+@click.option("--type", "order_type", default=None, type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
 @click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "cond_uv", type=int, default=0, help="조건부가격")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def credit_sell(code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str, cond_uv: int, confirm: bool):
+@click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
+@click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
+def credit_sell(code: str, qty: int, price: float, order_type: str | None, dmst_stex_tp: str, cond_uv: int, confirm: bool, dry_run: bool, client_order_id: str | None):
     """신용 매도주문 (kt10007).
 
     예: kiwoom order credit sell 005930 10 --type market --confirm
     """
+    order_type = _resolve_order_type(order_type, price)
+    kr_price = _kr_price_or_exit(price)
+    body = {
+        "dmst_stex_tp": dmst_stex_tp,
+        "stk_cd": code,
+        "ord_qty": str(qty),
+        "ord_uv": str(kr_price) if kr_price else "",
+        "trde_tp": ORDER_TYPES[order_type],
+        "cond_uv": str(cond_uv) if cond_uv else "",
+    }
+    if dry_run:
+        _dry_run_kr("kt10007", "sell", code, qty, kr_price, order_type, dmst_stex_tp, body,
+                    lambda: _show_order_preview("신용 매도", code, qty, kr_price, order_type, dmst_stex_tp))
+        return
+    _show_order_preview("신용 매도", code, qty, kr_price, order_type, dmst_stex_tp)
     confirm_gate(confirm)
-
-    _show_order_preview("신용 매도", code, qty, price, order_type, dmst_stex_tp)
-
-    with KiwoomClient() as c:
-        data, _ = c.request("kt10007", {
-            "dmst_stex_tp": dmst_stex_tp,
-            "stk_cd": code,
-            "ord_qty": str(qty),
-            "ord_uv": str(price) if price else "",
-            "trde_tp": ORDER_TYPES[order_type],
-            "cond_uv": str(cond_uv) if cond_uv else "",
-        })
-        print_order_result(data, "신용 매도")
+    send_order("kt10007", body, "신용 매도", client_order_id, client_cls=KiwoomClient)
 
 
 @credit.command("modify")
 @click.argument("orig_order_no")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.argument("price", type=int)
+@click.argument("price", type=float)
 @click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--cond-price", "mdfy_cond_uv", type=int, default=0, help="정정 조건부가격")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def credit_modify(orig_order_no: str, code: str, qty: int, price: int, dmst_stex_tp: str, mdfy_cond_uv: int, confirm: bool):
+@click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
+@click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
+def credit_modify(orig_order_no: str, code: str, qty: int, price: float, dmst_stex_tp: str, mdfy_cond_uv: int, confirm: bool, dry_run: bool, client_order_id: str | None):
     """신용 정정주문 (kt10008).
 
     예: kiwoom order credit modify 0000139 005930 1 70000 --confirm
     """
+    kr_price = _kr_price_or_exit(price)
+    body = {
+        "dmst_stex_tp": dmst_stex_tp,
+        "orig_ord_no": orig_order_no,
+        "stk_cd": code,
+        "mdfy_qty": str(qty),
+        "mdfy_uv": str(kr_price),
+        "mdfy_cond_uv": str(mdfy_cond_uv) if mdfy_cond_uv else "",
+    }
+    if dry_run:
+        _dry_run_kr("kt10008", "modify", code, qty, kr_price, None, dmst_stex_tp, body,
+                    lambda: _show_modify_preview("신용 정정", orig_order_no, code, qty, kr_price, dmst_stex_tp))
+        return
+    _show_modify_preview("신용 정정", orig_order_no, code, qty, kr_price, dmst_stex_tp)
     confirm_gate(confirm)
-
-    _show_modify_preview("신용 정정", orig_order_no, code, qty, price, dmst_stex_tp)
-
-    with KiwoomClient() as c:
-        data, _ = c.request("kt10008", {
-            "dmst_stex_tp": dmst_stex_tp,
-            "orig_ord_no": orig_order_no,
-            "stk_cd": code,
-            "mdfy_qty": str(qty),
-            "mdfy_uv": str(price),
-            "mdfy_cond_uv": str(mdfy_cond_uv) if mdfy_cond_uv else "",
-        })
-        print_order_result(data, "신용 정정")
+    send_order("kt10008", body, "신용 정정", client_order_id, client_cls=KiwoomClient)
 
 
 @credit.command("cancel")
@@ -570,23 +586,26 @@ def credit_modify(orig_order_no: str, code: str, qty: int, price: int, dmst_stex
 @click.option("--qty", type=int, default=0, help="취소수량 (0=전량취소)")
 @click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT", "SOR"]), help="거래소")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def credit_cancel(orig_order_no: str, code: str, qty: int, dmst_stex_tp: str, confirm: bool):
+@click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
+@click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
+def credit_cancel(orig_order_no: str, code: str, qty: int, dmst_stex_tp: str, confirm: bool, dry_run: bool, client_order_id: str | None):
     """신용 취소주문 (kt10009).
 
     예: kiwoom order credit cancel 0000140 005930 --confirm
     """
-    confirm_gate(confirm)
-
+    body = {
+        "dmst_stex_tp": dmst_stex_tp,
+        "orig_ord_no": orig_order_no,
+        "stk_cd": code,
+        "cncl_qty": str(qty),
+    }
+    if dry_run:
+        _dry_run_kr("kt10009", "cancel", code, qty, 0, None, dmst_stex_tp, body,
+                    lambda: _show_cancel_preview("신용 취소", orig_order_no, code, qty, dmst_stex_tp))
+        return
     _show_cancel_preview("신용 취소", orig_order_no, code, qty, dmst_stex_tp)
-
-    with KiwoomClient() as c:
-        data, _ = c.request("kt10009", {
-            "dmst_stex_tp": dmst_stex_tp,
-            "orig_ord_no": orig_order_no,
-            "stk_cd": code,
-            "cncl_qty": str(qty),
-        })
-        print_order_result(data, "신용 취소")
+    confirm_gate(confirm)
+    send_order("kt10009", body, "신용 취소", client_order_id, client_cls=KiwoomClient)
 
 
 # ════════════════════════════════════════════════════════
@@ -602,76 +621,90 @@ def gold():
 @gold.command("buy")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
-@click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
+@click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략)")
+@click.option("--type", "order_type", default=None, type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def gold_buy(code: str, qty: int, price: int, order_type: str, confirm: bool):
+@click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
+@click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
+def gold_buy(code: str, qty: int, price: float, order_type: str | None, confirm: bool, dry_run: bool, client_order_id: str | None):
     """금현물 매수주문 (kt50000).
 
     예: kiwoom order gold buy 730060 10 --type limit --price 90000 --confirm
     """
+    order_type = _resolve_order_type(order_type, price)
+    kr_price = _kr_price_or_exit(price)
+    body = {
+        "stk_cd": code,
+        "ord_qty": str(qty),
+        "ord_uv": str(kr_price) if kr_price else "",
+        "trde_tp": ORDER_TYPES[order_type],
+    }
+    if dry_run:
+        _dry_run_kr("kt50000", "buy", code, qty, kr_price, order_type, None, body,
+                    lambda: _show_order_preview("금현물 매수", code, qty, kr_price, order_type))
+        return
+    _show_order_preview("금현물 매수", code, qty, kr_price, order_type)
     confirm_gate(confirm)
-
-    _show_order_preview("금현물 매수", code, qty, price, order_type)
-
-    with KiwoomClient() as c:
-        data, _ = c.request("kt50000", {
-            "stk_cd": code,
-            "ord_qty": str(qty),
-            "ord_uv": str(price) if price else "",
-            "trde_tp": ORDER_TYPES[order_type],
-        })
-        print_order_result(data, "금현물 매수")
+    send_order("kt50000", body, "금현물 매수", client_order_id, client_cls=KiwoomClient)
 
 
 @gold.command("sell")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.option("--price", type=int, default=0, help="주문가격 (시장가 주문시 생략)")
-@click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형")
+@click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략)")
+@click.option("--type", "order_type", default=None, type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def gold_sell(code: str, qty: int, price: int, order_type: str, confirm: bool):
+@click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
+@click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
+def gold_sell(code: str, qty: int, price: float, order_type: str | None, confirm: bool, dry_run: bool, client_order_id: str | None):
     """금현물 매도주문 (kt50001).
 
     예: kiwoom order gold sell 730060 10 --type market --confirm
     """
+    order_type = _resolve_order_type(order_type, price)
+    kr_price = _kr_price_or_exit(price)
+    body = {
+        "stk_cd": code,
+        "ord_qty": str(qty),
+        "ord_uv": str(kr_price) if kr_price else "",
+        "trde_tp": ORDER_TYPES[order_type],
+    }
+    if dry_run:
+        _dry_run_kr("kt50001", "sell", code, qty, kr_price, order_type, None, body,
+                    lambda: _show_order_preview("금현물 매도", code, qty, kr_price, order_type))
+        return
+    _show_order_preview("금현물 매도", code, qty, kr_price, order_type)
     confirm_gate(confirm)
-
-    _show_order_preview("금현물 매도", code, qty, price, order_type)
-
-    with KiwoomClient() as c:
-        data, _ = c.request("kt50001", {
-            "stk_cd": code,
-            "ord_qty": str(qty),
-            "ord_uv": str(price) if price else "",
-            "trde_tp": ORDER_TYPES[order_type],
-        })
-        print_order_result(data, "금현물 매도")
+    send_order("kt50001", body, "금현물 매도", client_order_id, client_cls=KiwoomClient)
 
 
 @gold.command("modify")
 @click.argument("orig_order_no")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.argument("price", type=int)
+@click.argument("price", type=float)
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def gold_modify(orig_order_no: str, code: str, qty: int, price: int, confirm: bool):
+@click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
+@click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
+def gold_modify(orig_order_no: str, code: str, qty: int, price: float, confirm: bool, dry_run: bool, client_order_id: str | None):
     """금현물 정정주문 (kt50002).
 
     예: kiwoom order gold modify 0000139 730060 1 90000 --confirm
     """
+    kr_price = _kr_price_or_exit(price)
+    body = {
+        "orig_ord_no": orig_order_no,
+        "stk_cd": code,
+        "mdfy_qty": str(qty),
+        "mdfy_uv": str(kr_price),
+    }
+    if dry_run:
+        _dry_run_kr("kt50002", "modify", code, qty, kr_price, None, None, body,
+                    lambda: _show_modify_preview("금현물 정정", orig_order_no, code, qty, kr_price))
+        return
+    _show_modify_preview("금현물 정정", orig_order_no, code, qty, kr_price)
     confirm_gate(confirm)
-
-    _show_modify_preview("금현물 정정", orig_order_no, code, qty, price)
-
-    with KiwoomClient() as c:
-        data, _ = c.request("kt50002", {
-            "orig_ord_no": orig_order_no,
-            "stk_cd": code,
-            "mdfy_qty": str(qty),
-            "mdfy_uv": str(price),
-        })
-        print_order_result(data, "금현물 정정")
+    send_order("kt50002", body, "금현물 정정", client_order_id, client_cls=KiwoomClient)
 
 
 @gold.command("cancel")
@@ -679,22 +712,25 @@ def gold_modify(orig_order_no: str, code: str, qty: int, price: int, confirm: bo
 @click.argument("code")
 @click.option("--qty", type=int, default=0, help="취소수량 (0=전량취소)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
-def gold_cancel(orig_order_no: str, code: str, qty: int, confirm: bool):
+@click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
+@click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
+def gold_cancel(orig_order_no: str, code: str, qty: int, confirm: bool, dry_run: bool, client_order_id: str | None):
     """금현물 취소주문 (kt50003).
 
     예: kiwoom order gold cancel 0000140 730060 --confirm
     """
-    confirm_gate(confirm)
-
+    body = {
+        "orig_ord_no": orig_order_no,
+        "stk_cd": code,
+        "cncl_qty": str(qty),
+    }
+    if dry_run:
+        _dry_run_kr("kt50003", "cancel", code, qty, 0, None, None, body,
+                    lambda: _show_cancel_preview("금현물 취소", orig_order_no, code, qty))
+        return
     _show_cancel_preview("금현물 취소", orig_order_no, code, qty)
-
-    with KiwoomClient() as c:
-        data, _ = c.request("kt50003", {
-            "orig_ord_no": orig_order_no,
-            "stk_cd": code,
-            "cncl_qty": str(qty),
-        })
-        print_order_result(data, "금현물 취소")
+    confirm_gate(confirm)
+    send_order("kt50003", body, "금현물 취소", client_order_id, client_cls=KiwoomClient)
 
 
 # ── Gold Account Queries ───────────────────────────────

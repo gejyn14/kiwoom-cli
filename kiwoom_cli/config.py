@@ -88,14 +88,23 @@ def resolve_profile(profile: str | None = None) -> str:
     return cfg.get("general", {}).get("default_profile", "default")
 
 
-def get_domain(profile: str | None = None) -> str:
+def get_domain_key(profile: str | None = None) -> str:
+    """도메인 키('prod'|'mock'). KIWOOM_DOMAIN env > 프로필 설정 > 'mock'.
+
+    잘못된 KIWOOM_DOMAIN 값은 기존 get_domain과 동일하게 mock으로 강제한다
+    (실서버로 잘못 붙는 것보다 안전한 방향).
+    """
     env = os.environ.get("KIWOOM_DOMAIN")
     if env:
-        return DOMAINS.get(env, DOMAINS["mock"])
+        return env if env in DOMAINS else "mock"
     p = resolve_profile(profile)
     cfg = load_config()
     key = cfg.get("profiles", {}).get(p, {}).get("domain", "mock")
-    return DOMAINS.get(key, DOMAINS["mock"])
+    return key if key in DOMAINS else "mock"
+
+
+def get_domain(profile: str | None = None) -> str:
+    return DOMAINS[get_domain_key(profile)]
 
 
 def _keyring_get(key: str) -> str | None:

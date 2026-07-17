@@ -17,8 +17,8 @@ from rich.text import Text
 from ..client import KiwoomClient
 from ..formatters import _fmt_number, _sign_color
 from ..output import console
-from ..streaming import WS_DOMAINS
-from .. import auth, config
+from ..streaming import resolve_ws_target
+from .. import auth
 
 
 def _build_live_table(stocks: dict[str, dict[str, str]], title: str = "실시간 시세") -> Table:
@@ -92,10 +92,7 @@ def watch(codes: tuple[str, ...]):
             except Exception:
                 stock_state[code] = {"_name": code}
 
-    profile = config.resolve_profile(None)
-    cfg = config.load_config()
-    domain_key = cfg.get("profiles", {}).get(profile, {}).get("domain", "mock")
-    ws_url = WS_DOMAINS.get(domain_key, WS_DOMAINS["mock"])
+    profile, ws_url = resolve_ws_target()
     token = auth.load_token(profile=profile)
 
     if not token:

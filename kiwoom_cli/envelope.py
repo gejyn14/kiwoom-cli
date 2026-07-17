@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
 import click
@@ -90,12 +89,7 @@ def build_meta() -> dict[str, Any]:
     ctx = click.get_current_context(silent=True)
     obj = ctx.obj if ctx is not None and isinstance(ctx.obj, dict) else {}
     profile = config.resolve_profile(obj.get("profile"))
-    env = os.environ.get("KIWOOM_DOMAIN")
-    if env not in config.DOMAINS:
-        cfg = config.load_config()
-        env = cfg.get("profiles", {}).get(profile, {}).get("domain", "mock")
-        if env not in config.DOMAINS:
-            env = "mock"
+    env = config.get_domain_key(profile)
     return {"profile": profile, "env": env, "cont": obj.get("last_cont") or None}
 
 
