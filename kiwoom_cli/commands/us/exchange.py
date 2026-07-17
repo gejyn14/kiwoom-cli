@@ -7,6 +7,7 @@ from rich.panel import Panel
 
 from ...client import KiwoomClient
 from ...formatters import human, print_generic_table
+from .._mutation import confirm_gate
 
 DIRECTION = {"krw-usd": "1", "usd-krw": "2"}
 _DIRECTION_LABELS = {"krw-usd": "원화 → 달러", "usd-krw": "달러 → 원화"}
@@ -42,7 +43,7 @@ def fx_estimate(amount: int, direction: str):
 @exchange_group.command("apply")
 @click.argument("amount", type=int)
 @click.option("--direction", "direction", default="krw-usd", type=click.Choice(list(DIRECTION)), help="환전 방향")
-@click.option("--confirm", is_flag=True, help="확인 프롬프트 없이 실행")
+@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 실행")
 def fx_apply(amount: int, direction: str, confirm: bool):
     """환전 신청 (ust31302). 실제 자금이 이동합니다."""
     unit = "원" if direction == "krw-usd" else "달러"
@@ -53,8 +54,7 @@ def fx_apply(amount: int, direction: str, confirm: bool):
         title="환전 확인",
         border_style="yellow",
     ))
-    if not confirm:
-        click.confirm("환전을 신청하시겠습니까?", abort=True, err=True)
+    confirm_gate(confirm)
     with KiwoomClient() as c:
         data, _ = c.request("ust31302", {
             "exch_tp": DIRECTION[direction],

@@ -226,3 +226,23 @@ def test_explicit_market_with_price_rejected(runner, isolated_env):
     assert result.exit_code == 1
     doc = json.loads(result.stdout)
     assert doc["error"]["code"] == "INVALID_INPUT"
+
+
+# ── Task 6: fx apply uses the confirm gate ───────────────
+
+def test_fx_apply_json_mode_never_prompts(runner, isolated_env):
+    with patch("kiwoom_cli.commands.us.exchange.KiwoomClient") as mock_cls:
+        result = runner.invoke(cli, ["-f", "json", "account", "exchange", "apply", "1000000"])
+    assert result.exit_code == 1
+    doc = json.loads(result.stdout)
+    assert doc["error"]["code"] == "CONFIRMATION_REQUIRED"
+    mock_cls.assert_not_called()
+
+
+def test_fx_apply_yes_alias(runner, isolated_env):
+    with patch("kiwoom_cli.commands.us.exchange.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(
+            lambda api_id, body=None, **kw: ({"return_code": 0, "return_msg": "정상"}, {}))
+        result = runner.invoke(cli, ["-f", "json", "account", "exchange", "apply",
+                                     "1000000", "--yes"])
+    assert result.exit_code == 0
