@@ -307,6 +307,21 @@ def test_validate_rejects_market_plus_price(runner, isolated_env):
     assert _doc(result)["error"]["code"] == "INVALID_INPUT"
 
 
+def test_us_stock_info_exchange_resolution_failure_json_envelope(runner, isolated_env, monkeypatch):
+    from kiwoom_cli.commands.us import stock_ops
+    from kiwoom_cli.commands.us.detect import UsExchangeError
+
+    def raise_exchange_error(client, code, exchange=None):
+        raise UsExchangeError("거래소를 판별할 수 없습니다")
+
+    monkeypatch.setattr(stock_ops, "resolve_us_exchange", raise_exchange_error)
+    with patch("kiwoom_cli.commands.us.stock_ops.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(lambda api_id, body=None, **kw: ({}, {}))
+        result = runner.invoke(cli, ["-f", "json", "stock", "info", "ZZZZZZZ"])
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
 def test_send_order_strips_pagination_flags(runner, isolated_env):
     captured = {}
 

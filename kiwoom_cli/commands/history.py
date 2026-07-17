@@ -252,7 +252,10 @@ def _export_parquet(rows: list[dict[str, Any]], out: Path) -> None:
         import pandas as pd
         import pyarrow  # noqa: F401  (to_parquet 엔진 확인)
     except ImportError:
-        fail_input("parquet 내보내기에는 pandas와 pyarrow가 필요합니다: pip install pandas pyarrow")
+        fail_input(
+            "parquet 내보내기에는 pandas와 pyarrow가 필요합니다: pip install pandas pyarrow",
+            code="DEPENDENCY_MISSING",
+        )
     df = pd.DataFrame([_export_row(ev) for ev in rows], columns=EXPORT_COLUMNS)
     df.to_parquet(out)
 
