@@ -204,7 +204,7 @@ def config_cmd():
 
 
 @config_cmd.command("setup")
-@click.option("--profile", default="default", help="프로필 이름")
+@click.option("--profile", default=None, help="프로필 이름 (기본: 루트 -p/--profile, 없으면 default)")
 @click.option("--appkey", default=None, help="키움 API App Key")
 @click.option("--secretkey", default=None, help="키움 API Secret Key")
 @click.option("--domain", default=None, type=click.Choice(["prod", "mock"]), help="도메인")
@@ -212,9 +212,12 @@ def config_cmd():
 @click.option("--token-storage", "token_storage", default=None,
               type=click.Choice(list(config.TOKEN_STORAGES)),
               help="접근토큰 저장 방식")
-def config_setup(profile: str, appkey: str | None, secretkey: str | None,
+@click.pass_context
+def config_setup(ctx, profile: str | None, appkey: str | None, secretkey: str | None,
                  domain: str | None, account: str, token_storage: str | None):
     """초기 설정 (App Key, Secret Key, 도메인)."""
+    if profile is None:
+        profile = (ctx.obj.get("profile") if ctx.obj else None) or "default"
     interactive = _get_format() == "table"
     if not interactive:
         missing = [n for n, v in (("--appkey", appkey), ("--secretkey", secretkey)) if not v]

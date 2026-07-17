@@ -341,3 +341,27 @@ def test_deposit_both_fail_table_exits_2(runner, isolated_env):
         mock_cls.return_value = _mock_kiwoom_client(_raise_api_error)
         result = runner.invoke(cli, ["account", "deposit"])
     assert result.exit_code == 2
+
+
+# ── Task 9: config setup --profile alignment ─────────────
+
+def _stub_keys(monkeypatch):
+    monkeypatch.setattr("kiwoom_cli.config.set_appkey", lambda *a, **k: None)
+    monkeypatch.setattr("kiwoom_cli.config.set_secretkey", lambda *a, **k: None)
+
+
+def test_config_setup_uses_root_profile(runner, isolated_env, monkeypatch):
+    _stub_keys(monkeypatch)
+    result = runner.invoke(cli, ["-f", "json", "-p", "work", "config", "setup",
+                                 "--appkey", "AK", "--secretkey", "SK"])
+    assert result.exit_code == 0
+    assert _doc(result)["data"]["profile"] == "work"
+
+
+def test_config_setup_explicit_profile_beats_root(runner, isolated_env, monkeypatch):
+    _stub_keys(monkeypatch)
+    result = runner.invoke(cli, ["-f", "json", "-p", "work", "config", "setup",
+                                 "--profile", "mock2",
+                                 "--appkey", "AK", "--secretkey", "SK"])
+    assert result.exit_code == 0
+    assert _doc(result)["data"]["profile"] == "mock2"
