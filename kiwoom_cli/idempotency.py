@@ -67,9 +67,11 @@ def locked():
     재진입 불가(같은 프로세스에서 중첩 사용 시 데드락) — send_order 외에서 사용하지 말 것.
     """
     ledger = _ledger_file()
-    ledger.parent.mkdir(parents=True, exist_ok=True)
+    config.ensure_config_dir()
+    config.secure_dir(ledger.parent)
     lock_path = ledger.with_suffix(".lock")
     with open(lock_path, "a+", encoding="utf-8") as f:
+        config.secure_file(lock_path)
         try:
             _acquire(f)
         except OSError as e:
@@ -104,7 +106,8 @@ def record(key: str, api_id: str, response: dict[str, Any],
            fingerprint: str | None = None) -> None:
     """전송 성공한 주문 응답을 원장에 append."""
     ledger = _ledger_file()
-    ledger.parent.mkdir(parents=True, exist_ok=True)
+    config.ensure_config_dir()
+    config.secure_dir(ledger.parent)
     rec = {
         "key": key,
         "api_id": api_id,
@@ -115,3 +118,4 @@ def record(key: str, api_id: str, response: dict[str, Any],
     }
     with open(ledger, "a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    config.secure_file(ledger)

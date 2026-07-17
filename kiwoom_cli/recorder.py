@@ -52,8 +52,16 @@ class NdjsonRecorder:
         path = self.path_for(event)
         f = self._files.get(path)
         if f is None:
-            path.parent.mkdir(parents=True, exist_ok=True)
+            if self._single is None:
+                # 기본 레이아웃(<config dir>/data)만 권한을 조인다 —
+                # 사용자가 지정한 경로의 디렉토리 권한은 사용자의 선택
+                config.ensure_config_dir()
+                config.secure_dir(path.parent)
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
             f = open(path, "a", buffering=1, encoding="utf-8")
+            if self._single is None:
+                config.secure_file(path)
             self._files[path] = f
             self.counts.setdefault(path, 0)
         f.write(json.dumps(event, ensure_ascii=False) + "\n")

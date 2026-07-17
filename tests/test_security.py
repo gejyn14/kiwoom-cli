@@ -103,3 +103,48 @@ def test_cli_run_hardens_existing_install(runner, isolated_config):
     result = runner.invoke(cli, ["config", "show"])
     assert result.exit_code == 0
     assert _mode(isolated_config) == 0o700
+
+
+# ── Task 2: ledger + recorder permissions ────────────────
+
+from kiwoom_cli import idempotency
+from kiwoom_cli.recorder import NdjsonRecorder
+
+
+@posix_only
+def test_ledger_record_creates_0700_dir_and_0600_file(isolated_config):
+    idempotency.record("key1", "kt10000", {"ord_no": "1"}, fingerprint="ab")
+    ledger_dir = isolated_config / "idempotency"
+    files = list(ledger_dir.glob("*.jsonl"))
+    assert len(files) == 1
+    assert _mode(ledger_dir) == 0o700
+    assert _mode(files[0]) == 0o600
+
+
+@posix_only
+def test_ledger_lock_file_is_0600(isolated_config):
+    with idempotency.locked():
+        pass
+    locks = list((isolated_config / "idempotency").glob("*.lock"))
+    assert len(locks) == 1
+    assert _mode(locks[0]) == 0o600
+
+
+@posix_only
+def test_recorder_default_layout_is_0700_0600(isolated_config):
+    rec = NdjsonRecorder()
+    path = rec.write({"type": "0B", "symbol": "005930", "price": 1})
+    rec.close()
+    assert _mode(path) == 0o600
+    assert _mode(path.parent) == 0o700
+
+
+@posix_only
+def test_recorder_explicit_path_left_alone(isolated_config, tmp_path_factory):
+    """사용자가 지정한 --record 경로의 디렉토리 권한은 건드리지 않는다."""
+    shared = tmp_path_factory.mktemp("shared")
+    shared.chmod(0o755)
+    rec = NdjsonRecorder(shared / "out.ndjson")
+    rec.write({"type": "0B", "symbol": "005930", "price": 1})
+    rec.close()
+    assert _mode(shared) == 0o755
