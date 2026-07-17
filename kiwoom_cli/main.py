@@ -170,6 +170,9 @@ def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
     ctx.obj["next_key"] = next_key
     ctx.obj["all_pages"] = all_pages
 
+    # v2.7 이하가 만든 느슨한 권한(0755/0644)을 매 실행 시 조인다 — 생성은 하지 않음
+    config.harden_permissions()
+
     # Auto-migrate plaintext credentials into the keychain
     if config.migrate_from_plaintext():
         from .output import err_console
