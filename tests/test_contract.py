@@ -188,3 +188,22 @@ def test_describe_full_tree_still_default(runner, isolated_env):
     assert result.exit_code == 0
     spec = _doc(result)["data"]
     assert any(o["name"] == "client_order_id" for o in spec["options"])
+
+
+# ── Task 6: market.py docstrings carry API IDs ───────────
+
+def test_all_market_commands_expose_api_id():
+    import re
+    from kiwoom_cli.commands.market import market
+
+    def walk(cmd, path="market"):
+        missing = []
+        if isinstance(cmd, click.Group):
+            for name, sub in cmd.commands.items():
+                missing.extend(walk(sub, f"{path} {name}"))
+        else:
+            if not re.search(r"\((ka|kt|fn|us)[a-z]?\d+", cmd.help or ""):
+                missing.append(path)
+        return missing
+
+    assert walk(market) == []
