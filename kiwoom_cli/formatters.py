@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import sys
-from typing import Any
+from typing import Any, NoReturn
 
 import click
 from rich.panel import Panel
@@ -34,7 +34,7 @@ def human(renderable: Any) -> None:
         err_console.print(renderable)
 
 
-def fail_input(message: str, *, code: str = "INVALID_INPUT") -> None:
+def fail_input(message: str, *, code: str = "INVALID_INPUT") -> NoReturn:
     """입력 오류 계약 종료: table=stderr 빨간 메시지, json/csv=envelope 오류. exit 1.
 
     커맨드 본문에서 err_console.print + SystemExit(1) 패턴 대신 사용한다 —
@@ -45,6 +45,19 @@ def fail_input(message: str, *, code: str = "INVALID_INPUT") -> None:
     else:
         envelope.emit(error=envelope.error_body(message, code=code, retryable=False))
     raise SystemExit(1)
+
+
+def fail_api(message: str, *, code: str = "UPSTREAM_ERROR") -> NoReturn:
+    """API 계열 오류 계약 종료: table=stderr 빨간 메시지, json/csv=envelope 오류. exit 2.
+
+    통합 명령(국내+미국)에서 양쪽 모두 실패한 경우처럼, 전역 핸들러를 타지
+    않는 API 실패 경로에서 사용한다 — json 모드 stdout이 비지 않게 한다.
+    """
+    if _get_format() == "table":
+        err_console.print(f"[red]{message}[/]")
+    else:
+        envelope.emit(error=envelope.error_body(message, code=code, retryable=False))
+    raise SystemExit(2)
 
 
 def _output_json(data: Any) -> None:
@@ -467,6 +480,11 @@ def print_pending_orders(items: list[dict[str, Any]]) -> None:
     console.print(t)
 
 
+# 터미널 테이블 표시 상한. 초과분은 잘리되 반드시 안내 문구를 출력한다.
+_TABLE_ROW_CAP = 50
+_CHART_ROW_CAP = 30
+
+
 def print_chart_data(items: list[dict[str, Any]], title: str = "차트") -> None:
     """Format chart data (OHLCV)."""
     fmt = _get_format()
@@ -488,7 +506,7 @@ def print_chart_data(items: list[dict[str, Any]], title: str = "차트") -> None
     t.add_column("종가", justify="right")
     t.add_column("거래량", justify="right")
 
-    for item in items[:30]:
+    for item in items[:_CHART_ROW_CAP]:
         t.add_row(
             item.get("dt", item.get("date", "")),
             _fmt_number(item.get("open_pric", item.get("strt_pric", "")), strip_sign=True),
@@ -498,6 +516,10 @@ def print_chart_data(items: list[dict[str, Any]], title: str = "차트") -> None
             _fmt_number(item.get("trde_qty", item.get("acml_trde_qty", "")), strip_sign=True),
         )
     console.print(t)
+    if len(items) > _CHART_ROW_CAP:
+        console.print(
+            f"[dim]{len(items)}행 중 {_CHART_ROW_CAP}행 표시 — 전체 데이터는 -f json 또는 -f csv 사용[/]"
+        )
 
 
 _FIELD_LABELS: dict[str, str] = {
@@ -761,7 +783,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
         all_keys = list(data[0].keys())
         keys = [
             k for k in all_keys
-            if any(str(item.get(k, "")).strip() for item in data[:50])
+            if any(str(item.get(k, "")).strip() for item in data[:_TABLE_ROW_CAP])
         ]
         if not keys:
             keys = all_keys
@@ -777,7 +799,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
                 "now_trde_qty", "pre_rt",
             ) else "left"
             t.add_column(label, justify=justify)
-        for item in data[:50]:
+        for item in data[:_TABLE_ROW_CAP]:
             row = []
             for k in keys:
                 v = str(item.get(k, ""))
@@ -787,6 +809,10 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
                     row.append(v)
             t.add_row(*row)
         console.print(t)
+        if len(data) > _TABLE_ROW_CAP:
+            console.print(
+                f"[dim]{len(data)}행 중 {_TABLE_ROW_CAP}행 표시 — 전체 데이터는 -f json 또는 -f csv 사용[/]"
+            )
     elif isinstance(data, dict):
         scalar = {k: v for k, v in data.items() if not isinstance(v, (list, dict)) and k not in ("return_code", "return_msg")}
         lists = {k: v for k, v in data.items() if isinstance(v, list)}

@@ -61,16 +61,27 @@ def info(code: str, exchange: str | None):
     help="미국 거래소 (미국 종목 강제 라우팅)",
 )
 def price(code: str, exchange: str | None):
-    """종목 현재가 간단 조회."""
+    """종목 현재가 간단 조회. (국내 ka10001 / 미국 usa20100)"""
     if is_us_symbol(code, exchange):
         return us_stock_ops.price(code, exchange)
     with KiwoomClient() as c:
         data, _ = c.request("ka10001", {"stk_cd": code})
+        if _get_format() != "table":
+            print_generic_table(data, title=f"{code} 현재가")
+            return
+        from rich.markup import escape
+
         name = data.get("stk_nm", code)
-        cur = data.get("cur_prc", "0")
-        change = data.get("pred_pre", "0")
+        cur = _fmt_number(data.get("cur_prc", "0"), strip_sign=True)
+        change_raw = data.get("pred_pre", "0")
+        change = _fmt_number(change_raw)
         rate = data.get("flu_rt", "0")
-        click.echo(f"{name} ({code}): {cur}원 ({change}, {rate}%)")
+        color = _sign_color(change_raw)
+        console.print(
+            f"{escape(name)} ({code}): [bold {color}]{cur}원[/] "
+            f"([{color}]{change}, {rate}%[/])",
+            highlight=False,
+        )
 
 
 @stock.command("orderbook")

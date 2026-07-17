@@ -82,6 +82,7 @@ class KiwoomClient:
         *,
         cont_yn: str = "",
         next_key: str = "",
+        record_cont: bool = True,
     ) -> tuple[dict[str, Any], dict[str, str]]:
         """Make a single API request. Returns (body_json, response_headers)."""
         if not self.token:
@@ -107,12 +108,14 @@ class KiwoomClient:
 
         # 연속조회 커서를 Click 컨텍스트에 보관 → json envelope의 meta.cont로 노출
         # (라이브러리로 쓰일 때는 컨텍스트가 없으므로 조용히 건너뜀)
-        ctx = click.get_current_context(silent=True)
-        if ctx is not None and isinstance(ctx.obj, dict):
-            if resp_headers["cont-yn"] == "Y" and resp_headers["next-key"]:
-                ctx.obj["last_cont"] = {"next_key": resp_headers["next-key"]}
-            else:
-                ctx.obj["last_cont"] = None
+        # record_cont=False: 보조 호출(internal)은 본 조회의 커서 기록을 덮어쓰지 않는다.
+        if record_cont:
+            ctx = click.get_current_context(silent=True)
+            if ctx is not None and isinstance(ctx.obj, dict):
+                if resp_headers["cont-yn"] == "Y" and resp_headers["next-key"]:
+                    ctx.obj["last_cont"] = {"next_key": resp_headers["next-key"]}
+                else:
+                    ctx.obj["last_cont"] = None
 
         return data, resp_headers
 
@@ -125,12 +128,19 @@ class KiwoomClient:
         *,
         cont_yn: str = "",
         next_key: str = "",
+        internal: bool = False,
     ) -> tuple[dict[str, Any], dict[str, str]]:
         """단일 요청 + 전역 페이지네이션 플래그 처리.
 
         --next-key: 명령의 첫 API 요청에만 커서를 주입한다 (소비형).
         --all-pages: cont-yn이 끝날 때까지 반복, 리스트 필드를 병합한다.
+        internal=True: 보조 호출(예: 미국 거래소 자동판별)로 표시 —
+        전역 --next-key/--all-pages를 적용하지 않는다 (커서는 본 조회가 소비).
         """
+        if internal:
+            return self._request_once(
+                api_id, body, cont_yn=cont_yn, next_key=next_key, record_cont=False
+            )
         ctx = click.get_current_context(silent=True)
         obj = ctx.obj if ctx is not None and isinstance(ctx.obj, dict) else None
         if obj and not next_key and obj.get("next_key"):

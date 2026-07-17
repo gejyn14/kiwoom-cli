@@ -35,7 +35,9 @@ def _validate_us_type(order_type: str, side: str) -> str:
 
 def _quote_price_us(client, code: str, stex_tp: str) -> float:
     """미국주식 현재가 (usa20100). 시장가 주문의 예상비용 계산용."""
-    data, _ = client.request("usa20100", {"stex_tp": stex_tp, "stk_cd": code.upper()})
+    data, _ = client.request(
+        "usa20100", {"stex_tp": stex_tp, "stk_cd": code.upper()}, internal=True
+    )
     v = str(data.get("now_pric", "0")).strip().lstrip("+-") or "0"
     try:
         return float(v)

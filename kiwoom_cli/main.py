@@ -188,10 +188,11 @@ def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
         )
 
     if no_color:
-        from rich.console import Console as RichConsole
+        # 각 모듈이 import 시점에 잡아둔 인스턴스 참조가 유효해야 하므로
+        # 재바인딩이 아니라 기존 Console 객체를 변이시킨다.
         from . import output
-        output.console = RichConsole(no_color=True)
-        output.err_console = RichConsole(stderr=True, no_color=True)
+        output.console.no_color = True
+        output.err_console.no_color = True
 
 
 # ── Config ────────────────────────────────────────────
@@ -203,7 +204,7 @@ def config_cmd():
 
 
 @config_cmd.command("setup")
-@click.option("--profile", default="default", help="프로필 이름")
+@click.option("--profile", default=None, help="프로필 이름 (기본: 루트 -p/--profile, 없으면 default)")
 @click.option("--appkey", default=None, help="키움 API App Key")
 @click.option("--secretkey", default=None, help="키움 API Secret Key")
 @click.option("--domain", default=None, type=click.Choice(["prod", "mock"]), help="도메인")
@@ -211,9 +212,12 @@ def config_cmd():
 @click.option("--token-storage", "token_storage", default=None,
               type=click.Choice(list(config.TOKEN_STORAGES)),
               help="접근토큰 저장 방식")
-def config_setup(profile: str, appkey: str | None, secretkey: str | None,
+@click.pass_context
+def config_setup(ctx, profile: str | None, appkey: str | None, secretkey: str | None,
                  domain: str | None, account: str, token_storage: str | None):
     """초기 설정 (App Key, Secret Key, 도메인)."""
+    if profile is None:
+        profile = (ctx.obj.get("profile") if ctx.obj else None) or "default"
     interactive = _get_format() == "table"
     if not interactive:
         missing = [n for n, v in (("--appkey", appkey), ("--secretkey", secretkey)) if not v]
@@ -479,7 +483,29 @@ def auth_status(ctx):
 @click.option("--raw", is_flag=True, help="JSON 원본 출력")
 @click.option("--next-key", "next_key", default="", help="연속조회 커서 (이전 응답의 meta.cont.next_key)")
 def raw_api(api_id: str, body: str, raw: bool, next_key: str):
-    """Raw API 호출. (예: kiwoom api ka10001 '{"stk_cd":"005930"}')"""
+    """Raw API 호출. (예: kiwoom api ka10001 '{"stk_cd":"005930"}')
+
+    \b
+    api_id 자리에 list를 주면 전체 API 목록(217개 REST)을 출력합니다.
+    두 번째 인자는 검색 키워드: kiwoom api list 미체결
+    """
+    if api_id == "list":
+        from .api_spec import API_REGISTRY
+        keyword = "" if body == "{}" else body.lower()
+        rows = [
+            {"api_id": aid, "url_path": url, "description": desc}
+            for aid, (url, desc) in sorted(API_REGISTRY.items())
+            if not keyword or keyword in aid.lower() or keyword in desc.lower()
+        ]
+        if _get_format() == "json":
+            envelope.emit(data=rows)
+            return
+        from rich.markup import escape
+        for r in rows:
+            console.print(f"  {r['api_id']}  [dim]{escape(r['description'])}[/]", highlight=False)
+        console.print(f"[dim]{len(rows)}개 API — kiwoom api <id> '<body-json>' 로 호출[/]")
+        return
+
     try:
         body_dict = json.loads(body)
     except json.JSONDecodeError as e:
@@ -619,6 +645,44 @@ def describe(command_path: tuple[str, ...], paths_only: bool, depth: int | None)
         envelope.emit(data=spec)
         return
     _render_describe(spec)
+
+
+@cli.command("find")
+@click.argument("keyword")
+def find_cmd(keyword: str):
+    """명령어/API 통합 검색 — 명령 경로·도움말·API ID·API 설명에서 키워드 검색.
+
+    \b
+    예: kiwoom find 미체결            # 관련 명령어 + API ID
+        kiwoom find balance -f json  # 에이전트용 구조화 출력
+    """
+    kw = keyword.lower()
+    cmd_rows = [
+        r for r in _collect_paths(cli, "kiwoom")
+        if kw in r["path"].lower() or kw in r["help"].lower()
+    ]
+    from .api_spec import API_REGISTRY
+    api_rows = [
+        {"api_id": aid, "description": desc}
+        for aid, (_, desc) in sorted(API_REGISTRY.items())
+        if kw in aid.lower() or kw in desc.lower()
+    ]
+    if _get_format() == "json":
+        envelope.emit(data={"commands": cmd_rows, "apis": api_rows})
+        return
+    from rich.markup import escape
+
+    if not cmd_rows and not api_rows:
+        console.print(f"[yellow]'{escape(keyword)}'에 대한 결과가 없습니다.[/]")
+        return
+    if cmd_rows:
+        console.print(f"[bold]명령어 ({len(cmd_rows)})[/]")
+        for r in cmd_rows:
+            console.print(f"  {escape(r['path'])}  [dim]{escape(r['help'])}[/]", highlight=False)
+    if api_rows:
+        console.print(f"[bold]API ({len(api_rows)}) — kiwoom api <id>로 호출[/]")
+        for r in api_rows:
+            console.print(f"  {escape(r['api_id'])}  [dim]{escape(r['description'])}[/]", highlight=False)
 
 
 # ── Register subcommands ─────────────────────────────
