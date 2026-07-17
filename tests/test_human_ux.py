@@ -157,3 +157,29 @@ def test_find_markup_in_keyword_does_not_crash(runner, isolated_env):
     result = runner.invoke(cli, ["find", "[/]"])
     assert result.exit_code == 0
     assert "결과가 없습니다" in result.output
+
+
+# ── Task 5: kiwoom api list ──────────────────────────────
+
+def test_api_list_all(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "api", "list"])
+    assert result.exit_code == 0
+    rows = _doc(result)["data"]
+    assert len(rows) >= 217
+    assert {"api_id": "ka10001", "url_path": "/api/dostk/stkinfo",
+            "description": "주식기본정보요청"} in rows
+
+
+def test_api_list_keyword_filter(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "api", "list", "미체결"])
+    assert result.exit_code == 0
+    ids = [r["api_id"] for r in _doc(result)["data"]]
+    assert "ka10075" in ids
+    assert "ka10001" not in ids
+
+
+def test_api_list_needs_no_auth(runner, isolated_env):
+    # 토큰 없는 격리 환경에서도 성공해야 한다 (KiwoomClient 미사용 경로)
+    result = runner.invoke(cli, ["api", "list", "미체결"])
+    assert result.exit_code == 0
+    assert "ka10075" in result.output

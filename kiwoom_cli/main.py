@@ -480,7 +480,29 @@ def auth_status(ctx):
 @click.option("--raw", is_flag=True, help="JSON 원본 출력")
 @click.option("--next-key", "next_key", default="", help="연속조회 커서 (이전 응답의 meta.cont.next_key)")
 def raw_api(api_id: str, body: str, raw: bool, next_key: str):
-    """Raw API 호출. (예: kiwoom api ka10001 '{"stk_cd":"005930"}')"""
+    """Raw API 호출. (예: kiwoom api ka10001 '{"stk_cd":"005930"}')
+
+    \b
+    api_id 자리에 list를 주면 전체 API 목록(217개 REST)을 출력합니다.
+    두 번째 인자는 검색 키워드: kiwoom api list 미체결
+    """
+    if api_id == "list":
+        from .api_spec import API_REGISTRY
+        keyword = "" if body == "{}" else body.lower()
+        rows = [
+            {"api_id": aid, "url_path": url, "description": desc}
+            for aid, (url, desc) in sorted(API_REGISTRY.items())
+            if not keyword or keyword in aid.lower() or keyword in desc.lower()
+        ]
+        if _get_format() == "json":
+            envelope.emit(data=rows)
+            return
+        from rich.markup import escape
+        for r in rows:
+            console.print(f"  {r['api_id']}  [dim]{escape(r['description'])}[/]", highlight=False)
+        console.print(f"[dim]{len(rows)}개 API — kiwoom api <id> '<body-json>' 로 호출[/]")
+        return
+
     try:
         body_dict = json.loads(body)
     except json.JSONDecodeError as e:
