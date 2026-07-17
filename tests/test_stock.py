@@ -59,7 +59,7 @@ def test_price_echoes_name_and_cur_prc(runner, fake_client):
     result = runner.invoke(cli, ["stock", "price", "005930"])
 
     assert result.exit_code == 0
-    assert "삼성전자 (005930): 70000원 (+500, +0.71%)" in result.output
+    assert "삼성전자 (005930): 70,000원 (+500, +0.71%)" in result.output
 
 
 def test_orderbook_sends_to_ka10004(runner, fake_client):
