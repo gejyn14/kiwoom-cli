@@ -123,3 +123,27 @@ def test_legacy_record_without_fingerprint_replays(runner, isolated_env):
     doc = json.loads(result.stdout)
     assert doc["data"]["idempotent_replay"] is True
     mock_cls.assert_not_called()
+
+
+# ── Task 3: US order flow — resolve → preview → confirm ──
+
+def test_us_order_resolves_and_previews_before_confirm(runner, isolated_env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "kiwoom_cli.commands.us.order_ops._resolve_or_exit",
+        lambda c, code, ex: (calls.append("resolve"), "ND")[1])
+    monkeypatch.setattr(
+        "kiwoom_cli.commands.us.order_ops._show_us_preview",
+        lambda *a, **k: calls.append("preview"))
+
+    def abort_confirm(*a, **k):
+        calls.append("confirm")
+        raise click.Abort()
+    monkeypatch.setattr("kiwoom_cli.commands._mutation.click.confirm", abort_confirm)
+
+    with patch("kiwoom_cli.commands.us.order_ops.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(_ok_order_response)
+        result = runner.invoke(cli, ["order", "buy", "NVDA", "10", "--price", "213.04", "--type", "limit"])
+
+    assert result.exit_code != 0
+    assert calls == ["resolve", "preview", "confirm"]

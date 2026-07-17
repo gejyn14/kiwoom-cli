@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from rich.panel import Panel
 
-from ... import idempotency
 from ...client import KiwoomClient
-from ...formatters import human, print_generic_table, print_order_result
+from ...formatters import human, print_generic_table
 from ...output import err_console
-from .._mutation import confirm_gate, dry_run_payload, finish_dry_run
+from .._mutation import confirm_gate, dry_run_payload, finish_dry_run, send_order
 from ._constants import (
     US_ORDER_TYPES,
     US_SELL_ONLY_TYPES,
@@ -68,21 +67,18 @@ def _dry_run_us(api_id: str, side: str, code: str, qty: int, price: float,
 
 
 def _send_us_order(api_id: str, action: str, code: str, exchange: str | None,
-                   body_fn, show_preview_fn, client_order_id: str | None) -> None:
-    """미국 주문 전송 + 멱등성 처리. 원장 히트 시 API 호출 없이 이전 응답 반환."""
-    if client_order_id:
-        hit = idempotency.lookup(client_order_id)
-        if hit is not None:
-            human(f"[dim]멱등성 키 '{client_order_id}' 기존 기록 — 재전송하지 않고 이전 응답을 반환합니다.[/]")
-            print_order_result({**hit["response"], "idempotent_replay": True}, action)
-            return
+                   body_fn, show_preview_fn, client_order_id: str | None,
+                   confirm: bool) -> None:
+    """거래소 확정 → 미리보기 → 확인 게이트 → 전송(멱등성).
+
+    자동 판별된 거래소까지 사용자가 본 뒤에 확인하도록 게이트가 마지막이다.
+    """
     with KiwoomClient() as c:
         stex_tp = _resolve_or_exit(c, code, exchange)
-        show_preview_fn(stex_tp)
-        data, _ = c.request(api_id, body_fn(stex_tp))
-    if client_order_id:
-        idempotency.record(client_order_id, api_id, data)
-    print_order_result(data, action)
+    show_preview_fn(stex_tp)
+    confirm_gate(confirm)
+    send_order(api_id, body_fn(stex_tp), action, client_order_id,
+               client_cls=KiwoomClient)
 
 
 def _show_us_preview(action: str, code: str, qty: int, price: float,
@@ -132,8 +128,8 @@ def buy(code: str, qty: int, price: float, order_type: str,
         _dry_run_us("ust20000", "buy", code, qty, price, order_type, exchange,
                     body_fn, preview_fn)
         return
-    confirm_gate(confirm)
-    _send_us_order("ust20000", "매수", code, exchange, body_fn, preview_fn, client_order_id)
+    _send_us_order("ust20000", "매수", code, exchange, body_fn, preview_fn,
+                   client_order_id, confirm)
 
 
 def sell(code: str, qty: int, price: float, order_type: str,
@@ -167,8 +163,8 @@ def sell(code: str, qty: int, price: float, order_type: str,
         _dry_run_us("ust20001", "sell", code, qty, price, order_type, exchange,
                     body_fn, preview_fn)
         return
-    confirm_gate(confirm)
-    _send_us_order("ust20001", "매도", code, exchange, body_fn, preview_fn, client_order_id)
+    _send_us_order("ust20001", "매도", code, exchange, body_fn, preview_fn,
+                   client_order_id, confirm)
 
 
 def modify(orig_order_no: str, code: str, qty: int, price: float,
@@ -195,8 +191,8 @@ def modify(orig_order_no: str, code: str, qty: int, price: float,
         _dry_run_us("ust20002", "modify", code, 0, price, None, exchange,
                     body_fn, preview_fn)
         return
-    confirm_gate(confirm)
-    _send_us_order("ust20002", "정정", code, exchange, body_fn, preview_fn, client_order_id)
+    _send_us_order("ust20002", "정정", code, exchange, body_fn, preview_fn,
+                   client_order_id, confirm)
 
 
 def cancel(orig_order_no: str, code: str, qty: int,
@@ -221,8 +217,8 @@ def cancel(orig_order_no: str, code: str, qty: int,
         _dry_run_us("ust20003", "cancel", code, 0, 0, None, exchange,
                     body_fn, preview_fn)
         return
-    confirm_gate(confirm)
-    _send_us_order("ust20003", "취소", code, exchange, body_fn, preview_fn, client_order_id)
+    _send_us_order("ust20003", "취소", code, exchange, body_fn, preview_fn,
+                   client_order_id, confirm)
 
 
 def orderable(code: str, price: float, exchange: str | None) -> None:
