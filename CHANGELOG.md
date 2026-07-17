@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.7.0] - Unreleased
+## [2.7.0] - 2026-07-18
 
 ### Added
 - `kiwoom find <키워드>` — 명령어 + API 통합 검색
