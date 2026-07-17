@@ -73,3 +73,26 @@ def test_stock_price_json_emits_envelope(runner, isolated_env):
     doc = _doc(result)
     assert doc["ok"] is True and doc["schema"] == "v1"
     assert doc["data"]["raw"]["cur_prc"] == "-70000"
+
+
+# ── Task 2: --no-color ───────────────────────────────────
+
+@pytest.fixture
+def reset_no_color():
+    yield
+    from kiwoom_cli import output
+    output.console.no_color = False
+    output.err_console.no_color = False
+
+
+def test_no_color_mutates_shared_console_instances(runner, isolated_env, reset_no_color):
+    from kiwoom_cli import output
+    from kiwoom_cli.formatters import console as fmt_console
+    before_out, before_err = output.console, output.err_console
+    assert fmt_console is before_out       # import-time 바인딩이 같은 객체를 봐야 함
+    result = runner.invoke(cli, ["--no-color", "describe", "--paths"])
+    assert result.exit_code == 0
+    assert output.console is before_out and output.err_console is before_err
+    assert output.console.no_color is True
+    assert output.err_console.no_color is True
+    assert fmt_console.no_color is True    # 실제 회귀: 재바인딩은 이 단언에서 실패

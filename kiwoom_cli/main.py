@@ -188,10 +188,11 @@ def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
         )
 
     if no_color:
-        from rich.console import Console as RichConsole
+        # 각 모듈이 import 시점에 잡아둔 인스턴스 참조가 유효해야 하므로
+        # 재바인딩이 아니라 기존 Console 객체를 변이시킨다.
         from . import output
-        output.console = RichConsole(no_color=True)
-        output.err_console = RichConsole(stderr=True, no_color=True)
+        output.console.no_color = True
+        output.err_console.no_color = True
 
 
 # ── Config ────────────────────────────────────────────
