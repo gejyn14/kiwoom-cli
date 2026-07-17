@@ -259,3 +259,43 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
                                  "--to", "20260131", "--type", "deposit"])
     assert result.exit_code == 1
     assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
+@pytest.mark.parametrize("mapping_name", [
+    "DELIST_QRY", "TRADE_SIDE", "ALL_STOCK_QRY", "ORDER_DETAIL_QRY",
+    "ASSET_TYPE", "MARKET_STATUS_KOSPI", "FILLED_QRY", "HOLDINGS_EVAL_QRY",
+    "TRANSACTION_TYPE", "PRODUCT_TYPE", "ODD_LOT_QRY", "CASH_CREDIT", "HOT_PERIOD",
+])
+def test_every_mapping_converts_all_human_names(mapping_name):
+    from kiwoom_cli.commands import _constants
+    mapping = getattr(_constants, mapping_name)
+    hc = _constants.HumanChoice(mapping)
+    for human, code in mapping.items():
+        assert hc.convert(human, None, None) == code    # human 이름 → 코드
+        assert hc.convert(code, None, None) == code     # 원시 코드 하위호환
+
+
+def test_all_converted_decorators_use_human_choice(runner, isolated_env):
+    """18개 전환 옵션이 전부 HumanChoice로 남아있는지 데코레이터 레벨에서 고정."""
+    import click
+    from kiwoom_cli.commands import _constants
+    from kiwoom_cli.commands.account import account
+    from kiwoom_cli.commands.market import market
+
+    def _iter_options(cmd):
+        yield from ((cmd, p) for p in cmd.params if isinstance(p, click.Option))
+        if isinstance(cmd, click.Group):
+            for sub in cmd.commands.values():
+                yield from _iter_options(sub)
+
+    converted = [
+        (cmd.name, p.name) for cmd, p in list(_iter_options(account)) + list(_iter_options(market))
+        if isinstance(p.type, _constants.HumanChoice)
+    ]
+    # 19, not 18: balance's and asset's --delist are two separate physical decorators
+    # that both apply DELIST_QRY (task-6-brief.md Step 4 lists them as distinct bullets,
+    # "orders pending" through "history journal" sum to 18 in account.py alone), plus
+    # market.py's rank hot --period = 19. The brief's prose summary ("17 + 1 = 18") undercounts
+    # by one relative to its own itemized decorator list; this assertion pins the verified
+    # ground truth instead. See task-6-report.md for the full recount.
+    assert len(converted) == 19
