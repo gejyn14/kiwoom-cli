@@ -218,6 +218,10 @@ required, choices, is_flag)를 반환합니다. 도움말 파싱 대신 이걸 �
 
 - `kiwoom find <키워드> -f json` → `data = {"commands": [{"path","help"}], "apis": [{"api_id","description"}]}` (결과 없음 = 빈 배열, exit 0)
 - `kiwoom api list [키워드] -f json` → `data = [{"api_id","url_path","description"}]` (토큰 불필요)
+- 주문성 API(`kt10000~3`, `kt10006~9`, `kt50000~3`, `ust20000~3`, `ust31302`)를
+  `kiwoom api`로 직접 호출하면 확인 게이트가 걸립니다: json/csv 모드는 `--confirm`
+  없이 `CONFIRMATION_REQUIRED`(exit 1), table 모드는 body 미리보기 후 y/n 프롬프트.
+  자동화에서는 `--confirm`을 명시하세요. 조회 API는 영향 없습니다.
 
 ## 인증 (비대화형 환경)
 

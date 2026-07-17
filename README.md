@@ -563,6 +563,13 @@ kiwoom api ka10001 '{"stk_cd":"005930"}'        # Raw API — 테이블 출력
 kiwoom api ka10001 '{"stk_cd":"005930"}' --raw   # JSON 원본
 ```
 
+주문성 API(매수/매도/정정/취소/환전)를 raw로 호출할 때는 typed 명령과 동일한
+확인 게이트가 적용됩니다 — 미리보기 후 y/n 프롬프트, 자동화는 `--confirm`:
+
+```bash
+kiwoom api kt10000 '{"stk_cd":"005930","ord_qty":"1",...}' --confirm
+```
+
 ---
 
 ## 출력 형식

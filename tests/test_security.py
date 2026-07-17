@@ -192,3 +192,67 @@ def test_config_setup_rejects_traversal_profile(runner, isolated_config):
 def test_valid_profile_flag_still_works(runner, isolated_config):
     result = runner.invoke(cli, ["-p", "my_profile-2", "config", "show"])
     assert result.exit_code == 0
+
+
+# ── Task 4: raw api mutation gate ────────────────────────
+
+from tests.fakes import FakeKiwoomClient
+
+
+@pytest.fixture
+def fake_client(monkeypatch):
+    fake = FakeKiwoomClient()
+    monkeypatch.setattr("kiwoom_cli.main.KiwoomClient", lambda: fake)
+    return fake
+
+
+def test_raw_api_order_blocked_without_confirm_json(runner, isolated_config, fake_client):
+    result = runner.invoke(cli, [
+        "-f", "json", "api", "kt10000",
+        '{"dmst_stex_tp":"KRX","stk_cd":"005930","ord_qty":"1","ord_uv":"","trde_tp":"3","cond_uv":""}',
+    ])
+    assert result.exit_code == 1
+    doc = json.loads(result.output)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "CONFIRMATION_REQUIRED"
+    assert fake_client.calls == []  # 전송되지 않아야 한다
+
+
+def test_raw_api_order_sent_with_confirm(runner, isolated_config, fake_client):
+    result = runner.invoke(cli, [
+        "-f", "json", "api", "kt10000", '{"stk_cd":"005930"}', "--confirm",
+    ])
+    assert result.exit_code == 0
+    assert [c[0] for c in fake_client.calls] == ["kt10000"]
+
+
+def test_raw_api_readonly_needs_no_confirm(runner, isolated_config, fake_client):
+    result = runner.invoke(cli, ["-f", "json", "api", "ka10001", '{"stk_cd":"005930"}'])
+    assert result.exit_code == 0
+    assert [c[0] for c in fake_client.calls] == ["ka10001"]
+
+
+def test_raw_api_table_prompt_abort_sends_nothing(runner, isolated_config, fake_client):
+    result = runner.invoke(cli, ["api", "kt10000", '{"stk_cd":"005930"}'], input="n\n")
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+def test_raw_api_table_shows_body_before_prompt(runner, isolated_config, fake_client):
+    """미리보기(body)가 프롬프트보다 먼저 stderr에 출력되어야 한다 (Tier-1 불변식)."""
+    result = runner.invoke(cli, ["api", "kt10003", '{"orig_ord_no":"7"}'], input="y\n")
+    assert result.exit_code == 0
+    assert "kt10003" in result.output
+    assert "orig_ord_no" in result.output
+
+
+def test_mutation_apis_cover_all_order_ids():
+    from kiwoom_cli.api_spec import MUTATION_APIS
+    expected = {
+        "kt10000", "kt10001", "kt10002", "kt10003",
+        "kt10006", "kt10007", "kt10008", "kt10009",
+        "kt50000", "kt50001", "kt50002", "kt50003",
+        "ust20000", "ust20001", "ust20002", "ust20003",
+        "ust31302",
+    }
+    assert MUTATION_APIS == frozenset(expected)

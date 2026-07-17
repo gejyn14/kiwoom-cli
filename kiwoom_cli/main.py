@@ -497,7 +497,9 @@ def auth_status(ctx):
 @click.argument("body", default="{}")
 @click.option("--raw", is_flag=True, help="JSON 원본 출력")
 @click.option("--next-key", "next_key", default="", help="연속조회 커서 (이전 응답의 meta.cont.next_key)")
-def raw_api(api_id: str, body: str, raw: bool, next_key: str):
+@click.option("--confirm", "--yes", "confirm", is_flag=True,
+              help="주문성 API(매수/매도/정정/취소/환전) 확인 생략 (자동화용)")
+def raw_api(api_id: str, body: str, raw: bool, next_key: str, confirm: bool):
     """Raw API 호출. (예: kiwoom api ka10001 '{"stk_cd":"005930"}')
 
     \b
@@ -526,6 +528,17 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str):
     except json.JSONDecodeError as e:
         raise click.ClickException(f"Invalid JSON body: {e}")
 
+    from .api_spec import MUTATION_APIS, get_description
+    from .commands._mutation import confirm_gate
+    if api_id in MUTATION_APIS:
+        if _get_format() == "table" and not confirm:
+            # 미리보기 먼저, 확인은 그 다음 (Tier-1 불변식)
+            err_console.print(
+                f"[yellow]주문성 API {api_id} ({get_description(api_id)}) — 전송될 body:[/]"
+            )
+            err_console.print(json.dumps(body_dict, ensure_ascii=False, indent=2))
+        confirm_gate(confirm)
+
     with KiwoomClient() as c:
         data, headers = c.request(
             api_id, body_dict,
@@ -539,7 +552,6 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str):
             else:
                 console.print_json(json.dumps(data, ensure_ascii=False, indent=2))
         else:
-            from .api_spec import get_description
             title = get_description(api_id)
             print_generic_table(data, title=title)
 
