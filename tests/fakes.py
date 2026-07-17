@@ -52,16 +52,6 @@ class FakeKiwoomClient:
             {"cont-yn": "", "next-key": ""},
         )
 
-    def request_all(
-        self,
-        api_id: str,
-        body: dict[str, Any] | None = None,
-        max_pages: int = 10,
-    ) -> list[dict[str, Any]]:
-        """Fake pagination: return single page as a list."""
-        data, _ = self.request(api_id, body)
-        return [data]
-
     def __enter__(self) -> FakeKiwoomClient:
         return self
 

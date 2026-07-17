@@ -97,22 +97,37 @@ def send_order(api_id: str, body: dict[str, Any], action: str,
 
     client_cls: 호출 모듈의 KiwoomClient 바인딩 (테스트 patch 지점 유지).
     """
+    # 주문 전송은 페이지네이션 대상이 아님 — 전역 --all-pages/--next-key를 무시한다
+    ctx = click.get_current_context(silent=True)
+    if ctx is not None and isinstance(ctx.obj, dict):
+        ctx.obj["all_pages"] = False
+        ctx.obj.pop("next_key", None)
+
     if not client_order_id:
         with client_cls() as c:
             data, _ = c.request(api_id, body)
         print_order_result(data, action)
         return
     fp = idempotency.fingerprint(api_id, body)
-    with idempotency.locked():
-        hit = idempotency.lookup(client_order_id)
-        if hit is not None:
-            stored = hit.get("fingerprint")
-            if stored is not None and stored != fp:
-                _idempotency_conflict(client_order_id)
-            human(f"[dim]멱등성 키 '{client_order_id}' 기존 기록 — 재전송하지 않고 이전 응답을 반환합니다.[/]")
-            print_order_result({**hit["response"], "idempotent_replay": True}, action)
-            return
-        with client_cls() as c:
-            data, _ = c.request(api_id, body)
-        idempotency.record(client_order_id, api_id, data, fingerprint=fp)
+    try:
+        with idempotency.locked():
+            hit = idempotency.lookup(client_order_id)
+            if hit is not None:
+                stored = hit.get("fingerprint")
+                if stored is not None and stored != fp:
+                    _idempotency_conflict(client_order_id)
+                human(f"[dim]멱등성 키 '{client_order_id}' 기존 기록 — 재전송하지 않고 이전 응답을 반환합니다.[/]")
+                print_order_result({**hit["response"], "idempotent_replay": True}, action)
+                return
+            with client_cls() as c:
+                data, _ = c.request(api_id, body)
+            idempotency.record(client_order_id, api_id, data, fingerprint=fp)
+    except idempotency.LedgerLockBusy:
+        msg = ("멱등성 원장 잠금을 획득하지 못했습니다 — 같은 프로필의 다른 주문이 "
+               "전송 중입니다. 잠시 후 재시도하세요.")
+        if _get_format() == "table":
+            err_console.print(f"[red]{msg}[/]")
+        else:
+            envelope.emit(error=envelope.error_body(msg, code="LEDGER_BUSY", retryable=True))
+        raise SystemExit(2)
     print_order_result(data, action)

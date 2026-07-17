@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ...client import KiwoomClient
-from ...formatters import _find_list, print_chart_data, print_generic_table
+from ...formatters import _find_list, fail_input, print_chart_data, print_generic_table
 from ...output import err_console
 from ._constants import US_EXCHANGE_ALL
 from .detect import UsExchangeError, resolve_us_exchange
@@ -13,8 +13,7 @@ def _resolve_or_exit(client, code: str, exchange: str | None) -> str:
     try:
         return resolve_us_exchange(client, code, exchange)
     except UsExchangeError as e:
-        err_console.print(f"[red]{e}[/]")
-        raise SystemExit(1) from None
+        fail_input(str(e))
 
 
 def info(code: str, exchange: str | None) -> None:

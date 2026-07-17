@@ -12,12 +12,13 @@ from ..formatters import (
     _output_csv,
     _output_json,
     _sign_color,
+    fail_input,
     print_chart_data,
     print_generic_table,
     print_orderbook,
     print_stock_info,
 )
-from ..output import console, err_console
+from ..output import console
 from ._constants import EXCHANGE_ALL, MARKET_ALL, MARKET_PROGRAM, MARKET_TWO
 from .us import stock_ops as us_stock_ops
 from .us.detect import is_us_symbol
@@ -1327,8 +1328,7 @@ def chart_tick(code: str, tic_scope: str, upd_stkpc_tp: str, exchange: str | Non
         return us_stock_ops.chart("tick", code, exchange, tic_scope=tic_scope,
                                   adjusted=upd_stkpc_tp, krw=krw)
     if krw:
-        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
-        raise SystemExit(1)
+        fail_input("--krw는 미국주식에서만 사용합니다.")
     with KiwoomClient() as c:
         data, _ = c.request("ka10079", {
             "stk_cd": code,
@@ -1365,8 +1365,7 @@ def chart_minute(code: str, tic_scope: str, upd_stkpc_tp: str, base_dt: str, exc
         return us_stock_ops.chart("minute", code, exchange, tic_scope=tic_scope,
                                   strt_dt=base_dt, adjusted=upd_stkpc_tp, krw=krw)
     if krw:
-        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
-        raise SystemExit(1)
+        fail_input("--krw는 미국주식에서만 사용합니다.")
     body: dict = {
         "stk_cd": code,
         "tic_scope": tic_scope,
@@ -1400,8 +1399,7 @@ def chart_day(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, 
         return us_stock_ops.chart("day", code, exchange, strt_dt=base_dt,
                                   adjusted=upd_stkpc_tp, krw=krw)
     if krw:
-        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
-        raise SystemExit(1)
+        fail_input("--krw는 미국주식에서만 사용합니다.")
     with KiwoomClient() as c:
         data, _ = c.request("ka10081", {
             "stk_cd": code,
@@ -1432,8 +1430,7 @@ def chart_week(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None,
         return us_stock_ops.chart("week", code, exchange, strt_dt=base_dt,
                                   adjusted=upd_stkpc_tp, krw=krw)
     if krw:
-        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
-        raise SystemExit(1)
+        fail_input("--krw는 미국주식에서만 사용합니다.")
     with KiwoomClient() as c:
         data, _ = c.request("ka10082", {
             "stk_cd": code,
@@ -1464,8 +1461,7 @@ def chart_month(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None
         return us_stock_ops.chart("month", code, exchange, strt_dt=base_dt,
                                   adjusted=upd_stkpc_tp, krw=krw)
     if krw:
-        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
-        raise SystemExit(1)
+        fail_input("--krw는 미국주식에서만 사용합니다.")
     with KiwoomClient() as c:
         data, _ = c.request("ka10083", {
             "stk_cd": code,
@@ -1496,8 +1492,7 @@ def chart_year(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None,
         return us_stock_ops.chart("year", code, exchange, strt_dt=base_dt,
                                   adjusted=upd_stkpc_tp, krw=krw)
     if krw:
-        err_console.print("[red]--krw는 미국주식에서만 사용합니다.[/]")
-        raise SystemExit(1)
+        fail_input("--krw는 미국주식에서만 사용합니다.")
     with KiwoomClient() as c:
         data, _ = c.request("ka10094", {
             "stk_cd": code,

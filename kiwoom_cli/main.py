@@ -19,7 +19,7 @@ from .commands.order import order
 from .commands.stock import stock
 from .commands.stream import stream
 from .commands.watch import watch
-from .formatters import _get_format, human, print_generic_table
+from .formatters import _get_format, fail_input, human, print_generic_table
 from .output import console, err_console
 
 # Exit codes
@@ -39,17 +39,25 @@ class KiwoomGroup(click.Group):
 
     @staticmethod
     def _json_mode(ctx) -> bool:
-        return (ctx.obj.get("format", "table") if ctx.obj else "table") == "json"
+        # 알 수 없는 하위 명령 등 ctx.obj가 채워지기 전의 오류에서도 -f json을 인식해야
+        # envelope 계약이 지켜진다 (루트 파라미터는 이미 파싱되어 있음).
+        if ctx.obj and ctx.obj.get("format"):
+            return ctx.obj["format"] == "json"
+        return ctx.params.get("output_format") == "json"
 
     def invoke(self, ctx):
         try:
             return super().invoke(ctx)
         except KiwoomAPIError as e:
+            stable_code, _ = envelope.classify(upstream_code=e.code)
+            auth_related = stable_code in ("TOKEN_EXPIRED", "AUTH_REQUIRED")
             if self._json_mode(ctx):
                 envelope.emit(error=envelope.error_body(e.msg, upstream_code=e.code))
+            elif auth_related:
+                console.print(f"[red]인증 오류:[/] {e} [dim]kiwoom auth login[/]")
             else:
                 console.print(f"[red]API 오류:[/] {e}")
-            ctx.exit(EXIT_API)
+            ctx.exit(EXIT_AUTH if auth_related else EXIT_API)
         except KiwoomAuthError:
             keychain_ok = auth.keychain_readable()
             if self._json_mode(ctx):
@@ -101,6 +109,16 @@ class KiwoomGroup(click.Group):
             else:
                 console.print("[red]연결 오류:[/] API 서버에 연결할 수 없습니다. 도메인을 확인하세요.")
             ctx.exit(EXIT_API)
+        except httpx.RequestError as e:
+            # 타임아웃 등 나머지 전송 오류 — traceback 대신 계약대로 종료
+            if self._json_mode(ctx):
+                envelope.emit(error=envelope.error_body(
+                    f"네트워크 오류: {type(e).__name__}. 잠시 후 재시도하세요.",
+                    code="NETWORK_ERROR", retryable=True,
+                ))
+            else:
+                console.print(f"[red]네트워크 오류:[/] {type(e).__name__} — 잠시 후 재시도하세요.")
+            ctx.exit(EXIT_API)
         except click.ClickException as e:
             # 인자/옵션 오류(UsageError 포함)도 json 모드에서는 envelope로.
             # table 모드는 Click 기본 출력 그대로 (re-raise).
@@ -120,9 +138,13 @@ class KiwoomGroup(click.Group):
 @click.option("-p", "--profile", default=None, help="사용할 프로필")
 @click.option("--fields", "fields", default=None,
               help="json 출력의 data에서 유지할 필드 (쉼표구분). raw는 항상 제거 — 토큰 절약용")
+@click.option("--next-key", "next_key", default=None,
+              help="연속조회 커서 — 이전 응답 meta.cont.next_key를 전달하면 첫 API 요청이 해당 페이지부터 조회")
+@click.option("--all-pages", "all_pages", is_flag=True,
+              help="연속조회를 끝까지 자동 반복해 리스트를 병합 (최대 50페이지)")
 @click.option("--no-color", is_flag=True, help="색상 없이 출력")
 @click.pass_context
-def cli(ctx, output_format, profile, fields, no_color):
+def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
     """키움증권 REST API CLI.
 
     사용법:
@@ -142,6 +164,11 @@ def cli(ctx, output_format, profile, fields, no_color):
     ctx.obj["format"] = output_format
     ctx.obj["profile"] = profile
     ctx.obj["fields"] = [s.strip() for s in fields.split(",") if s.strip()] if fields else None
+
+    if next_key and all_pages:
+        raise click.UsageError("--next-key와 --all-pages는 함께 사용할 수 없습니다.")
+    ctx.obj["next_key"] = next_key
+    ctx.obj["all_pages"] = all_pages
 
     # Auto-migrate plaintext credentials into the keychain
     if config.migrate_from_plaintext():
@@ -177,16 +204,37 @@ def config_cmd():
 
 @config_cmd.command("setup")
 @click.option("--profile", default="default", help="프로필 이름")
-@click.option("--appkey", prompt="App Key", help="키움 API App Key")
-@click.option("--secretkey", prompt="Secret Key", hide_input=True, help="키움 API Secret Key")
-@click.option("--domain", prompt="도메인 (prod=실거래, mock=모의투자)", type=click.Choice(["prod", "mock"]), default="mock", help="도메인")
-@click.option("--account", prompt="계좌번호 (없으면 Enter)", default="", help="계좌번호")
-@click.option("--token-storage", "token_storage",
-              prompt="토큰 저장 방식 (keychain=OS 키체인, env=KIWOOM_TOKEN 직접 관리)",
-              type=click.Choice(list(config.TOKEN_STORAGES)), default="keychain",
+@click.option("--appkey", default=None, help="키움 API App Key")
+@click.option("--secretkey", default=None, help="키움 API Secret Key")
+@click.option("--domain", default=None, type=click.Choice(["prod", "mock"]), help="도메인")
+@click.option("--account", default="", help="계좌번호")
+@click.option("--token-storage", "token_storage", default=None,
+              type=click.Choice(list(config.TOKEN_STORAGES)),
               help="접근토큰 저장 방식")
-def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account: str, token_storage: str):
+def config_setup(profile: str, appkey: str | None, secretkey: str | None,
+                 domain: str | None, account: str, token_storage: str | None):
     """초기 설정 (App Key, Secret Key, 도메인)."""
+    interactive = _get_format() == "table"
+    if not interactive:
+        missing = [n for n, v in (("--appkey", appkey), ("--secretkey", secretkey)) if not v]
+        if missing:
+            fail_input("config setup 필수 옵션 누락: " + ", ".join(missing))
+        domain = domain or "mock"
+        token_storage = token_storage or "keychain"
+    else:
+        if appkey is None:
+            appkey = click.prompt("App Key", err=True)
+        if secretkey is None:
+            secretkey = click.prompt("Secret Key", hide_input=True, err=True)
+        if domain is None:
+            domain = click.prompt("도메인 (prod=실거래, mock=모의투자)",
+                                  type=click.Choice(["prod", "mock"]), default="mock", err=True)
+        if not account:
+            account = click.prompt("계좌번호 (없으면 Enter)", default="", err=True)
+        if token_storage is None:
+            token_storage = click.prompt(
+                "토큰 저장 방식 (keychain=OS 키체인, env=KIWOOM_TOKEN 직접 관리)",
+                type=click.Choice(list(config.TOKEN_STORAGES)), default="keychain", err=True)
     if config.is_legacy_encrypted():
         # Old password-encrypted entries are unusable — purge before writing new keys
         config.purge_legacy_credentials()
@@ -202,6 +250,12 @@ def config_setup(profile: str, appkey: str, secretkey: str, domain: str, account
         cfg.setdefault("general", {})["default_profile"] = profile
     cfg.pop("auth", None)
     config.save_config(cfg)
+    if _get_format() == "json":
+        envelope.emit(data={
+            "profile": profile, "domain": domain,
+            "account": account or "", "token_storage": token_storage,
+        })
+        return
     console.print(f"[green]설정 완료![/] (프로필: {profile})")
     console.print("  App Key/Secret Key: [bold]OS 키체인에 저장됨[/]")
     console.print(f"  도메인: [bold]{config.DOMAINS[domain]}[/]")
@@ -247,14 +301,15 @@ def config_set(ctx, key: str, value: str):
     """프로필 설정 변경. (예: kiwoom config set domain prod)"""
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     if key == "domain" and value not in ("prod", "mock"):
-        console.print("[red]domain은 prod 또는 mock만 가능합니다.[/]")
-        raise SystemExit(1)
+        fail_input("domain은 prod 또는 mock만 가능합니다.")
     if key == "token_storage" and value not in config.TOKEN_STORAGES:
-        console.print("[red]token_storage는 keychain 또는 env만 가능합니다.[/]")
-        raise SystemExit(1)
+        fail_input("token_storage는 keychain 또는 env만 가능합니다.")
     cfg = config.load_config()
     cfg.setdefault("profiles", {}).setdefault(profile, {})[key] = value
     config.save_config(cfg)
+    if _get_format() == "json":
+        envelope.emit(data={"key": key, "value": value, "profile": profile})
+        return
     display = config.DOMAINS[value] if key == "domain" else value
     console.print(f"[green]{key} 변경:[/] {display} (프로필: {profile})")
 
@@ -274,9 +329,11 @@ def config_use(profile_name: str):
     """기본 프로필 변경."""
     profiles = config.get_profiles()
     if profile_name not in profiles:
-        console.print(f"[red]프로필 '{profile_name}'을(를) 찾을 수 없습니다.[/]")
-        raise SystemExit(1)
+        fail_input(f"프로필 '{profile_name}'을(를) 찾을 수 없습니다.")
     config.set_default_profile(profile_name)
+    if _get_format() == "json":
+        envelope.emit(data={"default_profile": profile_name})
+        return
     console.print(f"[green]기본 프로필 변경:[/] {profile_name}")
 
 
@@ -474,7 +531,7 @@ def _param_spec(p: click.Parameter) -> dict:
     return spec
 
 
-def _describe_command(cmd: click.Command, path: str) -> dict:
+def _describe_command(cmd: click.Command, path: str, depth: int | None = None) -> dict:
     spec: dict = {
         "path": path,
         "help": (cmd.help or cmd.short_help or "").strip(),
@@ -482,12 +539,26 @@ def _describe_command(cmd: click.Command, path: str) -> dict:
         "options": [_param_spec(p) for p in cmd.params if isinstance(p, click.Option)],
     }
     if isinstance(cmd, click.Group):
-        spec["subcommands"] = [
-            _describe_command(sub, f"{path} {name}")
-            for name, sub in sorted(cmd.commands.items())
-            if not sub.hidden
-        ]
+        if depth is not None and depth <= 0:
+            spec["subcommands"] = []
+        else:
+            next_depth = None if depth is None else depth - 1
+            spec["subcommands"] = [
+                _describe_command(sub, f"{path} {name}", next_depth)
+                for name, sub in sorted(cmd.commands.items())
+                if not sub.hidden
+            ]
     return spec
+
+
+def _collect_paths(cmd: click.Command, path: str) -> list[dict]:
+    head = ((cmd.help or cmd.short_help or "").strip().splitlines() or [""])[0]
+    rows = [{"path": path, "help": head}]
+    if isinstance(cmd, click.Group):
+        for name, sub in sorted(cmd.commands.items()):
+            if not sub.hidden:
+                rows.extend(_collect_paths(sub, f"{path} {name}"))
+    return rows
 
 
 def _render_describe(spec: dict, depth: int = 0) -> None:
@@ -514,14 +585,19 @@ def _render_describe(spec: dict, depth: int = 0) -> None:
 
 @cli.command("describe")
 @click.argument("command_path", nargs=-1)
-def describe(command_path: tuple[str, ...]):
+@click.option("--paths", "paths_only", is_flag=True,
+              help="경로+한줄설명 평면 목록만 출력 (전체 트리 대비 토큰 절약 — 발견용)")
+@click.option("--depth", type=int, default=None,
+              help="하위 명령 재귀 깊이 제한 (예: --depth 1 = 한 단계만)")
+def describe(command_path: tuple[str, ...], paths_only: bool, depth: int | None):
     """CLI 명령 구조 자기서술 — 경로/도움말/인자/옵션(타입·기본값·choices).
 
     에이전트가 도구 스키마를 파악할 때 사용합니다.
 
     \b
-    예: kiwoom describe                  # 전체 트리
-        kiwoom describe order buy -f json
+    예: kiwoom describe --paths -f json   # 전체 경로 목록 (저비용 발견)
+        kiwoom describe order buy -f json # 단일 명령 상세 스키마
+        kiwoom describe order --depth 1
     """
     cmd: click.Command = cli
     path = "kiwoom"
@@ -530,7 +606,15 @@ def describe(command_path: tuple[str, ...]):
             raise click.ClickException(f"명령을 찾을 수 없습니다: {' '.join(command_path)}")
         cmd = cmd.commands[name]
         path += f" {name}"
-    spec = _describe_command(cmd, path)
+    if paths_only:
+        rows = _collect_paths(cmd, path)
+        if _get_format() == "json":
+            envelope.emit(data=rows)
+            return
+        for r in rows:
+            console.print(f"[bold]{r['path']}[/]  [dim]{r['help']}[/]", highlight=False)
+        return
+    spec = _describe_command(cmd, path, depth)
     if _get_format() == "json":
         envelope.emit(data=spec)
         return

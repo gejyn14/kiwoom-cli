@@ -67,6 +67,31 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 `data`(및 내부 모든 리스트의 각 요소)를 지정한 키로만 투영하고 `data.raw`를
 제거합니다. 대량 조회 시 응답 토큰을 크게 줄입니다.
 
+요청한 키 중 하나라도 매칭되지 않으면(부분 매칭 포함, 오타 등) 조용히 넘어가지 않고
+`meta.fields_unmatched`에 매칭 실패한 키 목록을 담아 반환합니다.
+
+## 페이지네이션 (연속조회)
+
+`meta.cont.next_key`가 있으면 다음 페이지가 존재합니다. 전역 옵션 두 가지로
+처리하며 동시 사용은 안 됩니다:
+
+```bash
+kiwoom -f json --next-key <이전 meta.cont.next_key> account orders executed
+kiwoom -f json --all-pages market rank volume
+```
+
+- `--next-key <값>` — 명령의 **첫 API 요청에만** 커서를 주입해 해당 페이지부터
+  재조회 (소비형). 나머지 페이지는 다시 응답의 `meta.cont`를 읽어 반복하세요.
+- `--all-pages` — `cont-yn`이 끝날 때까지 자동으로 반복 요청하고 리스트형
+  필드를 모두 병합해 한 번에 반환합니다(스칼라 필드는 첫 페이지 값 유지).
+  최대 50페이지 — 상한에 도달하면 stderr로 안내하고 `meta.cont`는 유지되므로
+  `--next-key`로 이어서 조회할 수 있습니다.
+
+여러 API를 연속 호출하는 명령(`account balance --market all`, `dashboard` 등)에서는
+`meta.cont`가 마지막 하위 호출 기준이며, `--next-key`는 명령의 첫 물리적 요청(미국
+종목은 거래소 판별 호출일 수 있음)에 주입되므로 페이지네이션은 `--market kr|us`처럼
+단일 API 경로에서 사용하세요.
+
 ## Exit codes
 
 | code | 의미 | 대응 |
@@ -74,7 +99,7 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 | 0 | 성공 | — |
 | 1 | 입력 오류 (인자, CONFIRMATION_REQUIRED, VALIDATION_FAILED) | 호출 수정 |
 | 2 | API/네트워크 오류 | `error.retryable` 확인 후 재시도 판단 |
-| 3 | 인증 필요 (토큰 없음/만료) | `kiwoom auth login` 또는 `KIWOOM_TOKEN` |
+| 3 | 인증 필요 (토큰 없음/만료 — `TOKEN_EXPIRED`(upstream 8005), HTTP 401 포함) | `kiwoom auth login` 또는 `KIWOOM_TOKEN` |
 
 ## Error codes (`error.code`)
 
@@ -83,8 +108,9 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 | `CONFIRMATION_REQUIRED` | ✗ | 변이 명령에 `--confirm`/`--yes` 누락 (json/csv 모드) |
 | `VALIDATION_FAILED` | ✗ | `order validate` 실패 — 실패 항목은 `error.details` |
 | `IDEMPOTENCY_CONFLICT` | ✗ | 같은 `--client-order-id`가 다른 주문 내용으로 이미 사용됨. 재시도라면 인자가 이전 실행과 동일한지 확인, 새 주문이면 새 키 사용. exit 1, 전송되지 않음 |
+| `LEDGER_BUSY` | ✓ | 멱등성 원장 잠금을 획득하지 못함 — 같은 프로필의 다른 주문이 전송 중. 잠시 후 재시도. exit 2 (`IDEMPOTENCY_CONFLICT`와 달리 exit 1이 아님에 유의) |
 | `AUTH_REQUIRED` | ✗ | 토큰 없음. 키체인 불가 환경이면 메시지가 `KIWOOM_TOKEN` 안내 |
-| `TOKEN_EXPIRED` | ✗ | 재로그인 필요 |
+| `TOKEN_EXPIRED` | ✗ | 재로그인 필요 (upstream 8005, HTTP 401) |
 | `INVALID_INPUT` | ✗ | 파라미터 형식/누락 (upstream 1511/1512/1517/2) |
 | `INVALID_API` | ✗ | 잘못된 API ID |
 | `NOT_FOUND` | ✗ | 종목/시장 없음 |
@@ -92,8 +118,10 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 | `ENV_MISMATCH` | ✗ | 실전/모의 불일치 (appkey/token) |
 | `IP_MISMATCH` | ✗ | 발급 IP와 요청 IP 다름 |
 | `INVALID_CREDENTIALS` / `TOKEN_ISSUE_FAILED` / `TOKEN_REVOKE_FAILED` | ✗ | 키/발급 문제 |
-| `KEYCHAIN_UNAVAILABLE` | ✗ | OS 키체인 접근 불가 — `KIWOOM_TOKEN` 사용 |
-| `NETWORK_ERROR` | ✓ | 연결 실패 |
+| `NOT_CONFIGURED` | ✗ | 설정 필요 — 먼저 `kiwoom config setup` 실행. exit 1 |
+| `KEYCHAIN_UNAVAILABLE` | ✗ | OS 키체인 접근 불가 — `KIWOOM_TOKEN` 사용. exit 1 |
+| `NETWORK_ERROR` | ✓ | 연결 실패·타임아웃 등 전송 오류 (`httpx.RequestError` 전반을 포괄) |
+| `DEPENDENCY_MISSING` | ✗ | 선택적 패키지 미설치 (예: `websockets` 없이 `stream`). exit 1 |
 | `UPSTREAM_ERROR` | ✓/✗ | 분류되지 않은 서버 오류 (`upstream_code` 참고) |
 
 ## 주문 안전장치
@@ -107,7 +135,14 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 
 멱등키는 주문 내용(api_id+body)의 fingerprint에 바인딩되며, 조회→전송→기록
 구간은 원장 파일 잠금으로 프로세스 간 직렬화된다. 같은 키로 다른 내용을
-보내면 `IDEMPOTENCY_CONFLICT`.
+보내면 `IDEMPOTENCY_CONFLICT`. 잠금 대기는 POSIX(fcntl)에서는 무한 대기하며,
+Windows(msvcrt)에서만 약 10초 재시도 후 획득 실패로 `LEDGER_BUSY`
+(exit 2, retryable)가 발생한다 — 잠시 후 재시도하면 된다.
+
+미국 주식 주문은 body에 자동판별된 거래소가 포함되므로, 같은
+`--client-order-id`로 재실행했는데 그 사이 거래소 판별이 달라지면(캐시 갱신 등)
+body가 달라져 `IDEMPOTENCY_CONFLICT`가 날 수 있다 — 의도된 동작이다. 같은
+주문인지 확인한 뒤 필요하면 새 키로 재시도하라.
 
 권장 주문 순서: **validate → --dry-run → --confirm --client-order-id**.
 항상 `meta.env`를 확인하고, 실거래(`prod`)에서는 dry-run을 생략하지 마세요.
@@ -158,10 +193,17 @@ $ kiwoom -f json stream quote 005930 --max-events 3
 ```bash
 kiwoom describe -f json                 # 전체 명령 트리
 kiwoom describe order buy -f json       # 단일 명령 스키마
+kiwoom describe --paths -f json         # 경로+한줄설명 평면 목록 (저비용 발견)
+kiwoom describe order --depth 1 -f json # 하위 명령 재귀 깊이 제한
 ```
 
 명령별로 `path` / `help` / `arguments[]` / `options[]`(opts, type, default,
 required, choices, is_flag)를 반환합니다. 도움말 파싱 대신 이걸 쓰세요.
+
+- `--paths` — 전체 트리 대신 `{path, help}` 배열만 반환 (스키마 없이 명령을
+  먼저 훑어볼 때 토큰 절약). `--depth N`은 전체 스키마 모드에서만 적용되며 `--paths`와 함께 쓰면 무시됩니다.
+- `market` 명령들은 docstring에 사용하는 API ID를 명시하므로(예:
+  `순위 정보 조회. (ka10016)`) `describe`의 `help` 필드에서 바로 확인됩니다.
 
 ## 인증 (비대화형 환경)
 

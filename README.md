@@ -187,7 +187,8 @@ kiwoom -f json order buy 005930 10 --price 70000 --type limit --confirm --client
 ```
 
 - 어떤 명령도 비밀번호·생체인증을 요구하지 않으므로 에이전트 세션이 중간에 멈추지 않습니다. json/csv 모드에서는 확인 프롬프트 대신 `CONFIRMATION_REQUIRED` 오류(exit 1)로 응답합니다.
-- 페이지네이션(연속조회)은 자동 처리 — 에이전트가 커서를 관리할 필요가 없습니다.
+- 페이지네이션(연속조회)은 전역 `--all-pages`(끝까지 자동 수집·리스트 병합) 또는 `--next-key <값>`(특정 페이지부터 재조회)로 명시 제어합니다 — 커서를 직접 다루지 않아도 됩니다.
+- `kiwoom describe --paths -f json`으로 전체 명령 경로를 저비용에 훑어본 뒤, 필요한 명령만 `kiwoom describe <경로> -f json`으로 상세 스키마를 조회하세요.
 - 자세한 패턴은 [Wiki: AI 에이전트 가이드](https://github.com/gejyn14/kiwoom-cli/wiki/AI-Agents) 참고.
 
 ### 샌드박스 환경 (키체인 접근 불가)
@@ -615,6 +616,8 @@ kiwoom -f csv stock daily 005930 > samsung_daily.csv
 | `NETWORK_ERROR` | O | API 서버 연결 실패 |
 | `KEYCHAIN_UNAVAILABLE` | X | OS 키체인 접근 불가 (샌드박스/CI) |
 | `NOT_CONFIGURED` | X | `config setup` 미실행 (CLI 로컬 감지) |
+| `DEPENDENCY_MISSING` | X | 선택적 패키지 미설치 (예: `websockets` 없이 `stream`) |
+| `LEDGER_BUSY` | O | 멱등성 원장 잠금 경합 — 재시도 (exit 2) |
 | `UPSTREAM_ERROR` | 5xx·1999는 O | 미분류 업스트림 오류 (기본값) |
 
 CLI 수준의 인자/옵션 오류(잘못된 값, 인자 누락 등)도 json 모드에서는 `INVALID_INPUT` envelope로 출력됩니다 (`upstream_code: null`, exit 1). `kiwoom api --raw`는 json 모드에서도 envelope로 감싸되 `data`에 응답 원본을 그대로(`return_code` 포함) 담습니다. `auth login`은 json 모드에서 `{profile, token_storage, saved, token}`을 반환하며, `token` 원문은 env 모드에서만 포함됩니다.

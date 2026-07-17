@@ -278,14 +278,21 @@ def run_stream(
     """Connect to WebSocket and stream real-time data.
 
     max_events/duration/until 종료 조건 도달 시 소켓을 닫고 정상 종료(exit 0).
-    json 모드에서는 REAL 이벤트를 NDJSON 한 줄씩, 오류는 envelope 오류 한 줄
-    (exit 2, 인증은 exit 3)로 출력한다. table/raw 모드 출력은 기존과 동일.
-    record가 None이 아니면 정규화 이벤트를 NDJSON 파일에도 기록한다
-    (""=기본 레이아웃, 그 외=명시 경로. 출력 형식과 무관).
+    json 모드에서는 REAL 이벤트를 NDJSON 한 줄씩, 오류는 envelope 오류 한 줄로
+    출력한다: 연결/등록 오류는 exit 2, 인증 문제는 exit 3. `websockets` 패키지가
+    없으면 DEPENDENCY_MISSING으로 exit 1, `--raw`를 json 모드와 함께 쓰면
+    INVALID_INPUT으로 exit 1(둘 다 소켓 연결 이전에 검증). table/raw 모드
+    출력은 기존과 동일. record가 None이 아니면 정규화 이벤트를 NDJSON 파일에도
+    기록한다 (""=기본 레이아웃, 그 외=명시 경로. 출력 형식과 무관).
     """
     import asyncio
 
     json_mode = _get_format() == "json"
+    if raw and json_mode:
+        _emit_line(error=envelope.error_body(
+            "--raw는 json 모드와 함께 사용할 수 없습니다 (NDJSON 한 줄 계약 위반).",
+            code="INVALID_INPUT", retryable=False))
+        raise SystemExit(1)
     # 입력 검증(UsageError -> exit 1)은 연결 시도 전에
     state = new_stream_state(max_events=max_events, duration=duration, until=until)
 
@@ -302,8 +309,12 @@ def run_stream(
     try:
         import websockets
     except ImportError:
-        human("[red]websockets 패키지가 필요합니다: pip install websockets[/]")
-        return
+        msg = "websockets 패키지가 필요합니다: pip install websockets"
+        if json_mode:
+            _emit_line(error=envelope.error_body(msg, code="DEPENDENCY_MISSING", retryable=False))
+        else:
+            err_console.print(f"[red]{msg}[/]")
+        raise SystemExit(1)
 
     profile, ws_url = resolve_ws_target()
     token = auth.load_token(profile=profile)
@@ -465,7 +476,7 @@ def run_stream(
     try:
         exit_code, error = asyncio.run(_stream())
     except KeyboardInterrupt:
-        console.print("\n[dim]스트리밍 종료[/]")
+        err_console.print("\n[dim]스트리밍 종료[/]")
         exit_code, error = 0, None
     finally:
         if recorder is not None:

@@ -118,18 +118,37 @@ def project_fields(data: Any, fields: list[str]) -> Any:
     return out
 
 
+def _collect_matched(data: Any, fields: list[str], found: set[str]) -> None:
+    """투영된 data를 순회하며 fields 중 실제로 존재한 키를 found에 모은다."""
+    if isinstance(data, list):
+        for x in data:
+            _collect_matched(x, fields, found)
+    elif isinstance(data, dict):
+        for k, v in data.items():
+            if k in fields:
+                found.add(k)
+            _collect_matched(v, fields, found)
+
+
 def emit(data: Any = None, *, error: dict[str, Any] | None = None) -> None:
     """Envelope 전체를 단일 JSON 문서로 stdout에 출력."""
     ctx = click.get_current_context(silent=True)
     obj = ctx.obj if ctx is not None and isinstance(ctx.obj, dict) else {}
     fields = obj.get("fields")
+    unmatched: list[str] = []
     if fields and data is not None:
         data = project_fields(data, fields)
+        found: set[str] = set()
+        _collect_matched(data, fields, found)
+        unmatched = sorted(set(fields) - found)
+    meta = build_meta()
+    if unmatched:
+        meta["fields_unmatched"] = unmatched
     doc = {
         "ok": error is None,
         "schema": SCHEMA,
         "data": data,
-        "meta": build_meta(),
+        "meta": meta,
         "error": error,
     }
     click.echo(json.dumps(doc, ensure_ascii=False, indent=2))

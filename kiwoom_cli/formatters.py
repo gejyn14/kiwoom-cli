@@ -34,6 +34,19 @@ def human(renderable: Any) -> None:
         err_console.print(renderable)
 
 
+def fail_input(message: str, *, code: str = "INVALID_INPUT") -> None:
+    """입력 오류 계약 종료: table=stderr 빨간 메시지, json/csv=envelope 오류. exit 1.
+
+    커맨드 본문에서 err_console.print + SystemExit(1) 패턴 대신 사용한다 —
+    json 모드에서 stdout이 비는(에이전트가 분기할 수 없는) 종료를 막는다.
+    """
+    if _get_format() == "table":
+        err_console.print(f"[red]{message}[/]")
+    else:
+        envelope.emit(error=envelope.error_body(message, code=code, retryable=False))
+    raise SystemExit(1)
+
+
 def _output_json(data: Any) -> None:
     """Write a Kiwoom API response as an enveloped JSON document to stdout.
 

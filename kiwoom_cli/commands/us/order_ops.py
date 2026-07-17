@@ -5,8 +5,7 @@ from __future__ import annotations
 from rich.panel import Panel
 
 from ...client import KiwoomClient
-from ...formatters import human, print_generic_table
-from ...output import err_console
+from ...formatters import fail_input, human, print_generic_table
 from .._mutation import confirm_gate, dry_run_payload, finish_dry_run, send_order
 from ._constants import (
     US_ORDER_TYPES,
@@ -28,11 +27,9 @@ def fmt_us_price(price: float) -> str:
 def _validate_us_type(order_type: str, side: str) -> str:
     """CLI 주문유형 → trde_tp 코드. 미지원이면 exit 1."""
     if order_type not in US_ORDER_TYPES:
-        err_console.print(f"[red]미국주식에서 지원하지 않는 주문유형입니다: {order_type}[/]")
-        raise SystemExit(1)
+        fail_input(f"미국주식에서 지원하지 않는 주문유형입니다: {order_type}")
     if side == "buy" and order_type in US_SELL_ONLY_TYPES:
-        err_console.print(f"[red]'{order_type}'은(는) 매도 전용 주문유형입니다 (매수 미지원).[/]")
-        raise SystemExit(1)
+        fail_input(f"'{order_type}'은(는) 매도 전용 주문유형입니다 (매수 미지원).")
     return US_ORDER_TYPES[order_type]
 
 
@@ -102,8 +99,7 @@ def _resolve_or_exit(client, code: str, exchange: str | None) -> str:
     try:
         return resolve_us_exchange(client, code, exchange)
     except UsExchangeError as e:
-        err_console.print(f"[red]{e}[/]")
-        raise SystemExit(1) from None
+        fail_input(str(e))
 
 
 def buy(code: str, qty: int, price: float, order_type: str,
@@ -138,11 +134,9 @@ def sell(code: str, qty: int, price: float, order_type: str,
     """미국주식 매도 (ust20001)."""
     trde_tp = _validate_us_type(order_type, "sell")
     if order_type in US_STOP_TYPES and not stop:
-        err_console.print(f"[red]'{order_type}' 주문에는 --stop 가격이 필요합니다.[/]")
-        raise SystemExit(1)
+        fail_input(f"'{order_type}' 주문에는 --stop 가격이 필요합니다.")
     if stop and order_type not in US_STOP_TYPES:
-        err_console.print("[red]--stop은 stop/stop-limit 주문에서만 사용합니다.[/]")
-        raise SystemExit(1)
+        fail_input("--stop은 stop/stop-limit 주문에서만 사용합니다.")
 
     def body_fn(stex_tp: str) -> dict[str, str]:
         body = {
@@ -200,8 +194,7 @@ def cancel(orig_order_no: str, code: str, qty: int,
            dry_run: bool = False, client_order_id: str | None = None) -> None:
     """미국주식 취소 (ust20003) — 잔량 전체 취소만 지원."""
     if qty:
-        err_console.print("[red]미국주식은 부분 취소를 지원하지 않습니다 (수량 지정 불가, 전량 취소만 가능).[/]")
-        raise SystemExit(1)
+        fail_input("미국주식은 부분 취소를 지원하지 않습니다 (수량 지정 불가, 전량 취소만 가능).")
 
     def body_fn(stex_tp: str) -> dict[str, str]:
         return {

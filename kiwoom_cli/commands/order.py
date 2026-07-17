@@ -29,8 +29,7 @@ from rich.panel import Panel
 
 from .. import envelope
 from ..client import KiwoomAPIError, KiwoomClient
-from ..formatters import _get_format, human, print_generic_table
-from ..output import err_console
+from ..formatters import _get_format, fail_input, human, print_generic_table
 from ._mutation import confirm_gate, dry_run_payload, finish_dry_run, send_order
 from .us import order_ops as us_order_ops
 from .us._constants import US_ORDER_TYPES
@@ -66,15 +65,13 @@ ORDER_EXCHANGES = ["KRX", "NXT", "SOR", "nasdaq", "nyse", "amex"]
 def _kr_price_or_exit(price: float) -> int:
     """국내 주문 가격은 정수(원). 소수점 입력 시 exit 1."""
     if price != int(price):
-        err_console.print("[red]국내 주문 가격은 정수(원)여야 합니다.[/]")
-        raise SystemExit(1)
+        fail_input("국내 주문 가격은 정수(원)여야 합니다.")
     return int(price)
 
 
 def _kr_type_or_exit(order_type: str) -> str:
     if order_type not in ORDER_TYPES:
-        err_console.print(f"[red]국내주식에서 지원하지 않는 주문유형입니다: {order_type}[/]")
-        raise SystemExit(1)
+        fail_input(f"국내주식에서 지원하지 않는 주문유형입니다: {order_type}")
     return ORDER_TYPES[order_type]
 
 
@@ -220,8 +217,7 @@ def buy(code: str, qty: int, price: float, order_type: str | None, exchange: str
     order_type = _resolve_order_type(order_type, price)
     if is_us_symbol(code, exchange):
         if cond_uv:
-            err_console.print("[red]--cond-price는 국내 주문에서만 사용합니다.[/]")
-            raise SystemExit(1)
+            fail_input("--cond-price는 국내 주문에서만 사용합니다.")
         return us_order_ops.buy(code, qty, price, order_type, exchange, confirm,
                                 dry_run=dry_run, client_order_id=client_order_id)
 
@@ -265,14 +261,12 @@ def sell(code: str, qty: int, price: float, order_type: str | None, exchange: st
     order_type = _resolve_order_type(order_type, price)
     if is_us_symbol(code, exchange):
         if cond_uv:
-            err_console.print("[red]--cond-price는 국내 주문에서만 사용합니다.[/]")
-            raise SystemExit(1)
+            fail_input("--cond-price는 국내 주문에서만 사용합니다.")
         return us_order_ops.sell(code, qty, price, order_type, exchange, stop, confirm,
                                  dry_run=dry_run, client_order_id=client_order_id)
 
     if stop:
-        err_console.print("[red]--stop은 미국주식 매도에서만 사용합니다.[/]")
-        raise SystemExit(1)
+        fail_input("--stop은 미국주식 매도에서만 사용합니다.")
     dmst_stex_tp = exchange or "KRX"
     trde_tp = _kr_type_or_exit(order_type)
     kr_price = _kr_price_or_exit(price)
@@ -312,14 +306,12 @@ def modify(orig_order_no: str, code: str, qty: int, price: float, exchange: str 
     """
     if is_us_symbol(code, exchange):
         if mdfy_cond_uv:
-            err_console.print("[red]--cond-price는 국내 주문에서만 사용합니다.[/]")
-            raise SystemExit(1)
+            fail_input("--cond-price는 국내 주문에서만 사용합니다.")
         return us_order_ops.modify(orig_order_no, code, qty, price, exchange, stop, confirm,
                                    dry_run=dry_run, client_order_id=client_order_id)
 
     if stop:
-        err_console.print("[red]--stop은 미국주식에서만 사용합니다.[/]")
-        raise SystemExit(1)
+        fail_input("--stop은 미국주식에서만 사용합니다.")
     dmst_stex_tp = exchange or "KRX"
     kr_price = _kr_price_or_exit(price)
     body = {
@@ -398,9 +390,9 @@ def _market_open_kr() -> bool:
 @click.argument("code")
 @click.argument("qty", type=int)
 @click.option("--price", type=float, default=0, help="주문가격 (생략 시 현재가로 예상비용 계산)")
-@click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES)), help="주문유형")
+@click.option("--type", "order_type", default=None, type=click.Choice(list(ORDER_TYPES)), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
 @click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소")
-def validate(side: str, code: str, qty: int, price: float, order_type: str, dmst_stex_tp: str):
+def validate(side: str, code: str, qty: int, price: float, order_type: str | None, dmst_stex_tp: str):
     """주문 사전점검 — 주문을 전송하지 않는 read-only 프리플라이트. (ka10001/kt00001/kt00004)
 
     symbol_ok / market_open / sufficient_balance / price_ok 를 점검합니다.
@@ -408,6 +400,7 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str, dmst
 
     예: kiwoom order validate buy 005930 10 --price 70000 -f json
     """
+    order_type = _resolve_order_type(order_type, price)
     if is_us_symbol(code):
         raise click.ClickException("validate는 국내 종목만 지원합니다 (미국주식 미지원).")
 
