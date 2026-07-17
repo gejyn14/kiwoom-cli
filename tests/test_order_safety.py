@@ -7,34 +7,39 @@ and concurrent sends.
 
 from __future__ import annotations
 
+import json  # noqa: F401
 from pathlib import Path
-from typing import Any
+from typing import Any  # noqa: F401
+from unittest.mock import MagicMock, patch  # noqa: F401
 
+import click  # noqa: F401
 import pytest
+from click.testing import CliRunner
 
-from kiwoom_cli import idempotency
+from kiwoom_cli import config, idempotency
+from kiwoom_cli.main import cli  # noqa: F401
 
 
 @pytest.fixture
-def isolated_env(tmp_path: Path, monkeypatch: Any) -> None:
-    """Isolate idempotency ledger to a temporary directory per test.
+def runner():
+    """Click CLI runner for integration tests."""
+    return CliRunner()
 
-    Mocks envelope.build_meta() to return a stable test profile/env,
-    and patches config.CONFIG_FILE to point to tmp_path.
-    """
-    # Set up temporary config directory
-    test_config_dir = tmp_path / "config"
-    test_config_dir.mkdir(parents=True, exist_ok=True)
 
-    # Mock CONFIG_FILE to point to temp directory
-    monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", test_config_dir / "config.toml")
+@pytest.fixture
+def isolated_env(tmp_path: Path, monkeypatch) -> Path:
+    """config/ledger를 tmp로 격리하고 프로필/도메인 env를 제거한다."""
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+    monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+    return tmp_path
 
-    # Mock envelope.build_meta() to return consistent test values
-    def mock_build_meta() -> dict[str, Any]:
-        return {"profile": "test", "env": "mock", "cont": None}
 
-    monkeypatch.setattr("kiwoom_cli.envelope.build_meta", mock_build_meta)
-    monkeypatch.setattr("kiwoom_cli.idempotency.envelope.build_meta", mock_build_meta)
+def _mock_kiwoom_client(request_fn):
+    """Helper to inject a fake KiwoomClient for testing."""
+    fake = MagicMock()
+    fake.request.side_effect = request_fn
+    return fake
 
 
 # ── Task 1: idempotency core ─────────────────────────────
