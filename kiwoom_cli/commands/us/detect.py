@@ -63,7 +63,7 @@ def resolve_us_exchange(client, code: str, exchange: str | None = None) -> str:
     cached = cache.get(symbol)
     if cached in US_EXCHANGE.values():
         return cached
-    data, _ = client.request("usa10098", {"stk_cd": symbol})
+    data, _ = client.request("usa10098", {"stk_cd": symbol}, internal=True)
     entries = [
         e for e in data.get("list", []) or []
         if e.get("stk_cd", "").upper() == symbol

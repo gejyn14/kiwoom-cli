@@ -57,3 +57,42 @@ def test_explicit_cursor_beats_ctx(client):
         c.request("kt00004", {}, cont_yn="Y", next_key="EXPLICIT")
     assert httpx_mock.get_requests()[0].headers.get("next-key") == "EXPLICIT"
     assert ctx.obj["next_key"] == "CTX"   # 소비되지 않음
+
+
+def test_internal_request_skips_global_cursor(client):
+    c, httpx_mock = client
+    httpx_mock.add_response(json={"return_code": 0}, headers={"cont-yn": "N", "next-key": ""})
+    httpx_mock.add_response(json={"return_code": 0}, headers={"cont-yn": "N", "next-key": ""})
+    ctx = click.Context(click.Command("x"), obj={"next_key": "CURSOR1"})
+    with ctx:
+        c.request("usa10098", {}, internal=True)   # 판별 보조 호출 — 커서 미소비
+        c.request("usa20100", {})                  # 본 조회가 커서를 소비
+    reqs = httpx_mock.get_requests()
+    assert "next-key" not in reqs[0].headers
+    assert reqs[1].headers.get("next-key") == "CURSOR1"
+    assert reqs[1].headers.get("cont-yn") == "Y"
+
+
+def test_internal_request_skips_all_pages(client):
+    c, httpx_mock = client
+    p = _page([{"n": "1"}], cont="K2")
+    httpx_mock.add_response(json=p["json"], headers=p["headers"])
+    ctx = click.Context(click.Command("x"), obj={"all_pages": True})
+    with ctx:
+        data, headers = c.request("usa10098", {}, internal=True)
+    assert len(httpx_mock.get_requests()) == 1     # 반복 조회 없음
+    assert headers["cont-yn"] == "Y"
+
+
+def test_all_pages_cap_stops_at_50(client, capsys):
+    c, httpx_mock = client
+    for i in range(50):
+        p = _page([{"n": str(i)}], cont=f"K{i + 1}")
+        httpx_mock.add_response(json=p["json"], headers=p["headers"])
+    ctx = click.Context(click.Command("x"), obj={"all_pages": True})
+    with ctx:
+        data, headers = c.request("kt00004", {})
+    assert len(httpx_mock.get_requests()) == 50    # 1 + 49회 반복에서 상한
+    assert len(data["acnt_evlt_prst"]) == 50
+    assert headers["cont-yn"] == "Y"               # 상한 도달 — meta.cont로 계속 가능
+    assert "상한" in capsys.readouterr().err

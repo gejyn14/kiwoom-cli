@@ -125,12 +125,17 @@ class KiwoomClient:
         *,
         cont_yn: str = "",
         next_key: str = "",
+        internal: bool = False,
     ) -> tuple[dict[str, Any], dict[str, str]]:
         """단일 요청 + 전역 페이지네이션 플래그 처리.
 
         --next-key: 명령의 첫 API 요청에만 커서를 주입한다 (소비형).
         --all-pages: cont-yn이 끝날 때까지 반복, 리스트 필드를 병합한다.
+        internal=True: 보조 호출(예: 미국 거래소 자동판별)로 표시 —
+        전역 --next-key/--all-pages를 적용하지 않는다 (커서는 본 조회가 소비).
         """
+        if internal:
+            return self._request_once(api_id, body, cont_yn=cont_yn, next_key=next_key)
         ctx = click.get_current_context(silent=True)
         obj = ctx.obj if ctx is not None and isinstance(ctx.obj, dict) else None
         if obj and not next_key and obj.get("next_key"):
