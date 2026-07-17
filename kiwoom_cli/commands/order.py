@@ -115,7 +115,7 @@ def _strip_signed_int(value: Any) -> int:
 
 def _quote_price_kr(client, code: str) -> int:
     """현재가 조회 (ka10001). 시장가 주문의 예상비용 계산용."""
-    data, _ = client.request("ka10001", {"stk_cd": code})
+    data, _ = client.request("ka10001", {"stk_cd": code}, internal=True)
     return _strip_signed_int(data.get("cur_prc"))
 
 

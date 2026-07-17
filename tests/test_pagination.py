@@ -96,3 +96,16 @@ def test_all_pages_cap_stops_at_50(client, capsys):
     assert len(data["acnt_evlt_prst"]) == 50
     assert headers["cont-yn"] == "Y"               # 상한 도달 — meta.cont로 계속 가능
     assert "상한" in capsys.readouterr().err
+
+
+def test_internal_request_does_not_record_last_cont(client):
+    c, httpx_mock = client
+    p1 = _page([{"n": "1"}], cont="MAIN_CURSOR")
+    p2 = _page([{"n": "2"}], cont="AUX_CURSOR")
+    httpx_mock.add_response(json=p1["json"], headers=p1["headers"])
+    httpx_mock.add_response(json=p2["json"], headers=p2["headers"])
+    ctx = click.Context(click.Command("x"), obj={})
+    with ctx:
+        c.request("kt00004", {})                     # 본 조회가 last_cont 기록
+        c.request("usa10098", {}, internal=True)     # 보조 호출은 덮어쓰지 않음
+    assert ctx.obj["last_cont"] == {"next_key": "MAIN_CURSOR"}
