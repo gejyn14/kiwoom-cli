@@ -677,6 +677,10 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 - 앱 자체 암호화 계층은 의도적으로 두지 않음 — 추가 계층은 명령마다 잠금 해제 프롬프트를 요구하게 되어 CLI 사용성을 해침
 - v2.0 이하에서 업그레이드한 경우: 암호화 저장소 형식이 제거되어 `kiwoom config setup`을 한 번 다시 실행해야 합니다
 - 주문은 기본적으로 미리보기 + 대화형 확인을 거칩니다 (`--confirm`으로 스킵)
+- `~/.kiwoom` 디렉토리는 0700, `config.toml`·주문 원장·레코딩 파일은 0600으로 생성됩니다 — 기존 설치본도 아무 명령 실행 시 자동으로 조여집니다 (`--record`로 명시한 경로는 제외)
+- 프로필 이름은 `[A-Za-z0-9_-]{1,64}` allowlist로 제한됩니다 — 원장 파일명·키링 키로의 경로 조작을 차단합니다
+- raw `kiwoom api`로 주문성 API(17개)를 직접 호출하면 확인 게이트가 적용됩니다: table 모드는 body 미리보기 + y/n 프롬프트, json/csv 모드는 `--confirm` 없이 `CONFIRMATION_REQUIRED`(exit 1)
+- PyPI 배포는 Trusted Publishing(OIDC)으로 이루어집니다 — 장기 API 토큰을 저장하지 않습니다
 
 자세한 내용: [Wiki: 보안 모델](https://github.com/gejyn14/kiwoom-cli/wiki/Security) · [SECURITY.md](SECURITY.md)
 
