@@ -390,9 +390,9 @@ def _market_open_kr() -> bool:
 @click.argument("code")
 @click.argument("qty", type=int)
 @click.option("--price", type=float, default=0, help="주문가격 (생략 시 현재가로 예상비용 계산)")
-@click.option("--type", "order_type", default="market", type=click.Choice(list(ORDER_TYPES)), help="주문유형")
+@click.option("--type", "order_type", default=None, type=click.Choice(list(ORDER_TYPES)), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
 @click.option("--exchange", "dmst_stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소")
-def validate(side: str, code: str, qty: int, price: float, order_type: str, dmst_stex_tp: str):
+def validate(side: str, code: str, qty: int, price: float, order_type: str | None, dmst_stex_tp: str):
     """주문 사전점검 — 주문을 전송하지 않는 read-only 프리플라이트. (ka10001/kt00001/kt00004)
 
     symbol_ok / market_open / sufficient_balance / price_ok 를 점검합니다.
@@ -400,6 +400,7 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str, dmst
 
     예: kiwoom order validate buy 005930 10 --price 70000 -f json
     """
+    order_type = _resolve_order_type(order_type, price)
     if is_us_symbol(code):
         raise click.ClickException("validate는 국내 종목만 지원합니다 (미국주식 미지원).")
 

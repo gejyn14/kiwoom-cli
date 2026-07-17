@@ -33,6 +33,10 @@ def fingerprint(api_id: str, body: dict[str, Any]) -> str:
     return hashlib.sha256(canon.encode("utf-8")).hexdigest()[:16]
 
 
+class LedgerLockBusy(Exception):
+    """원장 잠금을 제한시간 내 획득하지 못함 (Windows msvcrt ~10초 재시도 후)."""
+
+
 if sys.platform == "win32":  # pragma: no cover
     import msvcrt
 
@@ -66,7 +70,10 @@ def locked():
     ledger.parent.mkdir(parents=True, exist_ok=True)
     lock_path = ledger.with_suffix(".lock")
     with open(lock_path, "a+", encoding="utf-8") as f:
-        _acquire(f)
+        try:
+            _acquire(f)
+        except OSError as e:
+            raise LedgerLockBusy(str(e)) from e
         try:
             yield
         finally:

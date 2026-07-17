@@ -285,3 +285,42 @@ def test_fields_match_no_flag(runner, isolated_env):
     doc = _doc(result)
     assert "fields_unmatched" not in doc["meta"]
     assert doc["data"] == {"profile": "default"}
+
+
+# ── Task 10: tier-1 follow-ups ───────────────────────────
+
+def test_lock_busy_typed_error(runner, isolated_env, monkeypatch):
+    from kiwoom_cli import idempotency
+    monkeypatch.setattr(idempotency, "_acquire", MagicMock(side_effect=OSError("locked")))
+    result = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                 "--price", "70000", "--confirm", "--client-order-id", "k1"])
+    assert result.exit_code == 2
+    doc = _doc(result)
+    assert doc["error"]["code"] == "LEDGER_BUSY"
+    assert doc["error"]["retryable"] is True
+
+
+def test_validate_rejects_market_plus_price(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "order", "validate", "buy", "005930", "10",
+                                 "--price", "70000", "--type", "market"])
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
+def test_send_order_strips_pagination_flags(runner, isolated_env):
+    captured = {}
+
+    def capture(api_id, body=None, **kwargs):
+        ctx = click.get_current_context(silent=True)
+        captured["all_pages"] = ctx.obj.get("all_pages")
+        captured["next_key"] = ctx.obj.get("next_key")
+        return {"ord_no": "1", "return_code": 0}, {}
+
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        mc = _mock_kiwoom_client(capture)
+        mock_cls.return_value = mc
+        result = runner.invoke(cli, ["-f", "json", "--all-pages", "order", "buy", "005930",
+                                     "10", "--confirm"])
+    assert result.exit_code == 0
+    assert captured["all_pages"] is False
+    assert captured["next_key"] is None
