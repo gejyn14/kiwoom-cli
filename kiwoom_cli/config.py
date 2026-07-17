@@ -54,7 +54,7 @@ PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def is_valid_profile_name(name: str) -> bool:
-    return bool(PROFILE_NAME_RE.match(name))
+    return bool(PROFILE_NAME_RE.fullmatch(name))
 
 
 DEFAULT_CONFIG = {

@@ -159,7 +159,7 @@ def test_valid_profile_names_accepted():
 
 
 def test_invalid_profile_names_rejected():
-    for name in ("", "../evil", "a/b", "a\\b", "a.b", "한글", "a b", "A" * 65):
+    for name in ("", "../evil", "a/b", "a\\b", "a.b", "한글", "a b", "A" * 65, "default\n"):
         assert not config.is_valid_profile_name(name)
 
 
