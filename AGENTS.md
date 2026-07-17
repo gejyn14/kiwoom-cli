@@ -67,7 +67,7 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 `data`(및 내부 모든 리스트의 각 요소)를 지정한 키로만 투영하고 `data.raw`를
 제거합니다. 대량 조회 시 응답 토큰을 크게 줄입니다.
 
-요청한 키가 응답에 하나도 없으면(오타 등) 조용히 빈 결과를 주지 않고
+요청한 키 중 하나라도 매칭되지 않으면(부분 매칭 포함, 오타 등) 조용히 넘어가지 않고
 `meta.fields_unmatched`에 매칭 실패한 키 목록을 담아 반환합니다.
 
 ## 페이지네이션 (연속조회)
@@ -195,7 +195,7 @@ kiwoom describe order --depth 1 -f json # 하위 명령 재귀 깊이 제한
 required, choices, is_flag)를 반환합니다. 도움말 파싱 대신 이걸 쓰세요.
 
 - `--paths` — 전체 트리 대신 `{path, help}` 배열만 반환 (스키마 없이 명령을
-  먼저 훑어볼 때 토큰 절약). `--depth N`과 함께 재귀 깊이도 제한 가능합니다.
+  먼저 훑어볼 때 토큰 절약). `--depth N`은 전체 스키마 모드에서만 적용되며 `--paths`와 함께 쓰면 무시됩니다.
 - `market` 명령들은 docstring에 사용하는 API ID를 명시하므로(예:
   `순위 정보 조회. (ka10016)`) `describe`의 `help` 필드에서 바로 확인됩니다.
 

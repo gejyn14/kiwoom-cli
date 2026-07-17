@@ -14,8 +14,8 @@ envelope로 바뀝니다 (기존엔 `-f json`에서도 일반 텍스트/에러�
   없음(UsageError). 주문 전송 명령은 두 플래그를 조용히 무시(방어적).
 - `kiwoom describe --paths` — 경로+한줄설명 평면 목록만 반환하는 저비용
   발견 모드. `--depth N`으로 하위 명령 재귀 깊이 제한.
-- `meta.fields_unmatched` — `--fields`로 지정한 키가 응답에 하나도 없으면
-  매칭 실패한 키 목록을 반환(오타 감지).
+- `meta.fields_unmatched` — `--fields`로 지정한 키 중 하나라도 매칭되지 않으면
+  (부분 매칭 포함) 매칭 실패한 키 목록을 반환(오타 감지).
 - `market` 명령 docstring에 사용 API ID 명시(예: `순위 정보 조회. (ka10016)`)
   — `describe`의 `help` 필드에서 바로 확인 가능.
 - `config setup`/`config set`/`config use`/`account list`/`stream types`가
@@ -25,7 +25,7 @@ envelope로 바뀝니다 (기존엔 `-f json`에서도 일반 텍스트/에러�
 
 ### Fixed
 - 입력 오류(잘못된 인자/옵션 등)를 json/csv 모드에서 `err_console` 직접
-  출력 대신 전부 `fail_input` envelope로 통일(28개 지점) — stdout이 항상
+  출력 대신 전부 `fail_input` envelope로 통일(29개 지점) — stdout이 항상
   파싱 가능한 단일 문서가 되도록.
 - `httpx.RequestError`(타임아웃 등 `ConnectError` 외 전송 오류)를
   `NETWORK_ERROR`(retryable)로 분류 — 이전엔 처리되지 않아 traceback이
