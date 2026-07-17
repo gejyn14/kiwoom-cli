@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] — 에이전트 계약 강화 (Tier-2)
+## v2.6.0 (2026-07-17) — 에이전트 계약 강화 (Tier-2)
 
 **Breaking (json 모드만)**: `config set`/`config use`의 오류·성공 출력이
 envelope로 바뀝니다 (기존엔 `-f json`에서도 일반 텍스트/에러였습니다).

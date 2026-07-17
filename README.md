@@ -52,7 +52,7 @@ kiwoom -f json order buy 005930 10 --price 70000 --confirm --client-order-id run
 price=$(kiwoom -f json --fields price stock info 005930 | jq .data.price)
 kiwoom -f json stream quote 005930 --max-events 10           # NDJSON 10줄 후 exit 0
 kiwoom stream quote 005930 --record --duration 30m           # 녹화 → history query/export
-kiwoom describe order buy -f json                            # 명령 스키마 자기서술
+kiwoom -f json describe order buy                             # 명령 스키마 자기서술
 ```
 
 - 기계 계약 전체(envelope·error code·litmus loop): **[AGENTS.md](AGENTS.md)**
@@ -397,7 +397,7 @@ kiwoom account exchange apply 1000000 --confirm    # 원화 → 달러 환전
 
 ```bash
 # 안전장치 (에이전트/자동화)
-kiwoom order validate buy 005930 10 --price 70000 -f json        # 사전점검 (주문 미전송)
+kiwoom -f json order validate buy 005930 10 --price 70000        # 사전점검 (주문 미전송)
 kiwoom order buy 005930 10 --price 70000 --type limit --dry-run  # 전송될 내용만 확인 (미전송)
 kiwoom order buy 005930 10 --price 70000 --type limit --confirm --client-order-id run-42  # 멱등 주문
 
