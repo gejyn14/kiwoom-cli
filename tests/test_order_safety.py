@@ -147,3 +147,40 @@ def test_us_order_resolves_and_previews_before_confirm(runner, isolated_env, mon
 
     assert result.exit_code != 0
     assert calls == ["resolve", "preview", "confirm"]
+
+
+# ── Task 4: KR preview shown before confirm prompt ───────
+
+def test_kr_buy_preview_before_confirm(runner, isolated_env, monkeypatch):
+    calls = []
+    monkeypatch.setattr("kiwoom_cli.commands.order._show_order_preview",
+                        lambda *a, **k: calls.append("preview"))
+
+    def abort_confirm(*a, **k):
+        calls.append("confirm")
+        raise click.Abort()
+    monkeypatch.setattr("kiwoom_cli.commands._mutation.click.confirm", abort_confirm)
+
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        result = runner.invoke(cli, ["order", "buy", "005930", "10",
+                                     "--price", "70000", "--type", "limit"])
+    assert result.exit_code != 0
+    assert calls == ["preview", "confirm"]
+    mock_cls.assert_not_called()
+
+
+def test_kr_cancel_preview_before_confirm(runner, isolated_env, monkeypatch):
+    calls = []
+    monkeypatch.setattr("kiwoom_cli.commands.order._show_cancel_preview",
+                        lambda *a, **k: calls.append("preview"))
+
+    def abort_confirm(*a, **k):
+        calls.append("confirm")
+        raise click.Abort()
+    monkeypatch.setattr("kiwoom_cli.commands._mutation.click.confirm", abort_confirm)
+
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        result = runner.invoke(cli, ["order", "cancel", "0000140", "005930"])
+    assert result.exit_code != 0
+    assert calls == ["preview", "confirm"]
+    mock_cls.assert_not_called()

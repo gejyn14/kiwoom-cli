@@ -219,9 +219,8 @@ def buy(code: str, qty: int, price: float, order_type: str, exchange: str | None
         _dry_run_kr("kt10000", "buy", code, qty, kr_price, order_type, dmst_stex_tp, body,
                     lambda: _show_order_preview("매수", code, qty, kr_price, order_type, dmst_stex_tp))
         return
-    confirm_gate(confirm)
-
     _show_order_preview("매수", code, qty, kr_price, order_type, dmst_stex_tp)
+    confirm_gate(confirm)
     send_order("kt10000", body, "매수", client_order_id, client_cls=KiwoomClient)
 
 
@@ -267,9 +266,8 @@ def sell(code: str, qty: int, price: float, order_type: str, exchange: str | Non
         _dry_run_kr("kt10001", "sell", code, qty, kr_price, order_type, dmst_stex_tp, body,
                     lambda: _show_order_preview("매도", code, qty, kr_price, order_type, dmst_stex_tp))
         return
-    confirm_gate(confirm)
-
     _show_order_preview("매도", code, qty, kr_price, order_type, dmst_stex_tp)
+    confirm_gate(confirm)
     send_order("kt10001", body, "매도", client_order_id, client_cls=KiwoomClient)
 
 
@@ -314,9 +312,8 @@ def modify(orig_order_no: str, code: str, qty: int, price: float, exchange: str 
         _dry_run_kr("kt10002", "modify", code, qty, kr_price, None, dmst_stex_tp, body,
                     lambda: _show_modify_preview("정정", orig_order_no, code, qty, kr_price, dmst_stex_tp))
         return
-    confirm_gate(confirm)
-
     _show_modify_preview("정정", orig_order_no, code, qty, kr_price, dmst_stex_tp)
+    confirm_gate(confirm)
     send_order("kt10002", body, "정정", client_order_id, client_cls=KiwoomClient)
 
 
@@ -349,9 +346,8 @@ def cancel(orig_order_no: str, code: str, qty: int, exchange: str | None, confir
         _dry_run_kr("kt10003", "cancel", code, qty, 0, None, dmst_stex_tp, body,
                     lambda: _show_cancel_preview("취소", orig_order_no, code, qty, dmst_stex_tp))
         return
-    confirm_gate(confirm)
-
     _show_cancel_preview("취소", orig_order_no, code, qty, dmst_stex_tp)
+    confirm_gate(confirm)
     send_order("kt10003", body, "취소", client_order_id, client_cls=KiwoomClient)
 
 
