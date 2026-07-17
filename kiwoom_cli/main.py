@@ -622,6 +622,42 @@ def describe(command_path: tuple[str, ...], paths_only: bool, depth: int | None)
     _render_describe(spec)
 
 
+@cli.command("find")
+@click.argument("keyword")
+def find_cmd(keyword: str):
+    """명령어/API 통합 검색 — 명령 경로·도움말·API ID·API 설명에서 키워드 검색.
+
+    \b
+    예: kiwoom find 미체결            # 관련 명령어 + API ID
+        kiwoom find balance -f json  # 에이전트용 구조화 출력
+    """
+    kw = keyword.lower()
+    cmd_rows = [
+        r for r in _collect_paths(cli, "kiwoom")
+        if kw in r["path"].lower() or kw in r["help"].lower()
+    ]
+    from .api_spec import API_REGISTRY
+    api_rows = [
+        {"api_id": aid, "description": desc}
+        for aid, (_, desc) in sorted(API_REGISTRY.items())
+        if kw in aid.lower() or kw in desc.lower()
+    ]
+    if _get_format() == "json":
+        envelope.emit(data={"commands": cmd_rows, "apis": api_rows})
+        return
+    if not cmd_rows and not api_rows:
+        console.print(f"[yellow]'{keyword}'에 대한 결과가 없습니다.[/]")
+        return
+    if cmd_rows:
+        console.print(f"[bold]명령어 ({len(cmd_rows)})[/]")
+        for r in cmd_rows:
+            console.print(f"  {r['path']}  [dim]{r['help']}[/]", highlight=False)
+    if api_rows:
+        console.print(f"[bold]API ({len(api_rows)}) — kiwoom api <id>로 호출[/]")
+        for r in api_rows:
+            console.print(f"  {r['api_id']}  [dim]{r['description']}[/]", highlight=False)
+
+
 # ── Register subcommands ─────────────────────────────
 
 cli.add_command(stock)

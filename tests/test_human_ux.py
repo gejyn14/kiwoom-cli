@@ -120,3 +120,34 @@ def test_chart_truncation_notice(capsys):
     items = [{"dt": f"202601{i:02d}", "open_pric": "1"} for i in range(1, 41)]
     print_chart_data(items, title="t")
     assert "40행 중 30행 표시" in capsys.readouterr().out
+
+
+# ── Task 4: kiwoom find ──────────────────────────────────
+
+def test_find_matches_commands_and_apis(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "find", "미체결"])
+    assert result.exit_code == 0
+    doc = _doc(result)
+    paths = [r["path"] for r in doc["data"]["commands"]]
+    assert "kiwoom account orders pending" in paths
+    api_ids = [r["api_id"] for r in doc["data"]["apis"]]
+    assert "ka10075" in api_ids
+
+
+def test_find_case_insensitive_on_paths(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "find", "BALANCE"])
+    doc = _doc(result)
+    assert any("balance" in r["path"] for r in doc["data"]["commands"])
+
+
+def test_find_no_results_exits_0(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "find", "zzz-nope"])
+    assert result.exit_code == 0
+    assert _doc(result)["data"] == {"commands": [], "apis": []}
+
+
+def test_find_table_output(runner, isolated_env):
+    result = runner.invoke(cli, ["find", "미체결"])
+    assert result.exit_code == 0
+    assert "ka10075" in result.output
+    assert "account orders pending" in result.output
