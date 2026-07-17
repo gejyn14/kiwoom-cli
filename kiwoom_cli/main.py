@@ -165,6 +165,13 @@ def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
     ctx.obj["profile"] = profile
     ctx.obj["fields"] = [s.strip() for s in fields.split(",") if s.strip()] if fields else None
 
+    resolved_profile = config.resolve_profile(profile)
+    if not config.is_valid_profile_name(resolved_profile):
+        fail_input(
+            f"잘못된 프로필 이름 '{resolved_profile}' — "
+            "영문자/숫자/하이픈/언더스코어 1~64자만 허용됩니다."
+        )
+
     if next_key and all_pages:
         raise click.UsageError("--next-key와 --all-pages는 함께 사용할 수 없습니다.")
     ctx.obj["next_key"] = next_key
@@ -221,6 +228,11 @@ def config_setup(ctx, profile: str | None, appkey: str | None, secretkey: str | 
     """초기 설정 (App Key, Secret Key, 도메인)."""
     if profile is None:
         profile = (ctx.obj.get("profile") if ctx.obj else None) or "default"
+    if not config.is_valid_profile_name(profile):
+        fail_input(
+            f"잘못된 프로필 이름 '{profile}' — "
+            "영문자/숫자/하이픈/언더스코어 1~64자만 허용됩니다."
+        )
     interactive = _get_format() == "table"
     if not interactive:
         missing = [n for n, v in (("--appkey", appkey), ("--secretkey", secretkey)) if not v]

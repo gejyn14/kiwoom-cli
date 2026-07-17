@@ -148,3 +148,47 @@ def test_recorder_explicit_path_left_alone(isolated_config, tmp_path_factory):
     rec.write({"type": "0B", "symbol": "005930", "price": 1})
     rec.close()
     assert _mode(shared) == 0o755
+
+
+# ── Task 3: profile-name allowlist ───────────────────────
+
+
+def test_valid_profile_names_accepted():
+    for name in ("default", "My_Profile-2", "a", "A" * 64):
+        assert config.is_valid_profile_name(name)
+
+
+def test_invalid_profile_names_rejected():
+    for name in ("", "../evil", "a/b", "a\\b", "a.b", "한글", "a b", "A" * 65):
+        assert not config.is_valid_profile_name(name)
+
+
+def test_cli_rejects_traversal_profile_flag(runner, isolated_config):
+    result = runner.invoke(cli, ["-f", "json", "-p", "../evil", "config", "show"])
+    assert result.exit_code == 1
+    doc = json.loads(result.output)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "INVALID_INPUT"
+
+
+def test_cli_rejects_traversal_profile_env(runner, isolated_config, monkeypatch):
+    monkeypatch.setenv("KIWOOM_PROFILE", "../../etc/passwd")
+    result = runner.invoke(cli, ["-f", "json", "config", "show"])
+    assert result.exit_code == 1
+    doc = json.loads(result.output)
+    assert doc["error"]["code"] == "INVALID_INPUT"
+
+
+def test_config_setup_rejects_traversal_profile(runner, isolated_config):
+    result = runner.invoke(cli, [
+        "-f", "json", "config", "setup",
+        "--profile", "a/b", "--appkey", "k", "--secretkey", "s",
+    ])
+    assert result.exit_code == 1
+    doc = json.loads(result.output)
+    assert doc["error"]["code"] == "INVALID_INPUT"
+
+
+def test_valid_profile_flag_still_works(runner, isolated_config):
+    result = runner.invoke(cli, ["-p", "my_profile-2", "config", "show"])
+    assert result.exit_code == 0

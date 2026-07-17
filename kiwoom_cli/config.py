@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -46,6 +47,15 @@ DOMAINS = {
 }
 
 TOKEN_STORAGES = ("keychain", "env")
+
+# 프로필 이름 allowlist — 원장 파일명(idempotency/<profile>-<env>.jsonl)과
+# keyring 키(<profile>:appkey)에 그대로 들어가므로 경로 조작 문자를 차단한다
+PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def is_valid_profile_name(name: str) -> bool:
+    return bool(PROFILE_NAME_RE.match(name))
+
 
 DEFAULT_CONFIG = {
     "general": {"default_profile": "default"},
