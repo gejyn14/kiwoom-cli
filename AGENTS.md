@@ -87,6 +87,11 @@ kiwoom -f json --all-pages market rank volume
   최대 50페이지 — 상한에 도달하면 stderr로 안내하고 `meta.cont`는 유지되므로
   `--next-key`로 이어서 조회할 수 있습니다.
 
+여러 API를 연속 호출하는 명령(`account balance --market all`, `dashboard` 등)에서는
+`meta.cont`가 마지막 하위 호출 기준이며, `--next-key`는 명령의 첫 물리적 요청(미국
+종목은 거래소 판별 호출일 수 있음)에 주입되므로 페이지네이션은 `--market kr|us`처럼
+단일 API 경로에서 사용하세요.
+
 ## Exit codes
 
 | code | 의미 | 대응 |
@@ -130,8 +135,9 @@ kiwoom -f json --all-pages market rank volume
 
 멱등키는 주문 내용(api_id+body)의 fingerprint에 바인딩되며, 조회→전송→기록
 구간은 원장 파일 잠금으로 프로세스 간 직렬화된다. 같은 키로 다른 내용을
-보내면 `IDEMPOTENCY_CONFLICT`. 잠금을 즉시 획득하지 못하면(동시 실행) `LEDGER_BUSY`
-(exit 2, retryable) — 잠시 후 재시도하면 된다.
+보내면 `IDEMPOTENCY_CONFLICT`. 잠금 대기는 POSIX(fcntl)에서는 무한 대기하며,
+Windows(msvcrt)에서만 약 10초 재시도 후 획득 실패로 `LEDGER_BUSY`
+(exit 2, retryable)가 발생한다 — 잠시 후 재시도하면 된다.
 
 미국 주식 주문은 body에 자동판별된 거래소가 포함되므로, 같은
 `--client-order-id`로 재실행했는데 그 사이 거래소 판별이 달라지면(캐시 갱신 등)

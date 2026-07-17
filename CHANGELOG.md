@@ -13,7 +13,8 @@ envelope로 바뀝니다 (기존엔 `-f json`에서도 일반 텍스트/에러�
   50페이지, 상한 도달 시 stderr 안내 + `meta.cont` 유지). 둘은 함께 쓸 수
   없음(UsageError). 주문 전송 명령은 두 플래그를 조용히 무시(방어적).
 - `kiwoom describe --paths` — 경로+한줄설명 평면 목록만 반환하는 저비용
-  발견 모드. `--depth N`으로 하위 명령 재귀 깊이 제한.
+  발견 모드. `--depth N`으로 하위 명령 재귀 깊이 제한(전체 스키마 모드에서만
+  적용되며 `--paths`와 함께 쓰면 무시됨).
 - `meta.fields_unmatched` — `--fields`로 지정한 키 중 하나라도 매칭되지 않으면
   (부분 매칭 포함) 매칭 실패한 키 목록을 반환(오타 감지).
 - `market` 명령 docstring에 사용 API ID 명시(예: `순위 정보 조회. (ka10016)`)
@@ -31,8 +32,8 @@ envelope로 바뀝니다 (기존엔 `-f json`에서도 일반 텍스트/에러�
   `NETWORK_ERROR`(retryable)로 분류 — 이전엔 처리되지 않아 traceback이
   노출될 수 있었음.
 - `kiwoom stream *`의 `websockets` 미설치 시 오류가 json 모드에서
-  `DEPENDENCY_MISSING`으로 exit 1 (이전엔 exit 2), `--raw`를 json 모드와
-  함께 쓰면 `INVALID_INPUT`으로 exit 1.
+  `DEPENDENCY_MISSING`으로 exit 1 (이전엔 메시지만 출력하고 exit 0), `--raw`를
+  json 모드와 함께 쓰면 `INVALID_INPUT`으로 exit 1.
 - Ctrl+C로 스트림 종료 시 안내 메시지가 stderr로 출력(stdout 오염 방지).
 - `order validate buy|sell`이 `--price`/`--type` 추론 규칙(`_resolve_order_type`)을
   실제 주문 경로와 동일하게 적용 — 사전점검과 실제 전송의 판정이 어긋나지 않음.
