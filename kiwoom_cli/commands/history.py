@@ -19,11 +19,9 @@ from typing import Any
 import click
 
 from .. import envelope
-from ..formatters import _get_format, _output_csv, print_generic_table
+from ..formatters import _get_format, _output_csv, fail_input, print_generic_table
 from ..output import console, err_console
 from ..recorder import data_dir
-
-EXIT_INPUT = 1  # main.py와 동일 (순환 import 회피)
 
 KST = timezone(timedelta(hours=9))
 
@@ -254,11 +252,7 @@ def _export_parquet(rows: list[dict[str, Any]], out: Path) -> None:
         import pandas as pd
         import pyarrow  # noqa: F401  (to_parquet 엔진 확인)
     except ImportError:
-        err_console.print(
-            "[red]parquet 내보내기에는 pandas와 pyarrow가 필요합니다: "
-            "pip install pandas pyarrow[/]"
-        )
-        raise SystemExit(EXIT_INPUT) from None
+        fail_input("parquet 내보내기에는 pandas와 pyarrow가 필요합니다: pip install pandas pyarrow")
     df = pd.DataFrame([_export_row(ev) for ev in rows], columns=EXPORT_COLUMNS)
     df.to_parquet(out)
 

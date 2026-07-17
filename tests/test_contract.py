@@ -119,3 +119,26 @@ def test_fail_input_table_mode_stderr_only(runner, isolated_env):
                                  "--price", "70000.5", "--type", "limit", "--dry-run"])
     assert result.exit_code == 1
     assert result.stdout.strip() == ""
+
+
+# ── Task 3: fail_input sweep (query/config paths) ────────
+
+def test_config_set_invalid_domain_json_envelope(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "config", "set", "domain", "staging"])
+    assert result.exit_code == 1
+    doc = _doc(result)          # 기존 버그: rich 텍스트가 stdout에 섞여 파싱 불가였음
+    assert doc["error"]["code"] == "INVALID_INPUT"
+
+
+def test_config_use_unknown_profile_json_envelope(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "config", "use", "nope"])
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
+def test_krw_on_domestic_symbol_json_envelope(runner, isolated_env):
+    # stock info has no --krw option; --krw lives on stock chart {tick,minute,day,week,month,year}.
+    # chart tick is the first sweep-site command with --krw and no other required options.
+    result = runner.invoke(cli, ["-f", "json", "stock", "chart", "tick", "005930", "--krw"])
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"

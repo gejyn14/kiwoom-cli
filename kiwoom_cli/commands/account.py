@@ -9,6 +9,7 @@ import click
 from ..client import KiwoomAPIError, KiwoomClient
 from ..formatters import (
     _find_list,
+    fail_input,
     print_account_eval,
     print_api_response,
     print_deposit,
@@ -248,11 +249,9 @@ def pnl_today(code: str | None, market: str, fc_krw: bool):
     """당일 실현손익 — 국내(종목코드 필수 ka10077) + 미국(ust21170)."""
     if market == "kr":
         if not code:
-            err_console.print("[red]국내 당일 실현손익은 종목코드가 필요합니다.[/]")
-            raise SystemExit(1)
+            fail_input("국내 당일 실현손익은 종목코드가 필요합니다.")
         if is_us_symbol(code):
-            err_console.print("[red]국내 당일 실현손익에는 국내 종목코드가 필요합니다 (미국 티커는 지원하지 않음).[/]")
-            raise SystemExit(1)
+            fail_input("국내 당일 실현손익에는 국내 종목코드가 필요합니다 (미국 티커는 지원하지 않음).")
 
     with KiwoomClient() as c:
         def kr_fetch():
@@ -582,13 +581,11 @@ def orderable_margin_qty(code: str, uv: str, exchange: str | None):
     """증거금율별 주문가능 수량 조회 (국내 kt00011 / 미국 ust31490)."""
     if is_us_symbol(code, exchange):
         if not uv:
-            err_console.print("[red]미국주식 주문가능수량 조회에는 --price가 필요합니다.[/]")
-            raise SystemExit(1)
+            fail_input("미국주식 주문가능수량 조회에는 --price가 필요합니다.")
         try:
             price = float(uv)
         except ValueError:
-            err_console.print("[red]--price는 숫자여야 합니다.[/]")
-            raise SystemExit(1) from None
+            fail_input("--price는 숫자여야 합니다.")
         return us_order_ops.orderable(code, price, exchange)
     with KiwoomClient() as c:
         body: dict = {"stk_cd": code}
@@ -633,8 +630,7 @@ def history():
 def history_transactions(market: str, strt_dt: str, end_dt: str, tp: str, stk_cd: str, crnc_cd: str, gds_tp: str, frgn_stex_code: str, dmst_stex_tp: str):
     """위탁 종합거래내역 — 국내(kt00015) + 미국(ust21100)."""
     if market == "us" and tp in ("6", "7"):
-        err_console.print("[red]입금/출금 구분(6/7)은 국내 전용입니다. --market us 에서는 사용할 수 없습니다.[/]")
-        raise SystemExit(1)
+        fail_input("입금/출금 구분(6/7)은 국내 전용입니다. --market us 에서는 사용할 수 없습니다.")
 
     with KiwoomClient() as c:
         def kr_fetch():

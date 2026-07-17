@@ -19,7 +19,7 @@ from .commands.order import order
 from .commands.stock import stock
 from .commands.stream import stream
 from .commands.watch import watch
-from .formatters import _get_format, human, print_generic_table
+from .formatters import _get_format, fail_input, human, print_generic_table
 from .output import console, err_console
 
 # Exit codes
@@ -265,11 +265,9 @@ def config_set(ctx, key: str, value: str):
     """프로필 설정 변경. (예: kiwoom config set domain prod)"""
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     if key == "domain" and value not in ("prod", "mock"):
-        console.print("[red]domain은 prod 또는 mock만 가능합니다.[/]")
-        raise SystemExit(1)
+        fail_input("domain은 prod 또는 mock만 가능합니다.")
     if key == "token_storage" and value not in config.TOKEN_STORAGES:
-        console.print("[red]token_storage는 keychain 또는 env만 가능합니다.[/]")
-        raise SystemExit(1)
+        fail_input("token_storage는 keychain 또는 env만 가능합니다.")
     cfg = config.load_config()
     cfg.setdefault("profiles", {}).setdefault(profile, {})[key] = value
     config.save_config(cfg)
@@ -292,8 +290,7 @@ def config_use(profile_name: str):
     """기본 프로필 변경."""
     profiles = config.get_profiles()
     if profile_name not in profiles:
-        console.print(f"[red]프로필 '{profile_name}'을(를) 찾을 수 없습니다.[/]")
-        raise SystemExit(1)
+        fail_input(f"프로필 '{profile_name}'을(를) 찾을 수 없습니다.")
     config.set_default_profile(profile_name)
     console.print(f"[green]기본 프로필 변경:[/] {profile_name}")
 
