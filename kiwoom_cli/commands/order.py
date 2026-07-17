@@ -26,11 +26,11 @@ from typing import Any
 import click
 from rich.panel import Panel
 
-from .. import envelope, idempotency
+from .. import envelope
 from ..client import KiwoomAPIError, KiwoomClient
 from ..formatters import _get_format, human, print_order_result, print_generic_table
 from ..output import err_console
-from ._mutation import confirm_gate, dry_run_payload, finish_dry_run
+from ._mutation import confirm_gate, dry_run_payload, finish_dry_run, send_order
 from .us import order_ops as us_order_ops
 from .us._constants import US_ORDER_TYPES
 from .us.detect import is_us_symbol
@@ -115,22 +115,6 @@ def _dry_run_kr(api_id: str, side: str, code: str, qty: int, kr_price: int,
         order_type=order_type, exchange=dmst_stex_tp, currency="KRW",
         body=body, price_source=src,
     ), show_preview)
-
-
-def _send_order(api_id: str, body: dict[str, Any], action: str,
-                client_order_id: str | None) -> None:
-    """주문 전송 + 멱등성 처리. 키가 원장에 있으면 전송 없이 이전 응답 반환."""
-    if client_order_id:
-        hit = idempotency.lookup(client_order_id)
-        if hit is not None:
-            human(f"[dim]멱등성 키 '{client_order_id}' 기존 기록 — 재전송하지 않고 이전 응답을 반환합니다.[/]")
-            print_order_result({**hit["response"], "idempotent_replay": True}, action)
-            return
-    with KiwoomClient() as c:
-        data, _ = c.request(api_id, body)
-    if client_order_id:
-        idempotency.record(client_order_id, api_id, data)
-    print_order_result(data, action)
 
 
 def _show_order_preview(action: str, code: str, qty: int, price: int, order_type: str, dmst_stex_tp: str | None = None) -> None:
@@ -238,7 +222,7 @@ def buy(code: str, qty: int, price: float, order_type: str, exchange: str | None
     confirm_gate(confirm)
 
     _show_order_preview("매수", code, qty, kr_price, order_type, dmst_stex_tp)
-    _send_order("kt10000", body, "매수", client_order_id)
+    send_order("kt10000", body, "매수", client_order_id, client_cls=KiwoomClient)
 
 
 @order.command("sell")
@@ -286,7 +270,7 @@ def sell(code: str, qty: int, price: float, order_type: str, exchange: str | Non
     confirm_gate(confirm)
 
     _show_order_preview("매도", code, qty, kr_price, order_type, dmst_stex_tp)
-    _send_order("kt10001", body, "매도", client_order_id)
+    send_order("kt10001", body, "매도", client_order_id, client_cls=KiwoomClient)
 
 
 @order.command("modify")
@@ -333,7 +317,7 @@ def modify(orig_order_no: str, code: str, qty: int, price: float, exchange: str 
     confirm_gate(confirm)
 
     _show_modify_preview("정정", orig_order_no, code, qty, kr_price, dmst_stex_tp)
-    _send_order("kt10002", body, "정정", client_order_id)
+    send_order("kt10002", body, "정정", client_order_id, client_cls=KiwoomClient)
 
 
 @order.command("cancel")
@@ -368,7 +352,7 @@ def cancel(orig_order_no: str, code: str, qty: int, exchange: str | None, confir
     confirm_gate(confirm)
 
     _show_cancel_preview("취소", orig_order_no, code, qty, dmst_stex_tp)
-    _send_order("kt10003", body, "취소", client_order_id)
+    send_order("kt10003", body, "취소", client_order_id, client_cls=KiwoomClient)
 
 
 # ────────────────────────────────────────────────────────

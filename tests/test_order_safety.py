@@ -70,3 +70,56 @@ def test_locked_creates_lock_file_and_yields(isolated_env):
         pass
     lock = idempotency._ledger_file().with_suffix(".lock")
     assert lock.exists()
+
+
+# ── Task 2: send_order conflict / replay / lock ──────────
+
+def _ok_order_response(api_id, body=None, **kwargs):
+    return {"ord_no": "0000001", "return_code": 0, "return_msg": "정상"}, {}
+
+
+def test_idempotency_conflict_rejected_without_send(runner, isolated_env):
+    # 같은 키를 '다른 주문 내용'으로 먼저 기록
+    idempotency.record("dup-key", "kt10000", {"ord_no": "1", "return_code": 0},
+                       fingerprint=idempotency.fingerprint("kt10000", {"stk_cd": "000660"}))
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        result = runner.invoke(cli, [
+            "-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit",
+            "--confirm", "--client-order-id", "dup-key",
+        ])
+    assert result.exit_code == 1
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    mock_cls.assert_not_called()
+
+
+def test_idempotent_replay_same_body_still_works(runner, isolated_env):
+    args = ["-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit",
+            "--confirm", "--client-order-id", "replay-key"]
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(_ok_order_response)
+        first = runner.invoke(cli, args)
+    assert first.exit_code == 0
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls2:
+        second = runner.invoke(cli, args)
+    assert second.exit_code == 0
+    doc = json.loads(second.stdout)
+    assert doc["data"]["idempotent_replay"] is True
+    mock_cls2.assert_not_called()
+
+
+def test_legacy_record_without_fingerprint_replays(runner, isolated_env):
+    idempotency.record("old-key", "kt10000", {"ord_no": "7", "return_code": 0})
+    with patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        result = runner.invoke(cli, [
+            "-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit",
+            "--confirm", "--client-order-id", "old-key",
+        ])
+    assert result.exit_code == 0
+    doc = json.loads(result.stdout)
+    assert doc["data"]["idempotent_replay"] is True
+    mock_cls.assert_not_called()
