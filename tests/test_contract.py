@@ -269,3 +269,19 @@ def test_stream_raw_with_json_rejected(runner, isolated_env):
     assert result.exit_code == 1
     doc = json.loads(result.stdout.strip().splitlines()[-1])
     assert doc["error"]["code"] == "INVALID_INPUT"
+
+
+# ── Task 9: --fields unmatched hint ──────────────────────
+
+def test_fields_typo_flagged_in_meta(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "--fields", "bogus_field", "config", "show"])
+    assert result.exit_code == 0
+    doc = _doc(result)
+    assert doc["meta"]["fields_unmatched"] == ["bogus_field"]
+
+
+def test_fields_match_no_flag(runner, isolated_env):
+    result = runner.invoke(cli, ["-f", "json", "--fields", "profile", "config", "show"])
+    doc = _doc(result)
+    assert "fields_unmatched" not in doc["meta"]
+    assert doc["data"] == {"profile": "default"}
