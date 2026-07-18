@@ -243,56 +243,47 @@ _SIGNED_FIELDS = frozenset({
     "pred_pre_n", "flu_rt_n",
 })
 
-# Code fields that should never be number-formatted.
+# Code fields that should never be number-formatted. 날짜(YYYYMMDD)/시각(HHMMSS)
+# 필드. print_generic_table은 API 응답(Response)만 그리고 요청 바디는 거치지
+# 않으므로, 아래 각 항목은 Response 필드 기준으로 검증했다(au10001은 예외 —
+# 해당 항목에 별도 표기). 상세 근거·소스 시트별 예시값·기각 후보 감사 기록은
+# .superpowers/sdd/task-4b-report.md 참고.
 _CODE_FIELDS = frozenset({
     "stk_cd", "ord_no",
     "symbol", "order_no",  # 정규화 canonical 이름 (history 등 이벤트 테이블)
-    # Task 4 (N31) — 날짜(YYYYMMDD)/시각(HHMMSS) 필드. 스펙 Response Example에서
-    # 실제 값을 확인함(docs/키움 REST API 문서.xlsx). 모두 Response 필드로만 등록 —
-    # 이 테이블 렌더러는 API 응답(print_generic_table의 data)만 거치고 요청 바디는
-    # 거치지 않으므로, 아래 각주에 적은 "같은 키가 요청에서 다른 뜻으로도 쓰인다"는
-    # 사실은 이 게이트의 정확성에 영향을 주지 않는다.
     "dt", "date", "tm",
     "ord_tm", "cntr_tm", "cntr_dt", "trde_dt",
-    "qry_dt", "expr_dt", "loan_dt", "crd_loan_dt",
-    # dt_n/tm_n: _get_label()은 "_n" 접미사를 떼고 base 라벨(일자/시간)로 표시하지만
-    # 이 멤버십 검사는 원본 키로 하므로 별도 등록 필요 (cur_prc_n과 동일 패턴,
-    # 위 _ABS_FIELDS 블록의 불변식 주석 참고). ka20001/ka20009 지수 짝필드.
-    "dt_n", "tm_n",
-    # "dt"는 스펙에서 두 가지 뜻으로 쓰인다: Response 바디에서는 예외 없이 일자
-    # (YYYYMMDD). 스펙 전체(339개 시트 — docs/미국 REST API 문서.xlsx 기준, 여기
-    # 없는 ka10009는 docs/키움 REST API 문서.xlsx로 보완 — 두 문서 모두 전수 확인)
-    # 에서 "dt" Response 필드는 49개 API가 한글명 "일자", 3개 API(usa26410/
-    # usa26413/usa26414, 값 "2026"/"0")가 "연도"로 쓰인다. 다만 이 3개는
-    # kiwoom-cli의 API_REGISTRY에 없는(미구현) API라 실제로 이 코드베이스가 호출할
-    # 수 있는 217개 API로 좁히면 46개가 "일자", 0개가 "연도"다 — "dt"가 이 코드
-    # 베이스 안에서 콤마 포맷 없이 렌더링돼야 하는 이유는 이 46개 쪽 근거다. Request
-    # 바디에서는 일부 순위류 API(ka10016/34/36/37/38/39/42/43/131, ka30002,
-    # ka40001)에서 "기간"(조회 기간 코드: 5/10/20/60/120/250 등)을 의미한다. 이
-    # 두 번째 뜻은 요청 파라미터로만 나타나고 print_generic_table은 API 응답만
-    # 그리므로 이 플랫 셋에 안전하게 함께 둘 수 있다 — 실제로도 기간 코드값은 최대
-    # 3자리라 _CODE_FIELDS 등록 여부와 무관하게 애초에 length>4 게이트를 넘지
-    # 못해 콤마가 붙지 않았다(무해).
+    "qry_dt", "qry_tm",  # ka10040/ka10053 조회일자/조회시간(같은 오브젝트의 형제
+    # 필드쌍). 실제 예시값은 둘 다 3자리 이하 잡음("012"/"017"/"050" 등)이고 desc도
+    # 비어 있어 개별 근거는 약하지만 정확히 동일하게 약하다 — 한쪽만 등록하면 같은
+    # 오브젝트 안에서 렌더링이 갈리므로 둘 다 포함(오늘은 길이<=4라 무해, 값이
+    # 길어지면 실질적 불일치가 됨).
+    "expr_dt", "loan_dt", "crd_loan_dt",
+    "dt_n", "tm_n",  # ka20001/ka20009 지수 짝필드. _get_label()은 "_n" 접미사를 떼고
+    # base 라벨(일자/시간)로 표시하지만 이 멤버십 검사는 원본 키로 하므로 별도 등록
+    # 필요 (cur_prc_n과 동일 패턴, 위 _ABS_FIELDS 블록의 불변식 주석 참고).
     #
-    # 제외한 후보: base_dt("기준일자") — kiwoom-cli가 구현한 217개 API 전체(위와
-    # 동일하게 두 문서 모두 전수 확인)에서 base_dt는 17개 API(ka10051/ka10080~83/
-    # ka10094/ka10170/ka20005~08/ka20019/ka30003/ka50012/ka50081~83) 모두 Request
-    # 전용 파라미터로만 나타나고, 이 17개의 Response 바디에는 단 한 번도 등장하지
-    # 않는다 — 이 게이트가 다루는 표시 경로(API 응답 렌더링)에 도달할 수 없어 제외.
-    # 단, base_dt는 스펙 전체(kiwoom-cli 미구현 API 포함) 관점에서는 Response
-    # 필드로도 쓰인다 — usa21670/usa21680/usa21690(기준일, 예 "20260503"),
-    # usa24110/usa24111(최고/최저일시), usa24120/usa24121(기준일자, 예
-    # "20260508") 7개 US 시트에서 확인된다. 다만 이 7개는 API_REGISTRY에 없는
-    # (미구현) API라 실제로 이 코드베이스에서 base_dt가 Response로 렌더링될 경로는
-    # 없다. 예전 코멘트가 "스펙 전수 확인"이라 적은 근거는 사실 미국주식 API 29개가
-    # 전부 빠진 209시트짜리 구버전 문서(docs/키움 REST API 문서.xlsx)만 참조한
-    # 결과였다 — 결론(제외)은 우연히 맞았지만 검증 범위 진술은 틀렸었다(리뷰
-    # Finding 1). rgt_dt — 스펙 전체(Request/Response 불문)에 해당 키가 아예
-    # 존재하지 않아 제외(브리프의 오기로 추정).
+    # "dt"는 Response 바디에서는 예외 없이 일자(YYYYMMDD) — kiwoom-cli가 구현한
+    # 217개 API 중 46개가 한글명 "일자"로 쓰고 "연도"로 쓰는 구현 API는 0개다.
+    # Request 바디에서는 일부 순위류 API(ka10016/34/36/37/38/39/42/43/131,
+    # ka30002, ka40001)에서 "기간"(조회 기간 코드: 5/10/20/60/120/250 등)을
+    # 의미하지만, 요청 파라미터로만 나타나고 print_generic_table은 응답만 그리므로
+    # 이 플랫 셋에 안전하게 함께 둘 수 있다 — 기간 코드값은 최대 3자리라 길이 게이트
+    # 자체를 넘지 못해 어차피 무해하다.
     #
-    # Task 4b (리뷰 Finding 2) — Task 4 스윕이 위와 같은 이유로 놓친 날짜/시간
-    # Response 필드. docs/미국 REST API 문서.xlsx를 1차 소스로 Response Example에서
-    # 실제 값을 재확인함.
+    # 제외한 후보:
+    # - base_dt("기준일자") — 구현된 217개 API에서는 17개(ka10051/ka10080~83/
+    #   ka10094/ka10170/ka20005~08/ka20019/ka30003/ka50012/ka50081~83) 모두
+    #   Request 전용이고 그 Response 바디에는 등장하지 않는다 — 이 게이트가 다루는
+    #   표시 경로(API 응답 렌더링)에 도달할 수 없어 제외. 스펙 전체(미구현 API
+    #   포함) 관점에서는 usa21670/usa21680/usa21690(기준일 — 값이 시트마다 다름:
+    #   usa21670 "20260503"=YYYYMMDD, usa21680 "202605"=YYYYMM, usa21690
+    #   "2026"=연도만), usa24110/usa24111(최고/최저일시), usa24120/usa24121
+    #   (기준일자, 예 "20260508") 7개 US 시트에서 Response 필드로도 쓰이지만,
+    #   전부 API_REGISTRY에 없는(미구현) API라 이 코드베이스에서 base_dt가
+    #   Response로 렌더링될 경로는 없다.
+    # - rgt_dt — 스펙 전체(Request/Response 불문)에 해당 키가 존재하지 않음
+    #   (브리프의 오기로 추정).
     "exp_tm",  # ka50087 예상 체결 시간, 예 "085957"(HHmmss, 선행 0 유실 사례)
     "elwexpr_dt",  # ka10095 ELW만기일, 예 "00000000"(만기 없음 0 sentinel)
     "bid_req_base_tm",  # ka10004/ka10087 호가잔량기준시간, 예 "162000"(HHmmss)
@@ -328,17 +319,21 @@ _CODE_FIELDS = frozenset({
     # 날짜값이, 250hgst_pric_dt/250lwst_pric_dt에는 "3"/"0.00"이 들어있음 — 컬럼이
     # 밀린 문서 오류로 보임. docs/키움 REST API 문서.xlsx에도 동일하게 손상돼 있어
     # 파싱 오류가 아니라 스펙 문서 자체의 결함으로 확인함).
+    "base_pric_tm",  # ka90008/ka90013 기준가시간, desc "HHmmss"(예시는 공백). 같은
+    # 키가 ka30001에도 있으나 값이 "기준가(11/21)" 같은 텍스트 라벨이라 애초에
+    # isdigit() 게이트를 통과 못해 멤버십과 무관하게 안전하다 — 세 API가 이 플랫
+    # 셋을 공유하므로, ka90008/ka90013 쪽 실제 HHmmss 값을 지키기 위해 포함한다.
+    "fr_dt", "to_dt",  # ka30012 평가시작일자/평가종료일자(desc 없음, 이 API 자신의
+    # 예시는 항상 공백). 같은 키가 kt00016(desc "YYYYMMDD", 예 "20241111"/
+    # "20241125")과 ust21650(desc "YYYYMMDD", 예 "20260501"/"20260507")에서
+    # 실제 날짜값으로 확인됨 — 그 두 API에서는 Request 전용이라 이 게이트와 무관
+    # 하지만, 동일 키가 ka30012에서는 Response 필드이므로 그 경로로 렌더링될 수
+    # 있어 포함한다.
     #
-    # 검토했으나 제외한 후보 (Task 4b):
-    # - qry_tm — 이미 등록된 "qry_dt"의 형제 필드로 제안됐으나, ka10040/ka10053의
-    #   실제 예시값이 "012"/"046"/"056" 등 3자리라 HHMMSS 형태가 아니고 desc도
-    #   비어 있다 — qry_dt 자신의 예시값("012"/"017"/"050")도 동일하게 비정상이라
-    #   근거가 모순적이다(길이<=4라 콤마 게이트 자체를 넘지 못해 현재로선 무해).
-    # - base_pric_tm — ka90008/ka90013는 desc가 "HHmmss"이지만 예시가 항상 공백,
-    #   ka30001의 실제 예시값은 "기준가(11/21)"라는 텍스트 라벨이라 디지트 문자열이
-    #   아니다 — 같은 키가 실제로 시간이 아닌 값을 담는 사례가 있어 제외.
-    # - fr_dt/to_dt/fr_tm/evlt_end_tm(ka30012, 평가시작/종료 일자·시간) — desc가
-    #   비어 있고 스펙 전체에서 예시값이 한 번도 채워진 적이 없어(항상 "") 확인 불가.
+    # 검토했으나 제외: fr_tm/evlt_end_tm(ka30012 평가시작/종료시간) — desc가 없고
+    # 예시도 항상 공백이며, fr_dt/to_dt와 달리 스펙 전체(339 + 209시트)를 통틀어
+    # 이 두 키가 등장하는 곳이 ka30012 하나뿐이라 대조할 자매 필드가 없다 — 근거
+    # 부족으로 제외.
 })
 
 # USD decimal fields (up to 4 decimals). Routed to _fmt_usd by _smart_fmt.

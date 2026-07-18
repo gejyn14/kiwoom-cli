@@ -6,6 +6,8 @@ import click
 import pytest
 
 from kiwoom_cli.formatters import (
+    _CLASSIFIED_FIELDS,
+    _CODE_FIELDS,
     _fmt_number,
     _sign_color,
     print_generic_table,
@@ -360,4 +362,40 @@ def test_task_4b_date_time_fields_are_not_comma_formatted(capsys, field, raw):
     # (lstrip("0") or "0" 후 int()의 3자리 콤마 그룹핑)과 동일해야 오탐/누락이 없다.
     bad = f"{int(raw.lstrip('0') or '0'):,}"
     assert bad not in out, f"{field}에 콤마 포맷({bad})이 노출됨"
+
+
+# ── Task 4b 감사 후속조치: 잘못 기각됐던 필드 4건 ──
+
+
+@pytest.mark.parametrize("field,raw", [
+    ("qry_tm", "093015"),  # ka10040/ka10053 조회시간. 형제 필드 qry_dt는 이미 등록돼
+    # 있어 둘 다 없으면 같은 오브젝트 안에서 렌더링이 갈린다(qry_dt="20260718"은
+    # 원본 그대로, qry_tm="093015"는 "93,015"로 콤마 포맷되는 불일치).
+    ("base_pric_tm", "153045"),  # ka90008/ka90013 기준가시간(desc "HHmmss"). 기각
+    # 근거였던 ka30001의 "기준가(11/21)" 값은애초에 isdigit()이 아니라 게이트를
+    # 통과하지 못하므로 멤버십과 무관하게 안전 — 기각이 보호하는 건 없었다.
+    ("fr_dt", "20241111"),  # kt00016 Request 평가시작일(desc "YYYYMMDD"). 같은 키가
+    # ka30012 Response 평가시작일자로도 쓰인다.
+    ("to_dt", "20241125"),  # kt00016 Request 평가종료일(desc "YYYYMMDD"). 같은 키가
+    # ka30012 Response 평가종료일자로도 쓰인다.
+])
+def test_audit_fix_rejected_fields_are_not_comma_formatted(capsys, field, raw):
+    """리뷰가 지적한 4건 — 이전 라운드가 근거 부족/오독으로 잘못 기각했던 필드.
+    qry_tm(Finding 1): qry_dt의 형제 필드인데 누락돼 있었음.
+    base_pric_tm(Finding 2): 기각 근거(ka30001의 텍스트 값)가 애초에 isdigit() 게이트를
+    통과 못해 기각이 아무것도 보호하지 못했음 — ka90008/ka90013의 실제 HHmmss 값이 노출됨.
+    fr_dt/to_dt(Finding 3): "스펙 전체에서 예시값이 채워진 적이 없다"는 기각 코멘트가
+    사실과 다름 — kt00016/ust21650 Request에 desc="YYYYMMDD"인 실제 날짜값이 있음."""
+    print_generic_table([{"stk_cd": "005930", field: raw}])
+    out = capsys.readouterr().out
+    bad = f"{int(raw.lstrip('0') or '0'):,}"
+    assert bad not in out, f"{field}에 콤마 포맷({bad})이 노출됨"
     assert raw in out
+
+
+def test_code_fields_and_classified_fields_are_disjoint():
+    """_needs_fmt는 _CLASSIFIED_FIELDS 멤버십을 _CODE_FIELDS보다 먼저 검사한다
+    (formatters.py의 _needs_fmt 참고) — 두 집합에 동시에 속한 키가 있으면
+    _CODE_FIELDS 등록이 조용히 무효화된다. _CODE_FIELDS가 17->55개로 늘어난
+    지금, 이 불변식을 명시적으로 지켜야 한다."""
+    assert not (_CODE_FIELDS & _CLASSIFIED_FIELDS)
