@@ -135,7 +135,14 @@ def _quote_price_kr(client, code: str) -> int:
     `_quote_price_gold`로 별도 라우팅한다.
     """
     data, _ = client.request("ka10001", {"stk_cd": code}, internal=True)
-    return int(parse_quote_price(data.get("cur_prc")))
+    cur_prc = data.get("cur_prc")
+    price = int(parse_quote_price(cur_prc))
+    if price <= 0:
+        # parse_quote_price는 f > 0만 보장한다(> 0, >= 1이 아님) — (0, 1) 구간의
+        # 소수가 여기서 int() 절삭으로 0이 되면 이 함수가 막으려는 바로 그 실패
+        # (price=0의 미리보기를 "실제 시세로 계산했다"고 주장)가 재현된다.
+        raise QuoteUnavailable(f"시세 값이 정수로 절삭되며 0이 되었습니다: {cur_prc!r}")
+    return price
 
 
 def _quote_price_gold(client, code: str) -> int:
@@ -151,14 +158,26 @@ def _quote_price_gold(client, code: str) -> int:
 
     ka50010은 stk_cd만 필요해 가장 단순하고(다른 금현물 시세 API는 base_dt/
     tic_scope 등 추가 필수 파라미터가 있음) `market gold executions`에서 이미
-    쓰이고 있어 검증된 응답 형태다. gold_cntr 리스트의 첫 원소(최신 체결,
-    응답 예시에서 시간 내림차순 확인됨)의 cntr_pric(체결가)을 현재가로 쓴다.
+    쓰이고 있어 검증된 응답 형태다. gold_cntr 리스트의 첫 원소(최신 체결)의
+    cntr_pric(체결가)을 현재가로 쓴다 — 순서가 최신(newest-first)임은 한 예시가
+    아니라 구조적으로 확정된다: 스펙 Response Example에서 0번 행이 1번 행보다
+    tm이 늦을 뿐 아니라(090106 vs 090100) trde_qty(1385 vs 1375)와
+    acc_trde_prica도 더 크다 — 이 둘은 누적값이라 시간이 지나며 감소할 수 없으므로,
+    리스트가 oldest-first라면 누적 합계가 뒤로 갈수록 줄어드는 모순이 된다.
+    주식 시세 분석의 동일 계열 API인 ka10003(체결정보)도 같은 newest-first
+    관례를 보인다.
     """
     data, _ = client.request("ka50010", {"stk_cd": code}, internal=True)
     rows = data.get("gold_cntr") or []
     if not rows:
         raise QuoteUnavailable(f"금현물 체결 데이터가 없습니다: {code!r}")
-    return int(parse_quote_price(rows[0].get("cntr_pric")))
+    cntr_pric = rows[0].get("cntr_pric")
+    price = int(parse_quote_price(cntr_pric))
+    if price <= 0:
+        # _quote_price_kr과 동일한 재검사 — parse_quote_price는 f > 0만 보장하므로
+        # (0, 1) 구간의 소수는 여기서 int() 절삭으로 0이 될 수 있다.
+        raise QuoteUnavailable(f"시세 값이 정수로 절삭되며 0이 되었습니다: {cntr_pric!r}")
+    return price
 
 
 def _dry_run_kr(api_id: str, side: str, code: str, qty: int, kr_price: int,
@@ -458,7 +477,9 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
     휴리스틱입니다. price_known은 --price 미지정 시 현재가(ka10001의 cur_prc)로
     예상비용을 계산할 수 있었는지 — 시세를 해석할 수 없으면(빈 값/0 이하/NaN/
     Inf 등) False이고, 가격을 확정하지 못한 사전점검은 valid: true를 주장하지
-    않는다(est_cost도 신뢰할 수 없는 0이 된다).
+    않는다(est_cost도 신뢰할 수 없는 0이 된다). 매수 측 sufficient_balance는
+    price_known이 false이면 est_cost=0에 대해 계산한 결과를 true로 보고하지
+    않는다(checks만 읽는 에이전트가 미수행 점검을 참으로 오인하지 않도록).
 
     예: kiwoom order validate buy 005930 10 --price 70000 -f json
     """
@@ -487,15 +508,22 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
             est_price = int(price)
             price_known = True
         elif quote_price is not None:
+            # parse_quote_price는 f > 0만 보장한다(> 0, >= 1이 아님) — (0, 1) 구간의
+            # 소수는 여기서 int() 절삭으로 0이 될 수 있다. 그 경우 price_known을
+            # true로 주장하면 est_cost=0인 사전점검이 그대로 통과(valid: true)해
+            # dry-run 경로가 막는 것과 같은 실패를 재현한다.
             est_price = int(quote_price)
-            price_known = True
+            price_known = est_price > 0
         else:
             est_price = 0
             price_known = False
         est_cost = qty * est_price
         if side == "buy":
             deposit, _ = c.request("kt00001", {"qry_tp": "3"})
-            sufficient = _strip_signed_int(deposit.get("ord_alow_amt")) >= est_cost
+            # price_known이 false면 est_cost는 신뢰할 수 없는 0이므로
+            # "ord_alow_amt >= 0"이 공허하게 참이 된다 — sufficient_balance는
+            # 수행하지 못한 점검을 true로 주장해서는 안 된다(v2.9 audit finding 1).
+            sufficient = price_known and _strip_signed_int(deposit.get("ord_alow_amt")) >= est_cost
         else:
             balance, _ = c.request("kt00004", {"qry_tp": "0", "dmst_stex_tp": dmst_stex_tp})
             held = sum(

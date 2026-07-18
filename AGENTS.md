@@ -107,7 +107,11 @@ kiwoom -f json --all-pages market rank volume
 예상비용을 계산하는데, 이 조회가 실패/해석불가면 (validate는 dry-run과 달리
 exit 2로 하드 실패하지 않고) `checks.price_known`이 `false`가 되어 `valid`가
 `false`로 떨어집니다 — 가격을 확정하지 못한 사전점검이 `valid: true`를 주장하지
-않도록 하기 위함입니다.
+않도록 하기 위함입니다. 매수 측 `checks.sufficient_balance`도 `price_known`에
+연동됩니다: `price_known`이 `false`이면 `est_cost`가 신뢰할 수 없는 0이므로
+"주문가능금액 >= 0"이 공허하게 참이 되는 것을 막기 위해 `sufficient_balance`는
+`true`를 보고하지 않습니다 — `checks`는 `data` 안에 실리므로, `valid` 필드를
+보지 않고 개별 항목만 읽는 에이전트도 미수행 점검을 참으로 오인하지 않습니다.
 
 ## Exit codes
 
