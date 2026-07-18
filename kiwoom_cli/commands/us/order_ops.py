@@ -5,8 +5,15 @@ from __future__ import annotations
 from rich.panel import Panel
 
 from ...client import KiwoomClient
-from ...formatters import fail_input, human, print_generic_table
-from .._mutation import confirm_gate, dry_run_payload, finish_dry_run, send_order
+from ...formatters import fail_api, fail_input, human, print_generic_table
+from .._mutation import (
+    QuoteUnavailable,
+    confirm_gate,
+    dry_run_payload,
+    finish_dry_run,
+    parse_quote_price,
+    send_order,
+)
 from ._constants import (
     US_ORDER_TYPES,
     US_SELL_ONLY_TYPES,
@@ -37,18 +44,14 @@ def _quote_price_us(client, code: str, stex_tp: str) -> float:
     """미국주식 현재가 (usa20100). 시장가 주문의 예상비용 계산용.
 
     usa20100 스펙 응답 필드는 cur_prc (예: "+201.4700") — now_pric가 아니다.
-    now_pric는 계좌 잔고 API(ust21070 등)의 현재가 필드 이름이라 헷갈리기 쉽다.
-    now_pric 폴백은 혹시 있을지 모를 다른 시세 응답 형태를 대비한 방어일 뿐,
-    이 API에서 정답은 cur_prc다.
+    now_pric는 계좌 잔고 API(ust21070 등)의 현재가 필드 이름이다. 가격 파싱은
+    parse_quote_price를 거친다 — 파싱 실패를 조용히 0으로 넘기지 않고
+    QuoteUnavailable로 호출자(_dry_run_us)에 전파한다.
     """
     data, _ = client.request(
         "usa20100", {"stex_tp": stex_tp, "stk_cd": code.upper()}, internal=True
     )
-    v = str(data.get("cur_prc", data.get("now_pric", "0"))).strip().lstrip("+-") or "0"
-    try:
-        return float(v)
-    except ValueError:
-        return 0.0
+    return parse_quote_price(data.get("cur_prc"))
 
 
 def _dry_run_us(api_id: str, side: str, code: str, qty: int, price: float,
@@ -58,12 +61,22 @@ def _dry_run_us(api_id: str, side: str, code: str, qty: int, price: float,
 
     body_fn(stex_tp) -> 실제 전송과 동일한 body.
     show_preview_fn(stex_tp) -> table 모드 미리보기.
+
+    현재가 파싱이 실패하면(빈 값/숫자 아님/NaN/Inf) price=0인 미리보기를
+    price_source="market_quote"와 함께 보여주지 않고 QUOTE_UNAVAILABLE로
+    exit 2 — "실제 시세로 계산했다"는 거짓 주장을 막는다.
     """
     with KiwoomClient() as c:
         stex_tp = _resolve_or_exit(c, code, exchange)
         est_price, src = price, None
         if not price and side in ("buy", "sell"):
-            est_price, src = _quote_price_us(c, code, stex_tp), "market_quote"
+            try:
+                est_price, src = _quote_price_us(c, code, stex_tp), "market_quote"
+            except QuoteUnavailable as e:
+                fail_api(
+                    f"현재가 조회 결과를 해석할 수 없어 예상비용을 계산할 수 없습니다: {e}",
+                    code="QUOTE_UNAVAILABLE",
+                )
     finish_dry_run(dry_run_payload(
         api_id=api_id, side=side, symbol=code.upper(), qty=qty, price=est_price,
         order_type=order_type, exchange=stex_tp, currency="USD",

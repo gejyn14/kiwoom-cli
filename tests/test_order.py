@@ -606,6 +606,28 @@ def test_dry_run_market_resolves_price_from_quote(runner, fake_client):
     assert payload["body"]["ord_uv"] == ""  # 실제 전송 body는 시장가 그대로
 
 
+def test_dry_run_market_unparseable_quote_fails_loudly(runner, fake_client):
+    """cur_prc가 파싱 불가능한 값이면 est_cost=0을 price_source='market_quote'와
+    함께 조용히 내보내지 않고 QUOTE_UNAVAILABLE(exit 2)로 실패해야 한다.
+
+    현재가가 "N/A" 같은 값이면 이전에는 _strip_signed_int가 0으로 폴백해
+    '실제 시세로 계산했다'는 거짓 주장(price_source=market_quote)과 함께
+    est_cost=0인 미리보기를 보여줬다 — dry-run의 존재 목적을 무력화하는 버그.
+    """
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "N/A", "return_code": 0}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "005930", "10", "--dry-run", "--confirm"],
+    )
+
+    assert result.exit_code == 2
+    doc = _doc(result)
+    assert doc["error"]["code"] == "QUOTE_UNAVAILABLE"
+    assert doc["data"] is None
+
+
 def test_dry_run_cancel_sends_nothing(runner, fake_client):
     """취소 dry-run: 호출 0건, est_cost 0."""
     result = runner.invoke(

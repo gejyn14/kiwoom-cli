@@ -95,7 +95,10 @@ kiwoom -f json --all-pages market rank volume
 미국 심볼 거래소 자동판별 보조 호출(usa10098)과 주문 `--dry-run`의 시세 조회
 보조 호출(`_quote_price_kr`/`_quote_price_us`)은 내부(`internal`) 호출로 표시되어
 전역 `--next-key`/`--all-pages`가 적용되지 않고 `meta.cont`도 기록하지 않습니다 —
-커서는 항상 명령의 본 조회가 소비/기록합니다.
+커서는 항상 명령의 본 조회가 소비/기록합니다. 이 시세 조회 결과(cur_prc)를 숫자로
+해석할 수 없으면(빈 값/NaN/Inf 포함) `price`/`est_cost`를 0으로 조용히 채운 미리보기
+대신 `QUOTE_UNAVAILABLE`(exit 2)로 실패합니다 — `price_source: "market_quote"`가
+실제로는 실패한 조회에 붙는 것을 막기 위함입니다.
 
 ## Exit codes
 
@@ -115,6 +118,7 @@ kiwoom -f json --all-pages market rank volume
 | `IDEMPOTENCY_CONFLICT` | ✗ | 같은 `--client-order-id`가 다른 주문 내용으로 이미 사용됨. 재시도라면 인자가 이전 실행과 동일한지 확인, 새 주문이면 새 키 사용. exit 1, 전송되지 않음 |
 | `LEDGER_BUSY` | ✓ | 멱등성 원장 잠금을 획득하지 못함 — 같은 프로필의 다른 주문이 전송 중. 잠시 후 재시도. exit 2 (`IDEMPOTENCY_CONFLICT`와 달리 exit 1이 아님에 유의) |
 | `ORDER_STATUS_UNKNOWN` | ✗ | 이전 시도가 전송 후 응답을 받지 못함. 주문이 체결되었을 수 있어 재전송하지 않음 — `account orders pending`으로 확인 후 새 키 사용. exit 2 |
+| `QUOTE_UNAVAILABLE` | ✗ | `--dry-run` 시장가 예상비용 계산용 시세 조회 결과를 숫자로 해석할 수 없음 (빈 값/NaN/Inf 등). 조용히 0으로 채우지 않고 exit 2로 실패 |
 | `AUTH_REQUIRED` | ✗ | 토큰 없음. 키체인 불가 환경이면 메시지가 `KIWOOM_TOKEN` 안내 |
 | `TOKEN_EXPIRED` | ✗ | 재로그인 필요 (upstream 8005, HTTP 401) |
 | `INVALID_INPUT` | ✗ | 파라미터 형식/누락 (upstream 1511/1512/1517/2) |

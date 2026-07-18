@@ -9,6 +9,7 @@ dry-run: 실제 전송될 request body를 그대로 구성해 전송 없이 출�
 
 from __future__ import annotations
 
+import math
 from typing import Any, Callable
 
 import click
@@ -17,6 +18,36 @@ from .. import envelope, idempotency
 from ..client import KiwoomAPIError
 from ..formatters import _get_format, fail_api, human, print_order_result
 from ..output import err_console
+
+
+class QuoteUnavailable(Exception):
+    """시세 응답에서 예상비용 계산용 가격을 파싱할 수 없음.
+
+    국내(_quote_price_kr)/미국(_quote_price_us) dry-run 경로가 공유하는 시세
+    파서(parse_quote_price)가 실패 시 이 예외를 던진다. 호출자는 이를 조용히
+    0으로 넘기지 말고 fail_api(..., code="QUOTE_UNAVAILABLE")로 exit 2 처리해야
+    한다 — dry-run이 price_source="market_quote"를 주장하면서 price/est_cost가
+    0인 미리보기를 보여주는 것이 이 예외가 막으려는 실패 모드다.
+    """
+
+
+def parse_quote_price(value: Any) -> float:
+    """시세 응답의 가격 문자열 → float. 선행 부호(+/-)는 방향지시자이지 실제
+    부호가 아니므로 제거한다 (cur_prc 등 키움 관례).
+
+    빈 값/숫자로 변환 불가/NaN/Inf는 모두 QuoteUnavailable을 던진다 — 조용한
+    0 폴백은 dry-run 예상비용 미리보기를 거짓으로 만든다.
+    """
+    v = str(value if value is not None else "").strip().lstrip("+-")
+    if not v:
+        raise QuoteUnavailable(f"시세 값이 비어 있습니다: {value!r}")
+    try:
+        f = float(v)
+    except ValueError:
+        raise QuoteUnavailable(f"시세 값을 숫자로 변환할 수 없습니다: {value!r}") from None
+    if not math.isfinite(f):
+        raise QuoteUnavailable(f"시세 값이 유효한 숫자가 아닙니다: {value!r}")
+    return f
 
 
 def confirm_gate(confirm: bool) -> None:

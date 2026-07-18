@@ -362,6 +362,28 @@ def test_us_market_dry_run_uses_real_quote(runner, us_fake):
     assert _order_calls(us_fake, "ust20000") == []  # dry-run이므로 실제 주문 미전송
 
 
+def test_us_market_dry_run_unparseable_quote_fails_loudly(runner, us_fake):
+    """cur_prc가 파싱 불가능하면 est_cost=0 + price_source='market_quote'인 거짓
+    미리보기 대신 QUOTE_UNAVAILABLE(exit 2)로 실패해야 한다 (KR과 동일한 계약).
+
+    스펙상 cur_prc는 항상 포매팅된 숫자 문자열이지만, 업스트림이 예상 밖의 값을
+    주는 경우까지 대비한다 — dry-run이 "실제 시세로 계산했다"고 주장하면서
+    가격 0을 보여주는 것이 최악의 결과다.
+    """
+    us_fake.set_response(
+        "usa20100", {"return_code": 0, "stk_cd": "NVDA", "cur_prc": "N/A"}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "NVDA", "10", "--type", "market", "--dry-run"],
+    )
+    assert result.exit_code == 2
+    doc = json.loads(result.output)
+    assert doc["error"]["code"] == "QUOTE_UNAVAILABLE"
+    assert doc["data"] is None
+    assert _order_calls(us_fake, "ust20000") == []
+
+
 # ============================================================
 #  Task 6: US modify/cancel/orderable
 # ============================================================

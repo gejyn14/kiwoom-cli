@@ -29,8 +29,15 @@ from rich.panel import Panel
 
 from .. import envelope
 from ..client import KiwoomAPIError, KiwoomClient
-from ..formatters import _get_format, fail_input, human, print_generic_table
-from ._mutation import confirm_gate, dry_run_payload, finish_dry_run, send_order
+from ..formatters import _get_format, fail_api, fail_input, human, print_generic_table
+from ._mutation import (
+    QuoteUnavailable,
+    confirm_gate,
+    dry_run_payload,
+    finish_dry_run,
+    parse_quote_price,
+    send_order,
+)
 from .us import order_ops as us_order_ops
 from .us._constants import US_ORDER_TYPES
 from .us.detect import is_us_symbol
@@ -114,19 +121,35 @@ def _strip_signed_int(value: Any) -> int:
 
 
 def _quote_price_kr(client, code: str) -> int:
-    """현재가 조회 (ka10001). 시장가 주문의 예상비용 계산용."""
+    """현재가 조회 (ka10001). 시장가 주문의 예상비용 계산용.
+
+    가격 파싱은 (검증 등 다른 용도에 쓰이는) `_strip_signed_int`가 아니라
+    `parse_quote_price`를 거친다 — 파싱 실패를 조용히 0으로 넘기지 않고
+    QuoteUnavailable로 호출자(_dry_run_kr)에 전파한다.
+    """
     data, _ = client.request("ka10001", {"stk_cd": code}, internal=True)
-    return _strip_signed_int(data.get("cur_prc"))
+    return int(parse_quote_price(data.get("cur_prc")))
 
 
 def _dry_run_kr(api_id: str, side: str, code: str, qty: int, kr_price: int,
                 order_type: str | None, dmst_stex_tp: str | None,
                 body: dict[str, Any], show_preview) -> None:
-    """국내 주문 dry-run. 시장가면 현재가를 조회해 예상비용을 계산한다."""
+    """국내 주문 dry-run. 시장가면 현재가를 조회해 예상비용을 계산한다.
+
+    현재가 파싱이 실패하면(빈 값/숫자 아님/NaN/Inf) price=0인 미리보기를
+    price_source="market_quote"와 함께 보여주지 않고 QUOTE_UNAVAILABLE로
+    exit 2 — "실제 시세로 계산했다"는 거짓 주장을 막는다.
+    """
     price, src = kr_price, None
     if not kr_price and side in ("buy", "sell"):
         with KiwoomClient() as c:
-            price, src = _quote_price_kr(c, code), "market_quote"
+            try:
+                price, src = _quote_price_kr(c, code), "market_quote"
+            except QuoteUnavailable as e:
+                fail_api(
+                    f"현재가 조회 결과를 해석할 수 없어 예상비용을 계산할 수 없습니다: {e}",
+                    code="QUOTE_UNAVAILABLE",
+                )
     finish_dry_run(dry_run_payload(
         api_id=api_id, side=side, symbol=code, qty=qty, price=price,
         order_type=order_type, exchange=dmst_stex_tp, currency="KRW",
