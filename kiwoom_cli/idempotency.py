@@ -7,8 +7,8 @@
 원장 위치: <config dir>/idempotency/<profile>-<env>.jsonl
 줄 형식: {"key", "api_id", "ord_no", "fingerprint", "status", "response", "ts"}
 status: "inflight"(전송 직전 기록, 응답 미도착) | "done"(전송 완료) |
-"rejected"(업스트림이 구조적으로 거부 — 주문 미실행, 같은 키 재전송 안전).
-키 없음(v2.4~v2.8 원장)은 "done"으로 간주 — 하위호환.
+"rejected"(업스트림이 구조적으로 거부했거나 애초에 도달하지 못함 — 주문 미실행,
+같은 키 재전송 안전). 키 없음(v2.4~v2.8 원장)은 "done"으로 간주 — 하위호환.
 """
 
 from __future__ import annotations
@@ -129,12 +129,17 @@ def record_inflight(key: str, api_id: str, fingerprint: str) -> None:
 
 
 def record_rejected(key: str, api_id: str, fingerprint: str | None = None) -> None:
-    """업스트림이 구조적으로 거부한 시도를 종결 기록한다 (재전송 가능 상태로 남긴다).
+    """주문이 실행되지 않았다고 확신할 수 있는 시도를 종결 기록한다 (재전송 가능 상태로 남긴다).
 
-    `KiwoomAPIError`(잔고 부족, 호가 오류, 장 마감, 잘못된 종목 등 return_code != 0)로
-    거부된 요청은 업스트림에 도달은 했지만 실행되지 않았으므로 결과 불명(in-flight)이
-    아니다 — 같은 키로 재시도할 때 재전송을 막을 이유가 없다. "inflight"로 영구히
-    막히는 것을 방지하기 위해 in-flight 기록 위에 이 종결 레코드를 남긴다.
+    두 가지 경우에 호출된다:
+    - `KiwoomAPIError`(잔고 부족, 호가 오류, 장 마감, 잘못된 종목 등 return_code != 0):
+      업스트림에 도달은 했지만 구조적으로 거부되어 실행되지 않았다.
+    - `KiwoomAuthError` 등, 실제 HTTP 전송(self._http.post) 이전 지점에서만 발생함이
+      코드 구조상 보장되는 예외: 업스트림에 도달조차 하지 못했다.
+
+    두 경우 모두 결과 불명(in-flight)이 아니다 — 같은 키로 재시도할 때 재전송을
+    막을 이유가 없다. "inflight"로 영구히 막히는 것을 방지하기 위해 in-flight
+    기록 위에 이 종결 레코드를 남긴다.
     """
     ledger = _ledger_file()
     config.ensure_config_dir()

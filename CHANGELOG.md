@@ -3,17 +3,47 @@
 ## [Unreleased]
 
 **Breaking**
-- `-f json`(및 `-f csv`) 출력에서 아래 26개 필드의 타입/값이 바뀝니다 (`kiwoom_cli/formatters.py`의
-  `_ABS_FIELDS`/`_SIGNED_FIELDS`에 새로 편입 → `normalize.py`의 `_NUMERIC_FIELDS`가 그대로 이어받음).
-  문자열이던 값이 숫자로 파싱되고, `_ABS_FIELDS` 필드는 부호가 제거된 절대값 + (부호가 있었을 때만)
-  `<필드>_direction`("up"/"down") 동반 키가 추가됩니다. 예: `"sel_bid": "-96"` → `"sel_bid": 96,
-  "sel_bid_direction": "down"`, `"trde_qty_n": "890"` → `"trde_qty_n": 890`.
+- `-f json`(`data` 필드)와 **테이블(`-f table`, 기본값) 렌더링** 양쪽에서 아래 26개
+  필드의 타입/표시가 바뀝니다 (`kiwoom_cli/formatters.py`의 `_ABS_FIELDS`/
+  `_SIGNED_FIELDS`에 새로 편입 → json은 `normalize.py`의 `_NUMERIC_FIELDS`가 그대로
+  이어받고, 테이블은 같은 분류를 `_needs_fmt`가 공유). **`-f csv`는 영향이 없습니다**
+  — CSV는 `normalize_record`/`_smart_fmt`를 거치지 않고 원본 값을 그대로 씁니다.
+  json은 문자열이던 값이 숫자로 파싱되고, `_ABS_FIELDS` 필드는 부호가 제거된
+  절대값 + (부호가 있었을 때만) `<필드>_direction`("up"/"down") 동반 키가
+  추가됩니다. 예: `"sel_bid": "-96"` → `"sel_bid": 96, "sel_bid_direction":
+  "down"`, `"trde_qty_n": "890"` → `"trde_qty_n": 890`. 테이블은 같은 필드의
+  방향지시자 부호가 더 이상 표시되지 않습니다(아래 Fixed 참고 — 하락 종목
+  가격이 음수로 보이던 버그의 수정이기도 합니다).
   - `_ABS_FIELDS`로 편입(부호 제거 + `_direction` 동반 키 추가 가능): `sel_bid`, `buy_bid`,
     `cntr_pric`, `pri_sel_bid_unit`, `pri_buy_bid_unit`, `wonju_pric`, `past_curr_prc`,
     `52wk_hgst_pric`, `52wk_lwst_pric`, `tdy_high_pric`, `tdy_low_pric`, `sel_1th_bid`,
     `sel_2th_bid`, `sel_3th_bid`, `sel_4th_bid`, `sel_5th_bid`, `buy_1th_bid`, `buy_2th_bid`,
     `buy_3th_bid`, `buy_4th_bid`, `buy_5th_bid`, `cur_prc_n`, `trde_qty_n`, `acc_trde_qty_n`
   - `_SIGNED_FIELDS`로 편입(부호 유지, 숫자 타입만 변경): `pred_pre_n`, `flu_rt_n`
+- 시장가 계열 주문유형에 대한 `--price` 가드 확장 — 국내는 `best`/`best-ioc`/
+  `best-fok`/`first`/`mid`/`mid-ioc`/`mid-fok` 7종(기존 시장가/시장가IOC/
+  시장가FOK 3종 → 10종), 미국은 `moc`/`vwap`/`twap`/`stop` 4종(기존 0종 → 5종,
+  `market` 포함)에 `--price`를 지정하면 이제 `INVALID_INPUT`(exit 1)으로
+  거부됩니다. **이전에는 조용히 받아들여지고 지정한 가격이 버려진 채 시장가로
+  체결**됐습니다 — `order buy/sell`, `order validate`, 신용/금현물/미국 주문
+  등 `_resolve_order_type`/`_validate_us_type`을 공유하는 모든 커맨드에
+  적용되므로, 이 조합으로 주문을 자동화한 에이전트/스크립트는 인자를
+  수정해야 합니다.
+
+### Added
+- 멱등성 원장(`~/.kiwoom/idempotency/<프로필>-<환경>.jsonl`)이 전송 직전
+  `inflight` 상태를 먼저 기록합니다 — 응답 유실(타임아웃/연결 끊김/프로세스
+  종료) 후 같은 `--client-order-id`로 재시도하면 재전송 대신
+  `ORDER_STATUS_UNKNOWN`(신규 오류 코드, exit 2, retryable: false)으로
+  차단합니다. 업스트림이 구조적으로 거부했거나(`return_code != 0`) 애초에
+  업스트림에 도달하지 못한 시도(예: 토큰 없음 — 실제 HTTP 전송 이전 단계에서만
+  발생함이 코드 구조상 보장되는 경우)는 `rejected` 상태로 종결되어 같은 키로
+  안전하게 재시도할 수 있습니다. 원장에 `status` 필드(`inflight`/`done`/
+  `rejected`)가 추가됩니다 — `status` 키가 없는 기존(v2.4~v2.8) 원장은
+  `done`으로 간주해 하위호환됩니다.
+- 신규 오류 코드 `QUOTE_UNAVAILABLE` — `--dry-run` 시장가 예상비용 계산용
+  시세를 숫자로 해석할 수 없을 때(빈 값/0 이하/NaN/Inf 등) exit 2로 실패
+  (아래 Fixed 참고).
 
 ### Fixed
 - 호가·체결가 방향지시자 부호가 테이블에 그대로 노출되던 문제 보완 — `sel_bid`/`buy_bid`/
@@ -23,6 +53,38 @@
   (Breaking 섹션의 26개 중 `trde_qty_n`/`acc_trde_qty_n`은 애초에 부호가 노출된 적이
   없고, `pred_pre_n`/`flu_rt_n`은 실제 등락폭이라 부호를 의도적으로 유지하므로
   테이블 렌더링 버그 수정 대상이 아니다)
+- 계좌 잔고(평가현황/통합잔고)·대시보드 거래량상위·`stock compare`의 현재가가
+  `strip_sign=True` 누락으로 방향지시자 부호를 그대로 노출하던 문제(하락
+  종목이 음수 가격으로 표시됨).
+- 날짜(YYYYMMDD)/시각(HHMMSS) 필드가 길이 기반 숫자 휴리스틱을 통과해 콤마로
+  묶여 표시되던 문제 (예: `20260716` → `20,260,716`) — 스펙 전수 스윕으로
+  `_CODE_FIELDS`를 17→55개, 이어서 4개 추가로 총 59개까지 확장.
+- 미국주식 시장가 `--dry-run`의 예상비용(`est_cost`)이 항상 0으로 나오던 문제 —
+  스펙에 없는 필드명(`now_pric`)을 참조하던 것을 실제 스펙 필드(`cur_prc`)로 수정.
+- 금현물 `--dry-run` 시세 조회가 스펙상 금현물 종목코드(`M04020000`)를 받지 않는
+  `ka10001`(주식기본정보)을 호출하던 문제 — `ka50010`(금현물체결추이)으로 라우팅 수정.
+- `--dry-run` 시장가 예상비용 계산용 시세가 빈 값/NaN/Inf/0 이하일 때 조용히
+  0으로 채워 `price_source: "market_quote"`를 거짓 주장하던 문제 — 국내/미국/
+  금현물 공통으로 `QUOTE_UNAVAILABLE`(exit 2) 실패로 교정.
+- `order validate`에 `Infinity` 가격을 넘기면 `OverflowError` traceback으로
+  크래시하던 문제 — `VALIDATION_FAILED`(exit 1)로 교정. 신규 `price_known`
+  검사(`--price` 미지정 시 현재가로 예상비용을 계산할 수 있었는지)를 추가하고,
+  매수 측 `sufficient_balance`가 `price_known: false`일 때(`est_cost=0`) 공허하게
+  `true`를 보고하던 문제를 수정.
+- `account exchange apply`(환전)와 주문 조건검색 3종(`order condition
+  search`/`realtime`/`stop`)이 업스트림 `cont-yn: Y` 응답 시 전역 `--all-pages`를
+  따라 최대 50회까지 반복 전송(재이체/재구독)될 수 있던 문제 — 변이 요청은
+  페이지네이션 대상에서 제외.
+- 변이(주문 전송/환전/조건검색) 응답의 json envelope에 `meta.cont`가 남아있어
+  `--next-key`로 이어서 실행하라는 안내가 실제로는 같은 동작을 한 번 더
+  실행하도록 유도하던 문제 — 변이 응답은 이제 항상 `meta.cont: null`.
+- `kiwoom api`로 주문성 API를 raw 호출할 때 `cont-yn: Y` stderr 힌트("연속조회
+  가능")가 위 `meta.cont` 억제와 무관하게 계속 출력되던 문제.
+- 전송 전 인증 실패(토큰 없음/만료)가 실제로는 아무것도 전송하지 않았는데도
+  멱등성 키를 `inflight`로 영구히 소진해, 재로그인 후 재시도가
+  `ORDER_STATUS_UNKNOWN`으로 영구히 막히던 문제 — 실제 HTTP 전송 이전 단계에서만
+  발생함이 보장되는 `KiwoomAuthError`를 `KiwoomAPIError`와 동일하게 `rejected`로
+  종결 처리.
 
 ## [2.8.0] - 2026-07-18
 

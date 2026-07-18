@@ -11,7 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from kiwoom_cli import config, idempotency
-from kiwoom_cli.client import KiwoomAPIError
+from kiwoom_cli.client import KiwoomAPIError, KiwoomAuthError
 from kiwoom_cli.client import KiwoomClient as _RealKiwoomClient
 from kiwoom_cli.main import cli
 
@@ -467,6 +467,69 @@ def test_rejected_record_still_conflicts_on_different_body(runner, isolated_env)
     assert doc["error"]["code"] == "IDEMPOTENCY_CONFLICT"
     mock_cls.assert_not_called()
     assert len(sent) == 1  # 두 번째 시도는 전송되지 않음
+
+
+# ── I1: pre-transmission auth failure must not burn the idempotency key ──
+
+def test_auth_error_before_send_does_not_burn_key(runner, isolated_env):
+    """전송 전 인증 실패(토큰 없음)는 KiwoomAuthError로 나타난다 — 실제 HTTP 전송
+    (self._http.post) 이전, 요청 준비 단계에서 발생하므로 업스트림에 도달하지
+    않았음이 코드 구조상 보장된다. inflight로 영구히 막혀서는 안 되고, 토큰 발급
+    후 같은 키로 재시도하면 실제로 전송되어야 한다 (ORDER_STATUS_UNKNOWN에 막히지
+    않고, replay로도 처리되지 않음 — 실제로 새 요청이 나가야 한다)."""
+    sent = []
+
+    class NoTokenClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            # 실제 코드에서 KiwoomAuthError는 client.py의 _request_once()가
+            # self._http.post()를 호출하기 전, 토큰 유무를 확인하는 첫 줄에서
+            # 던진다 — 전송 시도 자체가 없다.
+            raise KiwoomAuthError()
+
+    args = ["-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit",
+            "--confirm", "--client-order-id", "auth-key"]
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", NoTokenClient):
+        r1 = runner.invoke(cli, args)
+    assert r1.exit_code == 3, r1.stdout  # EXIT_AUTH
+    assert len(sent) == 0, "인증 실패인데 전송 시도가 기록됐다"
+
+    # 핵심 검증: 인증 실패 후 원장이 "rejected"로 종결되어야 한다.
+    # inflight로 영구히 남으면(회귀 전 동작) 아래 재시도가 ORDER_STATUS_UNKNOWN으로
+    # 막히고, 이 assert가 그 사실을 직접 드러낸다.
+    hit = idempotency.lookup("auth-key")
+    assert hit is not None
+    assert hit["status"] == "rejected", (
+        f"인증 실패가 원장에 '{hit['status']}'로 남았다 — inflight로 남으면 "
+        "재시도가 영구히 ORDER_STATUS_UNKNOWN으로 막힌다 (아무것도 전송되지 않았는데도)."
+    )
+    assert hit["response"] is None
+
+    class OkClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            return {"ord_no": "0000999", "return_code": 0}, {}
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", OkClient):
+        r2 = runner.invoke(cli, args)
+    assert r2.exit_code == 0, r2.stdout
+    doc = json.loads(r2.stdout)
+    assert len(sent) == 1, (
+        "토큰 발급 후 재시도가 실제로 전송되지 않았다 — "
+        f"exit_code={r2.exit_code}, stdout={r2.stdout}"
+    )
+    assert "idempotent_replay" not in doc["data"], "재전송 결과가 replay로 오인됨"
+    assert doc["data"]["order_no"] == "0000999"
+
+    # inflight+rejected+inflight+done 상태 확인 (rejected 케이스와 동일한 형태)
+    lines = idempotency._ledger_file().read_text().strip().splitlines()
+    statuses = [json.loads(line)["status"] for line in lines]
+    assert statuses == ["inflight", "rejected", "inflight", "done"]
 
 
 # ── Task 10: OSError branches keep their fail-closed / fail-open direction ──

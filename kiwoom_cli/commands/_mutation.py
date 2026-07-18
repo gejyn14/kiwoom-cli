@@ -15,7 +15,7 @@ from typing import Any, Callable
 import click
 
 from .. import envelope, idempotency
-from ..client import KiwoomAPIError
+from ..client import KiwoomAPIError, KiwoomAuthError
 from ..formatters import _get_format, fail_api, human, print_order_result
 from ..output import err_console
 
@@ -163,8 +163,9 @@ def send_order(api_id: str, body: dict[str, Any], action: str,
     - 같은 키 + 다른 내용: IDEMPOTENCY_CONFLICT (exit 1), 전송하지 않음.
     - 같은 키가 "inflight" 상태(전송 후 응답 미도착 — 타임아웃/연결 끊김/프로세스
       종료)로 남아 있으면 ORDER_STATUS_UNKNOWN (exit 2), 재전송하지 않음.
-    - 같은 키가 "rejected" 상태(업스트림이 구조적으로 거부 — 주문 미실행)이면
-      재전송을 막지 않는다: 새 in-flight 기록을 남기고 다시 전송을 시도한다.
+    - 같은 키가 "rejected" 상태(업스트림이 구조적으로 거부됐거나, 아예 업스트림에
+      도달하지 못했음이 코드 구조상 보장됨 — 주문 미실행)이면 재전송을 막지
+      않는다: 새 in-flight 기록을 남기고 다시 전송을 시도한다.
     - fingerprint가 없는 과거(v2.4~v2.5.0) 기록은 종전대로 재생한다.
 
     client_cls: 호출 모듈의 KiwoomClient 바인딩 (테스트 patch 지점 유지).
@@ -213,9 +214,20 @@ def send_order(api_id: str, body: dict[str, Any], action: str,
             try:
                 with client_cls() as c:
                     data, _ = c.request(api_id, body)
-            except KiwoomAPIError:
-                # 업스트림이 구조적으로 거부 — 주문 미실행. in-flight를 "rejected"로
-                # 종결해 같은 키의 다음 재시도가 영구히 막히지 않도록 한다.
+            except (KiwoomAPIError, KiwoomAuthError):
+                # 업스트림이 구조적으로 거부(KiwoomAPIError)했거나, 애초에 업스트림에
+                # 도달하지 못했다(KiwoomAuthError — client_cls() 생성/c.request()의
+                # 인증 단계는 실제 HTTP 전송(self._http.post) 이전에 실행되므로,
+                # 여기서 발생하면 전송이 일어나지 않았음이 코드 구조상 보장된다).
+                # 어느 경우든 주문은 미실행이므로 in-flight를 "rejected"로 종결해
+                # 같은 키의 다음 재시도가 영구히 막히지 않도록 한다.
+                #
+                # 이 튜플에 예외 타입을 추가하려면 "실제 전송(self._http.post) 이전
+                # 지점에서만 발생함이 코드 구조상 보장되는지"를 반드시 확인할 것 —
+                # 애매한 경우(예: httpx.ReadTimeout — 요청 바이트가 이미 나갔을 수
+                # 있음)는 절대 포함하면 안 된다. 그 경우는 in-flight로 남아
+                # ORDER_STATUS_UNKNOWN을 내는 것이 안전한 방향이다
+                # (test_inflight_record_blocks_duplicate_after_transport_failure 참고).
                 try:
                     idempotency.record_rejected(client_order_id, api_id, fingerprint=fp)
                 except OSError as e:
