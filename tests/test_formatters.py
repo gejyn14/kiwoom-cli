@@ -146,3 +146,22 @@ def test_account_balance_strips_direction_sign_from_price(capsys):
     out = capsys.readouterr().out
     assert "-68,000" not in out, "현재가에 방향지시자 부호가 그대로 노출됨"
     assert "68,000" in out
+
+
+def test_unified_balance_strips_direction_sign_from_price(capsys):
+    """통합 계좌현황(print_unified_balance)의 현재가도 방향지시자 부호를 노출하지 않는다."""
+    from kiwoom_cli.formatters import print_unified_balance
+    print_unified_balance(
+        {
+            "tot_pur_amt": "7000000", "tot_est_amt": "6800000",
+            "stk_acnt_evlt_prst": [{
+                "stk_cd": "A005930", "stk_nm": "삼성전자", "rmnd_qty": "100",
+                "avg_prc": "70000", "cur_prc": "-68000", "evlt_amt": "6800000",
+                "pl_amt": "-200000", "pl_rt": "-2.86",
+            }],
+        },
+        None,
+    )
+    out = capsys.readouterr().out
+    assert "-68,000" not in out, "현재가에 방향지시자 부호가 그대로 노출됨"
+    assert "68,000" in out
