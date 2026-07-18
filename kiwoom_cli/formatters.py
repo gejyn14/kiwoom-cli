@@ -245,9 +245,13 @@ _SIGNED_FIELDS = frozenset({
 
 # Code fields that should never be number-formatted. 날짜(YYYYMMDD)/시각(HHMMSS)
 # 필드. print_generic_table은 API 응답(Response)만 그리고 요청 바디는 거치지
-# 않으므로, 아래 각 항목은 Response 필드 기준으로 검증했다(au10001은 예외 —
-# 해당 항목에 별도 표기). 상세 근거·소스 시트별 예시값·기각 후보 감사 기록은
-# .superpowers/sdd/task-4b-report.md 참고.
+# 않으므로, 아래 각 항목은 Response 필드 기준으로 검증했다. expires_dt(au10001)만
+# 별도 표기가 있는데, 이는 Request/Response 구분의 예외가 아니라 — au10001의
+# expires_dt는 정상적인 Response 필드다 — 렌더링 경로의 예외다(client.py가
+# 직접 처리해 보통 이 게이트를 타지 않고, raw `kiwoom api au10001`로만 도달함;
+# 아래 개별 항목 참고). 스펙 전체(미구현 API 포함, 339시트)에서 "dt" 필드는
+# 49개 시트에서 일자(YYYYMMDD)로, 3개 시트(usa26410/usa26413/usa26414)에서
+# 연도(YYYY)로 쓰인다.
 _CODE_FIELDS = frozenset({
     "stk_cd", "ord_no",
     "symbol", "order_no",  # 정규화 canonical 이름 (history 등 이벤트 테이블)

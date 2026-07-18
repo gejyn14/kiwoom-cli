@@ -362,6 +362,7 @@ def test_task_4b_date_time_fields_are_not_comma_formatted(capsys, field, raw):
     # (lstrip("0") or "0" 후 int()의 3자리 콤마 그룹핑)과 동일해야 오탐/누락이 없다.
     bad = f"{int(raw.lstrip('0') or '0'):,}"
     assert bad not in out, f"{field}에 콤마 포맷({bad})이 노출됨"
+    assert raw in out
 
 
 # ── Task 4b 감사 후속조치: 잘못 기각됐던 필드 4건 ──
@@ -372,7 +373,7 @@ def test_task_4b_date_time_fields_are_not_comma_formatted(capsys, field, raw):
     # 있어 둘 다 없으면 같은 오브젝트 안에서 렌더링이 갈린다(qry_dt="20260718"은
     # 원본 그대로, qry_tm="093015"는 "93,015"로 콤마 포맷되는 불일치).
     ("base_pric_tm", "153045"),  # ka90008/ka90013 기준가시간(desc "HHmmss"). 기각
-    # 근거였던 ka30001의 "기준가(11/21)" 값은애초에 isdigit()이 아니라 게이트를
+    # 근거였던 ka30001의 "기준가(11/21)" 값은 애초에 isdigit()이 아니라 게이트를
     # 통과하지 못하므로 멤버십과 무관하게 안전 — 기각이 보호하는 건 없었다.
     ("fr_dt", "20241111"),  # kt00016 Request 평가시작일(desc "YYYYMMDD"). 같은 키가
     # ka30012 Response 평가시작일자로도 쓰인다.
@@ -398,4 +399,4 @@ def test_code_fields_and_classified_fields_are_disjoint():
     (formatters.py의 _needs_fmt 참고) — 두 집합에 동시에 속한 키가 있으면
     _CODE_FIELDS 등록이 조용히 무효화된다. _CODE_FIELDS가 17->55개로 늘어난
     지금, 이 불변식을 명시적으로 지켜야 한다."""
-    assert not (_CODE_FIELDS & _CLASSIFIED_FIELDS)
+    assert (_CODE_FIELDS & _CLASSIFIED_FIELDS) == frozenset()
