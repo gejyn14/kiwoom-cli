@@ -60,6 +60,7 @@ def test_us_apis_have_korean_descriptions():
 from kiwoom_cli.commands.us._constants import (  # noqa: E402
     US_BUY_TYPES,
     US_EXCHANGE,
+    US_MARKET_TYPES,
     US_ORDER_TYPES,
     US_SELL_TYPES,
     US_STOP_TYPES,
@@ -97,6 +98,13 @@ def test_us_order_type_codes():
     )
     assert US_SELL_TYPES == US_BUY_TYPES | frozenset({"moc", "stop", "stop-limit"})
     assert US_EXCHANGE == {"nasdaq": "ND", "nyse": "NY", "amex": "NA"}
+
+
+def test_us_market_types_ignore_price():
+    """ord_uv가 빈 값 처리되는(스펙: "그 외 시장가 거래유형 설정 시 입력 값은
+    빈 값 처리") 유형 집합. stop-limit(34, 트리거 후 지정가)은 제외 — 시장가가
+    아니라 지정가 계열이라 가격을 유지해야 한다."""
+    assert US_MARKET_TYPES == frozenset({"market", "moc", "vwap", "twap", "stop"})
 
 
 # ============================================================
@@ -291,6 +299,55 @@ def test_us_sell_stop_type_requires_stop_price(runner, us_fake):
         cli, ["order", "sell", "NVDA", "5", "--type", "stop", "--confirm"]
     )
     assert result.exit_code == 1
+
+
+# ── v2.9 task 7: US 시장가 계열(moc/vwap/twap/stop)도 --price를 거부한다
+# (ust20000/ust20001 스펙: "그 외 시장가 거래유형 설정 시 입력 값은 빈 값 처리") ──
+
+
+@pytest.mark.parametrize("otype,extra_args", [
+    ("moc", []),
+    ("stop", ["--stop", "199.99"]),
+])
+def test_us_sell_market_family_rejects_price(runner, us_fake, otype, extra_args):
+    """매도전용 시장가 계열(moc/stop)은 --price와 함께 쓰면 exit 1.
+
+    moc에는 --stop을 주지 않는다 — --stop은 stop/stop-limit 전용이라 moc과
+    같이 쓰면 (이번에 고치는 가격 가드가 아니라) 그 검사가 먼저 걸려 exit 1의
+    원인이 뒤바뀐다."""
+    result = runner.invoke(
+        cli,
+        ["order", "sell", "NVDA", "5", "--type", otype, *extra_args,
+         "--price", "200", "--confirm"],
+    )
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust20001") == []
+
+
+@pytest.mark.parametrize("otype", ["vwap", "twap"])
+def test_us_buy_market_family_rejects_price(runner, us_fake, otype):
+    """매수/매도 공통 시장가 계열(vwap/twap)은 --price와 함께 쓰면 exit 1."""
+    result = runner.invoke(
+        cli, ["order", "buy", "NVDA", "10", "--type", otype, "--price", "200", "--confirm"]
+    )
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust20000") == []
+
+
+def test_us_sell_stop_limit_still_accepts_price(runner, us_fake):
+    """stop-limit(34)은 시장가 계열이 아니다 — 트리거 후 지정가로 체결되므로
+    --price(정정지정가)를 계속 받아야 한다 (market-family 확장이 이름이 비슷한
+    이 유형까지 잘못 삼키지 않는지 확인, 기존 test_us_sell_stop_limit_body와
+    동일한 의도를 명시적으로 재확인)."""
+    result = runner.invoke(
+        cli,
+        ["order", "sell", "NVDA", "5", "--type", "stop-limit",
+         "--price", "200.5", "--stop", "199.99", "--confirm"],
+    )
+    assert result.exit_code == 0
+    body = _order_calls(us_fake, "ust20001")[0][1]
+    assert body["trde_tp"] == "34"
+    assert body["ord_uv"] == "200.5"
 
 
 def test_kr_buy_unchanged_and_fractional_price_rejected(runner, us_fake):

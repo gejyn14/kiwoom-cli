@@ -15,6 +15,7 @@ from .._mutation import (
     send_order,
 )
 from ._constants import (
+    US_MARKET_TYPES,
     US_ORDER_TYPES,
     US_SELL_ONLY_TYPES,
     US_STOP_TYPES,
@@ -31,12 +32,22 @@ def fmt_us_price(price: float) -> str:
     return f"{price:.4f}".rstrip("0").rstrip(".")
 
 
-def _validate_us_type(order_type: str, side: str) -> str:
-    """CLI 주문유형 → trde_tp 코드. 미지원이면 exit 1."""
+def _validate_us_type(order_type: str, side: str, price: float = 0) -> str:
+    """CLI 주문유형 → trde_tp 코드. 미지원이면 exit 1.
+
+    price가 주어졌는데 order_type이 시장가 계열(US_MARKET_TYPES)이면 거부한다
+    — ord_uv는 그 유형들에서 빈 값 처리되므로(스펙), 안 그러면 사용자가 지정한
+    가격이 조용히 버려지고 시장가로 체결된다(v2.9 audit finding N2).
+    """
     if order_type not in US_ORDER_TYPES:
         fail_input(f"미국주식에서 지원하지 않는 주문유형입니다: {order_type}")
     if side == "buy" and order_type in US_SELL_ONLY_TYPES:
         fail_input(f"'{order_type}'은(는) 매도 전용 주문유형입니다 (매수 미지원).")
+    if price and order_type in US_MARKET_TYPES:
+        fail_input(
+            f"'{order_type}' 주문유형은 가격을 사용하지 않습니다. "
+            "--price를 빼거나 --type limit을 지정하세요."
+        )
     return US_ORDER_TYPES[order_type]
 
 
@@ -127,7 +138,7 @@ def buy(code: str, qty: int, price: float, order_type: str,
         exchange: str | None, confirm: bool,
         dry_run: bool = False, client_order_id: str | None = None) -> None:
     """미국주식 매수 (ust20000)."""
-    trde_tp = _validate_us_type(order_type, "buy")
+    trde_tp = _validate_us_type(order_type, "buy", price)
 
     def body_fn(stex_tp: str) -> dict[str, str]:
         return {
@@ -153,7 +164,7 @@ def sell(code: str, qty: int, price: float, order_type: str,
          exchange: str | None, stop: float, confirm: bool,
          dry_run: bool = False, client_order_id: str | None = None) -> None:
     """미국주식 매도 (ust20001)."""
-    trde_tp = _validate_us_type(order_type, "sell")
+    trde_tp = _validate_us_type(order_type, "sell", price)
     if order_type in US_STOP_TYPES and not stop:
         fail_input(f"'{order_type}' 주문에는 --stop 가격이 필요합니다.")
     if stop and order_type not in US_STOP_TYPES:

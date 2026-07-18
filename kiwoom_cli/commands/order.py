@@ -83,7 +83,23 @@ def _kr_type_or_exit(order_type: str) -> str:
     return ORDER_TYPES[order_type]
 
 
-_MARKET_TYPES = frozenset({"market", "market-ioc", "market-fok"})
+# 시장가 계열 — ord_uv(주문단가)를 시스템이 결정하므로 사용자가 넘긴 --price는
+# 조용히 버려진다. kt10000 스펙 자체에는 US ust20001처럼 "빈 값 처리" 문구가
+# 없지만, 최유리지정가/최우선지정가/중간가는 체결가가 최우선/최유리 호가나
+# 중간가로 자동 결정되는 유형이라 사용자 지정 가격이 의미를 갖지 않는다
+# (v2.9 audit finding N2 — 시장가/시장가IOC/시장가FOK 3종만 막고 최유리·최우선·
+# 중간가 7종은 빠뜨려 --price가 조용히 전송·무시되던 갭).
+#
+# "stop"(28, 스톱지정가)은 여기 포함하지 않는다 — 도메인이 같은 dict를 공유하는
+# 미국 stop(시장가, 35)과 이름만 같을 뿐 국내 스톱지정가는 지정가 계열이라
+# 가격을 유지해야 한다(us/_constants.py의 US_MARKET_TYPES가 미국 쪽을 별도로
+# 담당).
+_MARKET_TYPES = frozenset({
+    "market", "market-ioc", "market-fok",
+    "best", "best-ioc", "best-fok",
+    "first",
+    "mid", "mid-ioc", "mid-fok",
+})
 
 
 def _resolve_order_type(order_type: str | None, price: float) -> str:

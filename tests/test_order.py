@@ -609,6 +609,82 @@ def test_order_type_translation(runner, fake_client, type_name, api_code):
 
 
 # ============================================================
+#  v2.9 task 7: 국내 최유리/최우선/중간가 계열도 시장가와 동일하게
+#  --price를 거부한다 (kt10000 스펙에는 US ust20001처럼 "빈 값 처리" 문구가
+#  없지만, 최유리/최우선/중간가는 체결가가 시스템이 정하는 호가로 자동
+#  결정되는 유형이라 사용자가 넘긴 ord_uv는 조용히 버려진다 — 감사 발견
+#  N2가 지적한 바로 그 실패 모드).
+# ============================================================
+
+
+@pytest.mark.parametrize("type_name", [
+    "best", "best-ioc", "best-fok", "first", "mid", "mid-ioc", "mid-fok",
+])
+def test_market_family_kr_rejects_price(runner, fake_client, type_name):
+    """국내 최유리/최우선/중간가 계열은 --price와 함께 쓰면 exit 1로 거부된다."""
+    result = runner.invoke(
+        cli,
+        ["order", "buy", "005930", "10", "--type", type_name, "--price", "70000", "--confirm"],
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+def test_domestic_stop_type_still_accepts_price(runner, fake_client):
+    """국내 스톱지정가(trde_tp=28)는 이름만 미국 stop(시장가)과 같을 뿐 별개
+    개념(지정가 계열)이라 --price를 계속 받아야 한다 — market-family 확장이
+    이름이 겹치는 이 유형까지 잘못 삼키지 않는지 확인."""
+    result = runner.invoke(
+        cli,
+        ["order", "buy", "005930", "10", "--type", "stop", "--price", "70000", "--confirm"],
+    )
+
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["trde_tp"] == "28"
+    assert body["ord_uv"] == "70000"
+
+
+def test_credit_buy_rejects_market_family_price(runner, fake_client):
+    """신용 매수(kt10006)도 buy/sell과 동일한 _resolve_order_type을 거치므로
+    확장된 가드가 자동으로 전파된다 (감사가 지적한 '한 곳만 고치고 전파 안 됨'
+    실패모드 재발 방지 확인)."""
+    result = runner.invoke(
+        cli,
+        ["order", "credit", "buy", "005930", "10", "--type", "best", "--price", "70000", "--confirm"],
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+def test_gold_buy_rejects_market_family_price(runner, fake_client):
+    """금현물 매수(kt50000)도 같은 공유 함수를 거치므로 가드가 전파된다."""
+    result = runner.invoke(
+        cli,
+        ["order", "gold", "buy", "M04020000", "10", "--type", "mid", "--price", "90000", "--confirm"],
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+def test_price_without_type_still_infers_limit(runner, fake_client):
+    """--price만 주고 --type을 생략하면 여전히 limit으로 추론된다 — market-family
+    확장이 이 추론 분기에 영향을 주지 않는지 확인 (Related behavior 항목)."""
+    result = runner.invoke(
+        cli,
+        ["order", "buy", "005930", "10", "--price", "70000", "--confirm"],
+    )
+
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["trde_tp"] == "0"      # limit
+    assert body["ord_uv"] == "70000"
+
+
+# ============================================================
 #  Error propagation
 # ============================================================
 

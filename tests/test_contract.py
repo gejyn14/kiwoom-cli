@@ -307,6 +307,16 @@ def test_validate_rejects_market_plus_price(runner, isolated_env):
     assert _doc(result)["error"]["code"] == "INVALID_INPUT"
 
 
+def test_validate_rejects_best_plus_price(runner, isolated_env):
+    """validate는 order buy/sell과 같은 _resolve_order_type을 거치므로 확장된
+    시장가 계열(최유리/최우선/중간가) 가드도 그대로 적용돼야 한다 — validate가
+    통과시키는데 실제 주문 경로가 거부하는 괴리(과거 발견 사례)를 막는다."""
+    result = runner.invoke(cli, ["-f", "json", "order", "validate", "buy", "005930", "10",
+                                 "--price", "70000", "--type", "best"])
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
 def test_us_stock_info_exchange_resolution_failure_json_envelope(runner, isolated_env, monkeypatch):
     from kiwoom_cli.commands.us import stock_ops
     from kiwoom_cli.commands.us.detect import UsExchangeError
