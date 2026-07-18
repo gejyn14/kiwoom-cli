@@ -32,12 +32,16 @@ def fmt_us_price(price: float) -> str:
     return f"{price:.4f}".rstrip("0").rstrip(".")
 
 
-def _validate_us_type(order_type: str, side: str, price: float = 0) -> str:
+def _validate_us_type(order_type: str, side: str, price: float) -> str:
     """CLI 주문유형 → trde_tp 코드. 미지원이면 exit 1.
 
     price가 주어졌는데 order_type이 시장가 계열(US_MARKET_TYPES)이면 거부한다
     — ord_uv는 그 유형들에서 빈 값 처리되므로(스펙), 안 그러면 사용자가 지정한
     가격이 조용히 버려지고 시장가로 체결된다(v2.9 audit finding N2).
+
+    price는 필수 위치 인자다 — 기본값 0을 두면 그 값 자체가 이 가드를 조용히
+    건너뛰는 우회로가 되어, 이 작업 전체가 막으려는 바로 그 실패 모드(가격
+    무시)가 다음 호출부 추가 때 재발할 수 있다(v2.9 audit finding 1).
     """
     if order_type not in US_ORDER_TYPES:
         fail_input(f"미국주식에서 지원하지 않는 주문유형입니다: {order_type}")

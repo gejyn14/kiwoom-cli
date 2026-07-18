@@ -107,11 +107,18 @@ def _resolve_order_type(order_type: str | None, price: float) -> str:
 
     조용히 가격을 버리고 시장가로 나가는 사고(가격 지정 매수가 시장가 체결)를
     막는 안전장치다.
+
+    입력 오류는 `fail_input`으로 종료한다 — `click.UsageError`를 쓰면 csv/table
+    모드에서 프로젝트 컨벤션(fail_input의 스타일 있는 오류 출력/envelope)
+    대신 Click 기본 usage 배너가 노출된다(v2.9 audit finding 4: us/order_ops.py의
+    동급 가드는 이미 fail_input을 쓰는데 이쪽만 다른 메커니즘이었다). json 모드는
+    두 메커니즘 모두 이전에도 KiwoomGroup의 ClickException 처리로 envelope가
+    나갔지만, csv 모드는 raw Click 텍스트가 그대로 노출되고 있었다.
     """
     if order_type is None:
         return "limit" if price else "market"
     if price and order_type in _MARKET_TYPES:
-        raise click.UsageError(
+        fail_input(
             f"'{order_type}' 주문유형은 가격을 사용하지 않습니다. "
             "--price를 빼거나 --type limit을 지정하세요."
         )

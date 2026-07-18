@@ -62,6 +62,7 @@ from kiwoom_cli.commands.us._constants import (  # noqa: E402
     US_EXCHANGE,
     US_MARKET_TYPES,
     US_ORDER_TYPES,
+    US_SELL_ONLY_TYPES,
     US_SELL_TYPES,
     US_STOP_TYPES,
 )
@@ -100,11 +101,11 @@ def test_us_order_type_codes():
     assert US_EXCHANGE == {"nasdaq": "ND", "nyse": "NY", "amex": "NA"}
 
 
-def test_us_market_types_ignore_price():
-    """ord_uv가 빈 값 처리되는(스펙: "그 외 시장가 거래유형 설정 시 입력 값은
-    빈 값 처리") 유형 집합. stop-limit(34, 트리거 후 지정가)은 제외 — 시장가가
-    아니라 지정가 계열이라 가격을 유지해야 한다."""
-    assert US_MARKET_TYPES == frozenset({"market", "moc", "vwap", "twap", "stop"})
+# test_us_market_types_reject_price (아래, Task 5 섹션)가 US_MARKET_TYPES의
+# 각 멤버에 대해 실제 주문 명령을 실행해 --price 거부를 행동으로 검증한다 —
+# 여기 있던 이전 버전(test_us_market_types_ignore_price)은 상수가 자기
+# 리터럴과 같은지만 확인해 가드 유무와 무관하게 항상 통과했다(v2.9 audit
+# finding 3, 위양성 위험 — 상수만 존재하면 가드가 실제로는 빠져 있어도 green).
 
 
 # ============================================================
@@ -348,6 +349,26 @@ def test_us_sell_stop_limit_still_accepts_price(runner, us_fake):
     body = _order_calls(us_fake, "ust20001")[0][1]
     assert body["trde_tp"] == "34"
     assert body["ord_uv"] == "200.5"
+
+
+@pytest.mark.parametrize("otype", sorted(US_MARKET_TYPES))
+def test_us_market_types_reject_price(runner, us_fake, otype):
+    """US_MARKET_TYPES의 모든 멤버가 --price와 함께 쓰이면 실제로 거부되는지
+    행동으로 검증한다 (v2.9 audit finding 3 — 이전에는 상수가 자기 리터럴과
+    같은지만 확인해 가드 유무와 무관하게 항상 통과하는 테스트가 있었다).
+
+    moc/stop은 매도 전용(US_SELL_ONLY_TYPES)이라 side=sell로 보낸다. stop은
+    --stop 트리거 가격도 함께 줘야 한다 — 안 그러면 (이번에 검증하려는 가격
+    가드가 아니라) '--stop 필요' 가드가 먼저 걸려 exit 1의 원인이 뒤바뀐다
+    (test_us_sell_market_family_rejects_price와 동일한 주의사항)."""
+    side = "sell" if otype in US_SELL_ONLY_TYPES else "buy"
+    args = ["order", side, "NVDA", "5", "--type", otype, "--price", "200", "--confirm"]
+    if otype in US_STOP_TYPES:
+        args += ["--stop", "199.99"]
+    result = runner.invoke(cli, args)
+    assert result.exit_code == 1
+    api_id = "ust20001" if side == "sell" else "ust20000"
+    assert _order_calls(us_fake, api_id) == []
 
 
 def test_kr_buy_unchanged_and_fractional_price_rejected(runner, us_fake):
