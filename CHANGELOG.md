@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.8.0] - 2026-07-18
+
+**Breaking**
+- 프로필 이름이 `[A-Za-z0-9_-]{1,64}` allowlist로 제한됩니다 (경로 조작 차단).
+  점(.)·공백 등이 포함된 기존 프로필은 `config setup`으로 재생성이 필요합니다.
+- 주문성 API 17개(`kt10000~3`, `kt10006~9`, `kt50000~3`, `ust20000~3`, `ust31302`)를
+  `kiwoom api`로 직접 호출하면 확인 게이트가 적용됩니다 — json/csv 모드는
+  `--confirm` 없이 `CONFIRMATION_REQUIRED`(exit 1).
+
+### Security
+- `~/.kiwoom` 디렉토리 0700, `config.toml`·주문 원장·레코딩 파일 0600으로 생성 —
+  기존 설치본도 아무 명령 실행 시 일괄 조임 (`--record` 명시 경로는 제외)
+- raw `kiwoom api` 주문성 호출 확인 게이트 (table: body 미리보기 + y/n, 자동화: `--confirm`)
+- 프로필 이름 allowlist — 원장 파일명·키링 키로의 경로 조작 차단
+- PyPI 배포를 Trusted Publishing(OIDC)으로 전환 — 장기 API 토큰 제거
+- main 브랜치 보호 룰셋 복원 (PR + CI 필수, force push/삭제 차단, 관리자 bypass)
+
 ## [2.7.0] - 2026-07-18
 
 ### Added

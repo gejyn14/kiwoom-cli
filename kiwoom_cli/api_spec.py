@@ -250,6 +250,17 @@ API_REGISTRY: dict[str, tuple[str, str]] = {
 }
 
 
+# 상태를 바꾸는(주문·환전) API — raw `kiwoom api` 호출 시 확인 게이트 대상.
+# 신규 주문 API를 API_REGISTRY에 추가할 때 여기에도 반드시 추가할 것.
+MUTATION_APIS = frozenset({
+    "kt10000", "kt10001", "kt10002", "kt10003",      # 주식 매수/매도/정정/취소
+    "kt10006", "kt10007", "kt10008", "kt10009",      # 신용 매수/매도/정정/취소
+    "kt50000", "kt50001", "kt50002", "kt50003",      # 금현물 매수/매도/정정/취소
+    "ust20000", "ust20001", "ust20002", "ust20003",  # 미국주식 매수/매도/정정/취소
+    "ust31302",                                       # 환전 신청
+})
+
+
 def get_url(api_id: str) -> str:
     entry = API_REGISTRY.get(api_id)
     if entry is None:

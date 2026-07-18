@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -47,17 +48,86 @@ DOMAINS = {
 
 TOKEN_STORAGES = ("keychain", "env")
 
+# 프로필 이름 allowlist — 원장 파일명(idempotency/<profile>-<env>.jsonl)과
+# keyring 키(<profile>:appkey)에 그대로 들어가므로 경로 조작 문자를 차단한다
+PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def is_valid_profile_name(name: str) -> bool:
+    return bool(PROFILE_NAME_RE.fullmatch(name))
+
+
 DEFAULT_CONFIG = {
     "general": {"default_profile": "default"},
     "profiles": {"default": {"domain": "mock", "account": ""}},
 }
 
+
+def secure_dir(path: Path) -> None:
+    """디렉토리를 생성하고 소유자 전용(0700)으로 강제한다. 이미 있어도 매번 조인다."""
+    path.mkdir(parents=True, exist_ok=True)
+    if os.name == "posix":
+        path.chmod(0o700)
+
+
+def secure_file(path: Path) -> None:
+    """존재하는 파일을 소유자 전용(0600)으로 조인다. 없으면 아무것도 하지 않는다."""
+    if os.name == "posix" and path.exists():
+        path.chmod(0o600)
+
+
 def ensure_config_dir() -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    secure_dir(CONFIG_DIR)
 
 
 def ensure_cache_dir() -> None:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_config_dir()
+    secure_dir(CACHE_DIR)
+
+
+def harden_permissions() -> None:
+    """기존 설치본의 ~/.kiwoom 트리 권한을 일괄로 조인다 (디렉토리 0700, 파일 0600).
+
+    계좌번호(config.toml)·주문 원장(idempotency/)·레코딩(data/)이 v2.7 이하에서
+    0755/0644로 생성되어 다른 로컬 사용자가 읽을 수 있었다. 아무것도 생성하지 않는다.
+
+    best-effort: root 소유 잔재 파일 등 chmod가 실패(OSError)해도 무시하고 계속
+    조인다 — 파일 하나가 다른 사용자 소유라고 해서 매 명령이 죽으면 안 된다.
+    """
+    if os.name != "posix" or not CONFIG_DIR.exists():
+        return
+
+    failed = False
+
+    def _try_chmod(path: Path, mode: int) -> None:
+        nonlocal failed
+        try:
+            path.chmod(mode)
+        except OSError:
+            failed = True
+
+    _try_chmod(CONFIG_DIR, 0o700)
+    if CONFIG_FILE.exists():
+        _try_chmod(CONFIG_FILE, 0o600)
+    for sub in ("idempotency", "data", "cache"):
+        d = CONFIG_DIR / sub
+        if not d.is_dir():
+            continue
+        _try_chmod(d, 0o700)
+        try:
+            entries = list(d.iterdir())
+        except OSError:
+            failed = True
+            continue
+        for f in entries:
+            if f.is_file():
+                _try_chmod(f, 0o600)
+
+    if failed:
+        from .output import err_console
+        err_console.print(
+            "[dim]일부 파일/디렉토리 권한을 조이지 못했습니다 (다른 사용자 소유 등) — 무시하고 계속합니다.[/]"
+        )
 
 
 def load_config() -> dict:
@@ -72,6 +142,7 @@ def save_config(cfg: dict) -> None:
     ensure_config_dir()
     with open(CONFIG_FILE, "wb") as f:
         tomli_w.dump(cfg, f)
+    secure_file(CONFIG_FILE)
 
 
 def resolve_profile(profile: str | None = None) -> str:
