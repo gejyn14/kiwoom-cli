@@ -191,3 +191,60 @@ def test_unified_balance_strips_direction_sign_from_price(capsys):
     out = capsys.readouterr().out
     assert "-68,000" not in out, "현재가에 방향지시자 부호가 그대로 노출됨"
     assert "68,000" in out
+
+
+# ── Task 3b: _ABS_FIELDS/_SIGNED_FIELDS 분류 누락 (호가·체결가 방향지시자) ──
+
+
+def test_elw_row_strips_direction_sign_from_quote_and_execution_fields(capsys):
+    """버그 재현: ELW 행에서 현재가만 고쳐지고 매도호가/매수호가/체결가는 여전히
+    방향지시자 부호(-)가 노출됨 (종목코드 57JBHW 예시). sel_bid/buy_bid/cntr_pric는
+    스펙 예시(ka10016/ka10017/ka10024/ka10055 등)에서 +/- 방향지시자가 확인되었다."""
+    print_generic_table([{
+        "stk_cd": "57JBHW", "cur_prc": "-95",
+        "sel_bid": "-96", "buy_bid": "-94", "cntr_pric": "-93",
+    }])
+    out = capsys.readouterr().out
+    for bad in ("-96", "-94", "-93"):
+        assert bad not in out, f"{bad}에 방향지시자 부호가 그대로 노출됨"
+    assert "96" in out
+    assert "94" in out
+    assert "93" in out
+
+
+def test_generic_table_strips_sign_on_cur_prc_n_despite_label_stripping(capsys):
+    """_get_label은 '_n' 접미사를 떼고 cur_prc_n을 '현재가'로 표시하지만, 멤버십 검사는
+    원본 키(cur_prc_n)로 이뤄져야 한다 (ka20001/ka20009 지수 현재가 짝필드).
+    스펙 예시: ka20001 cur_prc_n "-2394.49"."""
+    print_generic_table([{"stk_cd": "201060", "cur_prc_n": "-2394.49"}])
+    out = capsys.readouterr().out
+    assert "-2394.49" not in out and "-2,394.49" not in out
+    assert "2,394.49" in out
+
+
+def test_generic_table_keeps_real_sign_on_pred_pre_n(capsys):
+    """pred_pre_n은 전일대비(pred_pre)의 짝필드로, 방향지시자가 아닌 실제 등락폭이므로
+    부호를 보존해야 한다 (_SIGNED_FIELDS). 스펙 예시: ka20001 pred_pre_n "-2394.49" 형태."""
+    print_generic_table([{"stk_cd": "201060", "pred_pre_n": "-2394.49"}])
+    out = capsys.readouterr().out
+    assert "-2,394.49" in out, "실제 등락폭 부호가 사라짐"
+
+
+@pytest.mark.parametrize("field,raw,expected", [
+    ("pri_sel_bid_unit", "-96", "96"),
+    ("pri_buy_bid_unit", "-94", "94"),
+    ("wonju_pric", "-10", "10"),
+    ("past_curr_prc", "-70700", "70,700"),
+    ("52wk_hgst_pric", "-3001", "3,001"),
+    ("52wk_lwst_pric", "-1608", "1,608"),
+    ("tdy_high_pric", "-7470", "7,470"),
+    ("tdy_low_pric", "-10060", "10,060"),
+    ("sel_1th_bid", "-156700", "156,700"),
+    ("buy_1th_bid", "-156600", "156,600"),
+])
+def test_generic_table_strips_direction_sign_on_newly_classified_abs_fields(capsys, field, raw, expected):
+    """Task 3b에서 새로 _ABS_FIELDS에 편입된 필드들도 방향지시자 부호를 노출하지 않는다."""
+    print_generic_table([{"stk_cd": "005930", field: raw}])
+    out = capsys.readouterr().out
+    assert raw not in out, f"{field}에 방향지시자 부호가 그대로 노출됨"
+    assert expected in out

@@ -190,6 +190,31 @@ _ABS_FIELDS = frozenset({
     "buy_1bid", "buy_2bid", "buy_3bid", "buy_4bid", "buy_5bid",
     "buy_6bid", "buy_7bid", "buy_8bid", "buy_9bid", "buy_10bid",
     "poss_qty", "sell_alowq",
+    # Task 3b — 스펙 Response Example에서 +/- 방향지시자를 확인한 호가·체결가 필드.
+    # sel_bid(ka10016/17/18/24/26/29/32/34 등 13개), buy_bid(12개): "매도호가"/"매수호가"
+    "sel_bid", "buy_bid",
+    # cntr_pric(체결가, ka10055/50010/50092/50101 등에서 "+" 확인)
+    "cntr_pric",
+    # pri_sel_bid_unit/pri_buy_bid_unit(ka10003/ka10084 등에서 +/- 확인)
+    "pri_sel_bid_unit", "pri_buy_bid_unit",
+    # wonju_pric(원주가격, ka40006/ka40007 예시 "-10")
+    "wonju_pric",
+    # past_curr_prc(과거현재가, ka00198 예시 "+70700")
+    "past_curr_prc",
+    # 52wk_hgst_pric/52wk_lwst_pric(ka20001/ka20009 예시 "+3001.91"/"-1608.07")
+    "52wk_hgst_pric", "52wk_lwst_pric",
+    # tdy_high_pric/tdy_low_pric(당일고가/당일저가, ka10018 예시 +/- 확인)
+    "tdy_high_pric", "tdy_low_pric",
+    # ka10095(관심종목정보) 호가 1~4단계: 예시에서 "+" 확인. 5단계(sel_5th_bid/
+    # buy_5th_bid)는 sel_5th_bid만 "+" 확인되어 포함, buy_5th_bid는 근거 부족으로 미포함(하단 참고)
+    "sel_1th_bid", "sel_2th_bid", "sel_3th_bid", "sel_4th_bid", "sel_5th_bid",
+    "buy_1th_bid", "buy_2th_bid", "buy_3th_bid", "buy_4th_bid",
+    # cur_prc_n(지수현재가 짝필드, ka20001/ka20009/ka40008 예시 +/- 확인).
+    # _get_label이 "_n" 접미사를 떼고 base 라벨을 쓰지만 멤버십 검사는 원본 키로
+    # 하므로 별도 등록 필요 (base cur_prc와 동일 취급).
+    "cur_prc_n",
+    # trde_qty_n/acc_trde_qty_n: base(trde_qty/acc_trde_qty)가 이미 ABS이므로 짝필드도 동일 취급
+    "trde_qty_n", "acc_trde_qty_n",
 })
 
 # Fields where +/- is meaningful (changes, rates).
@@ -198,6 +223,9 @@ _SIGNED_FIELDS = frozenset({
     "tdy_lspft", "lspft", "tdy_lspft_rt", "lspft_rt", "lspft_ratio",
     "11", "12", "15",  # WebSocket: 전일대비, 등락율, 거래량(+매수/-매도)
     "938", "940", "950", "951",  # WebSocket: 당일순매수수량, 당일총매도손익, 당일실현손익(율)
+    # Task 3b — pred_pre_n/flu_rt_n: base(pred_pre/flu_rt)가 실제 등락폭·등락율(부호가
+    # 곧 값)이므로 짝필드(ka20001/ka20009/ka40008 지수)도 동일하게 부호 보존
+    "pred_pre_n", "flu_rt_n",
 })
 
 # Code fields that should never be number-formatted.
