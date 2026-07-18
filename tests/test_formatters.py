@@ -260,3 +260,30 @@ def test_generic_table_strips_direction_sign_on_newly_classified_abs_fields(caps
         f"{field}에 방향지시자 부호가 포함된 콤마 포맷({signed_expected})이 그대로 노출됨"
     )
     assert expected in out
+
+
+# ── Task 4: 날짜·시간 필드가 금액처럼 콤마 포매팅됨 (N31) ──
+
+
+def test_date_and_time_fields_are_not_comma_formatted(capsys):
+    """8자리 날짜(YYYYMMDD)/6자리 시각(HHMMSS)이 _needs_fmt의 길이 휴리스틱
+    (숫자처럼 보이고 5자 이상)을 통과해 콤마로 묶이면 안 된다."""
+    print_generic_table([{"dt": "20260716", "ord_tm": "093012", "cur_prc": "70000"}])
+    out = capsys.readouterr().out
+    assert "20,260,716" not in out
+    assert "20260716" in out
+    assert "93,012" not in out
+    assert "70,000" in out, "일반 가격 필드의 포매팅은 유지되어야 함"
+
+
+def test_date_and_time_n_suffixed_fields_are_not_comma_formatted(capsys):
+    """_get_label은 '_n' 접미사를 떼고 라벨을 표시하지만(dt_n -> 일자, tm_n -> 시간),
+    멤버십 검사(_CODE_FIELDS)는 원본 키로 이뤄진다 — dt/tm만 등록하면 dt_n/tm_n은
+    날짜/시간처럼 보이면서 콤마 포매팅에서는 새어나간다 (ka20001/ka20009 지수 짝필드,
+    dt_n 예시 "20241122", tm_n 예시 "143000")."""
+    print_generic_table([{"stk_cd": "201060", "dt_n": "20241122", "tm_n": "143000"}])
+    out = capsys.readouterr().out
+    assert "20,241,122" not in out
+    assert "20241122" in out
+    assert "143,000" not in out
+    assert "143000" in out

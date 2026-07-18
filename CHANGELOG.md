@@ -19,7 +19,10 @@
 - 호가·체결가 방향지시자 부호가 테이블에 그대로 노출되던 문제 보완 — `sel_bid`/`buy_bid`/
   `cntr_pric`/`pri_sel_bid_unit`/`pri_buy_bid_unit`/`wonju_pric`/`past_curr_prc`/`52wk_hgst_pric`/
   `52wk_lwst_pric`/`tdy_high_pric`/`tdy_low_pric`/ka10095 호가 1~5단계(`buy_5th_bid` 포함,
-  형제 필드만 벗겨지고 이것만 남아 비대칭으로 보이던 문제)/`cur_prc_n` 등 26개 필드
+  형제 필드만 벗겨지고 이것만 남아 비대칭으로 보이던 문제)/`cur_prc_n` 등 22개 필드
+  (Breaking 섹션의 26개 중 `trde_qty_n`/`acc_trde_qty_n`은 애초에 부호가 노출된 적이
+  없고, `pred_pre_n`/`flu_rt_n`은 실제 등락폭이라 부호를 의도적으로 유지하므로
+  테이블 렌더링 버그 수정 대상이 아니다)
 
 ## [2.8.0] - 2026-07-18
 

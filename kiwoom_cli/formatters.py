@@ -247,6 +247,32 @@ _SIGNED_FIELDS = frozenset({
 _CODE_FIELDS = frozenset({
     "stk_cd", "ord_no",
     "symbol", "order_no",  # 정규화 canonical 이름 (history 등 이벤트 테이블)
+    # Task 4 (N31) — 날짜(YYYYMMDD)/시각(HHMMSS) 필드. 스펙 Response Example에서
+    # 실제 값을 확인함(docs/키움 REST API 문서.xlsx). 모두 Response 필드로만 등록 —
+    # 이 테이블 렌더러는 API 응답(print_generic_table의 data)만 거치고 요청 바디는
+    # 거치지 않으므로, 아래 각주에 적은 "같은 키가 요청에서 다른 뜻으로도 쓰인다"는
+    # 사실은 이 게이트의 정확성에 영향을 주지 않는다.
+    "dt", "date", "tm",
+    "ord_tm", "cntr_tm", "cntr_dt", "trde_dt",
+    "qry_dt", "expr_dt", "loan_dt", "crd_loan_dt",
+    # dt_n/tm_n: _get_label()은 "_n" 접미사를 떼고 base 라벨(일자/시간)로 표시하지만
+    # 이 멤버십 검사는 원본 키로 하므로 별도 등록 필요 (cur_prc_n과 동일 패턴,
+    # 위 _ABS_FIELDS 블록의 불변식 주석 참고). ka20001/ka20009 지수 짝필드.
+    "dt_n", "tm_n",
+    # "dt"는 스펙에서 두 가지 뜻으로 쓰인다: Response 바디에서는 예외 없이 일자
+    # (YYYYMMDD, 41개 API 전수 확인 — 모두 한글명 "일자"), Request 바디에서는
+    # 일부 순위류 API(ka10016/34/36/37/38/39/42/43/131, ka30002, ka40001)에서
+    # "기간"(조회 기간 코드: 5/10/20/60/120/250 등)을 의미한다. 이 두 번째 뜻은
+    # 요청 파라미터로만 나타나고 print_generic_table은 API 응답만 그리므로 이
+    # 플랫 셋에 안전하게 함께 둘 수 있다 — 실제로도 기간 코드값은 최대 3자리라
+    # _CODE_FIELDS 등록 여부와 무관하게 애초에 length>4 게이트를 넘지 못해 콤마가
+    # 붙지 않았다(무해).
+    #
+    # 제외한 후보: base_dt("기준일자") — 17개 API에서 전부 Request 전용 파라미터로만
+    # 나타나고 Response 바디에는 단 한 번도 등장하지 않아(스펙 전수 확인) 이 게이트가
+    # 다루는 표시 경로(API 응답 렌더링)에 도달할 수 없다 — 근거 없는 추측성 등록을
+    # 피하기 위해 제외. rgt_dt — 스펙 전체(Request/Response 불문)에 해당 키가
+    # 아예 존재하지 않아 제외(브리프의 오기로 추정).
 })
 
 # USD decimal fields (up to 4 decimals). Routed to _fmt_usd by _smart_fmt.
