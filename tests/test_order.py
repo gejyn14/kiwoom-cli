@@ -280,6 +280,48 @@ def test_credit_cancel_sends_to_kt10009(runner, fake_client):
 
 
 # ============================================================
+#  Credit dry-run (kt10006/kt10007) — v2.9 audit fix 3: 신용주문도
+#  _dry_run_kr을 공유하지만 이전에는 테스트 커버리지가 없었다.
+# ============================================================
+
+
+def test_credit_buy_dry_run_market_resolves_price_from_quote(runner, fake_client):
+    """신용 매수 시장가 dry-run: ka10001 현재가로 예상비용 계산, 전송 없음."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "-70000", "return_code": 0}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "credit", "buy", "005930", "10", "--dry-run"],
+    )
+
+    assert result.exit_code == 0
+    assert [c[0] for c in fake_client.calls] == ["ka10001"]
+    payload = _doc(result)["data"]
+    assert payload["api_id"] == "kt10006"
+    assert payload["price"] == 70000
+    assert payload["price_source"] == "market_quote"
+    assert payload["est_cost"] == 700000
+
+
+def test_credit_sell_dry_run_unparseable_quote_fails_loudly(runner, fake_client):
+    """신용 매도 dry-run도 시세 파싱 실패 시 QUOTE_UNAVAILABLE(exit 2)이어야 한다
+    — kt10001/kt10000과 동일한 계약이 kt10007에도 적용되는지 확인."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "N/A", "return_code": 0}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "credit", "sell", "005930", "10", "--dry-run"],
+    )
+
+    assert result.exit_code == 2
+    doc = _doc(result)
+    assert doc["error"]["code"] == "QUOTE_UNAVAILABLE"
+    assert [c[0] for c in fake_client.calls] == ["ka10001"]
+
+
+# ============================================================
 #  Gold Orders (kt50000 ~ kt50003)
 # ============================================================
 
@@ -337,6 +379,74 @@ def test_gold_cancel_sends_to_kt50003(runner, fake_client):
 
     assert result.exit_code == 0
     assert fake_client.calls[0][0] == "kt50003"
+
+
+# ============================================================
+#  Gold dry-run (kt50000/kt50001) — v2.9 audit fix 3 (merge blocker):
+#  금현물은 ka10001이 아니라 전용 시세 API(ka50010)로 현재가를 조회해야 한다.
+#  ka10001은 금현물 코드를 받지 않는다(스펙 stk_cd 설명이 KRX/NXT/SOR 국내주식
+#  코드로 한정됨) — ka10001로 조회하면 종목없음 오류거나 무의미한 응답이 되어
+#  이전에는 "동작하지만 오도하는" 상태에서 하드 실패로 퇴행했을 것이다.
+# ============================================================
+
+
+def test_gold_buy_dry_run_market_resolves_price_from_gold_quote_api(runner, fake_client):
+    """금현물 매수 시장가 dry-run: ka50010(금현물체결추이)의 gold_cntr[0].cntr_pric로
+    예상비용을 계산해야 한다 — ka10001이 아니다."""
+    fake_client.set_response(
+        "ka50010",
+        {
+            "gold_cntr": [
+                {"cntr_pric": "+152300", "tm": "090106"},
+                {"cntr_pric": "+152400", "tm": "090100"},
+            ],
+            "return_code": 0,
+        },
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "gold", "buy", "M04020000", "1", "--dry-run"],
+    )
+
+    assert result.exit_code == 0
+    assert [c[0] for c in fake_client.calls] == ["ka50010"]  # ka10001은 호출되지 않는다
+    payload = _doc(result)["data"]
+    assert payload["api_id"] == "kt50000"
+    assert payload["price"] == 152300
+    assert payload["price_source"] == "market_quote"
+    assert payload["est_cost"] == 152300
+
+
+def test_gold_sell_dry_run_unavailable_gold_quote_fails_loudly(runner, fake_client):
+    """금현물 매도 dry-run: ka50010이 체결 데이터를 주지 못하면(빈 리스트)
+    QUOTE_UNAVAILABLE(exit 2)이어야 한다 — 조용히 price=0을 보여주지 않는다."""
+    fake_client.set_response("ka50010", {"gold_cntr": [], "return_code": 0})
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "gold", "sell", "M04020000", "1", "--dry-run"],
+    )
+
+    assert result.exit_code == 2
+    doc = _doc(result)
+    assert doc["error"]["code"] == "QUOTE_UNAVAILABLE"
+    assert [c[0] for c in fake_client.calls] == ["ka50010"]
+
+
+def test_gold_buy_dry_run_unparseable_cntr_pric_fails_loudly(runner, fake_client):
+    """gold_cntr는 있지만 cntr_pric이 파싱 불가능하면 QUOTE_UNAVAILABLE이어야 한다."""
+    fake_client.set_response(
+        "ka50010", {"gold_cntr": [{"cntr_pric": "N/A", "tm": "090106"}], "return_code": 0}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "gold", "buy", "M04020000", "1", "--dry-run"],
+    )
+
+    assert result.exit_code == 2
+    assert _doc(result)["error"]["code"] == "QUOTE_UNAVAILABLE"
+    # ka10001로 잘못 라우팅되면(금현물 코드 미지원) 우연히 같은 exit code가 나올
+    # 수 있으므로, 실제로 금현물 전용 API가 호출됐는지 명시적으로 확인한다.
+    assert [c[0] for c in fake_client.calls] == ["ka50010"]
 
 
 # ============================================================
@@ -626,6 +736,90 @@ def test_dry_run_market_unparseable_quote_fails_loudly(runner, fake_client):
     doc = _doc(result)
     assert doc["error"]["code"] == "QUOTE_UNAVAILABLE"
     assert doc["data"] is None
+    # 주문 API(kt10000)는 호출되지 않아야 한다 — 시세 조회(ka10001)만 있었어야 함.
+    assert [c[0] for c in fake_client.calls] == ["ka10001"]
+
+
+@pytest.mark.parametrize("cur_prc", ["0", "+0", "-0", "+00000000", "0.0000"])
+def test_dry_run_market_zero_quote_fails_loudly(runner, fake_client, cur_prc):
+    """cur_prc가 정확히 "0"(부호/자릿수 변형 포함)이어도 QUOTE_UNAVAILABLE이어야 한다.
+
+    이 값은 원래 버그가 만들어내던 정확한 결과물이다 — "0"을 걸러내지 못하는
+    수정은 이 버그 클래스를 하나도 못 잡는다. 실거래 종목에 가격 0은 없다
+    (거래정지/상장전 등 "시세 없음"을 의미).
+    """
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": cur_prc, "return_code": 0}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "005930", "10", "--dry-run", "--confirm"],
+    )
+
+    assert result.exit_code == 2
+    doc = _doc(result)
+    assert doc["error"]["code"] == "QUOTE_UNAVAILABLE"
+    assert doc["data"] is None
+    assert [c[0] for c in fake_client.calls] == ["ka10001"]
+
+
+def test_dry_run_market_quote_missing_key_fails_loudly(runner, fake_client):
+    """응답에 cur_prc 키 자체가 없으면(None) QUOTE_UNAVAILABLE이어야 한다."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "return_code": 0}  # cur_prc 없음
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "005930", "10", "--dry-run", "--confirm"],
+    )
+
+    assert result.exit_code == 2
+    assert _doc(result)["error"]["code"] == "QUOTE_UNAVAILABLE"
+
+
+def test_dry_run_market_quote_empty_string_fails_loudly(runner, fake_client):
+    """cur_prc가 빈 문자열이면 QUOTE_UNAVAILABLE이어야 한다."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "", "return_code": 0}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "005930", "10", "--dry-run", "--confirm"],
+    )
+
+    assert result.exit_code == 2
+    assert _doc(result)["error"]["code"] == "QUOTE_UNAVAILABLE"
+
+
+def test_dry_run_market_quote_inf_fails_loudly_not_crash(runner, fake_client):
+    """cur_prc가 "inf"여도 크래시 없이 QUOTE_UNAVAILABLE(exit 2)로 실패해야 한다."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "inf", "return_code": 0}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "005930", "10", "--dry-run", "--confirm"],
+    )
+
+    assert result.exit_code == 2
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert _doc(result)["error"]["code"] == "QUOTE_UNAVAILABLE"
+
+
+def test_dry_run_market_unparseable_quote_table_mode(runner, fake_client):
+    """table 모드에서도 QUOTE_UNAVAILABLE은 exit 2 + stderr 메시지로 실패해야 한다
+    (fail_api의 table 분기 — 지금까지 json 모드만 커버됐었다)."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "N/A", "return_code": 0}
+    )
+    result = runner.invoke(
+        cli,
+        ["order", "buy", "005930", "10", "--dry-run", "--confirm"],
+    )
+
+    assert result.exit_code == 2
+    assert "현재가 조회 결과를 해석할 수 없어" in result.output
+    assert [c[0] for c in fake_client.calls] == ["ka10001"]
 
 
 def test_dry_run_cancel_sends_nothing(runner, fake_client):
@@ -719,7 +913,7 @@ def test_validate_buy_happy_path(runner, fake_client, market_open):
     assert data["valid"] is True
     assert data["checks"] == {
         "symbol_ok": True, "market_open": True,
-        "sufficient_balance": True, "price_ok": True,
+        "sufficient_balance": True, "price_ok": True, "price_known": True,
     }
     assert data["est_cost"] == 700000
     assert data["heuristic"] is True
@@ -763,6 +957,107 @@ def test_validate_sell_checks_holdings(runner, fake_client, market_open):
     over = runner.invoke(cli, ["-f", "json", "order", "validate", "sell", "005930", "10"])
     assert over.exit_code == 1
     assert _doc(over)["error"]["details"] == {"sufficient_balance": False}
+
+
+# ============================================================
+#  order validate — 시세 조회 실패 (v2.9 audit fix 2)
+# ============================================================
+
+
+def test_validate_price_unavailable_is_not_valid(runner, fake_client, market_open):
+    """--price 생략 + 현재가 파싱 실패 → price_known: false, valid: false,
+    VALIDATION_FAILED(exit 1), est_cost: 0.
+
+    이전 리뷰 리포트는 "symbol_ok가 false가 되어 이미 잡힌다"고 주장했지만
+    틀렸다 — symbol_ok = bool(stk_nm or quote_price)이고 stk_nm만으로 참이
+    된다. 아래 test_validate_symbol_ok_stays_true_when_price_unavailable가
+    이를 직접 반증한다. price_known이 없으면 이 케이스는 valid: true로
+    새 나간다.
+    """
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "N/A", "return_code": 0}
+    )
+    fake_client.set_response(
+        "kt00001", {"ord_alow_amt": "000001000000", "return_code": 0}
+    )
+
+    result = runner.invoke(cli, ["-f", "json", "order", "validate", "buy", "005930", "10"])
+
+    assert result.exit_code == 1
+    doc = _doc(result)
+    assert doc["error"]["code"] == "VALIDATION_FAILED"
+    assert doc["error"]["details"] == {"price_known": False}
+    data = doc["data"]
+    assert data["valid"] is False
+    assert data["checks"]["price_known"] is False
+    assert data["est_cost"] == 0  # 가격을 확정하지 못했으므로 신뢰할 수 없는 0
+
+
+def test_validate_symbol_ok_stays_true_when_price_unavailable(runner, fake_client, market_open):
+    """종목명(stk_nm)이 있으면 현재가 파싱이 실패해도 symbol_ok는 true여야 한다
+    — 이전 리뷰 리포트의 "symbol_ok가 false가 된다"는 근거가 틀렸음을 직접
+    검증한다. 그럼에도 price_known이 false이므로 전체 valid는 false다.
+    """
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "N/A", "return_code": 0}
+    )
+    fake_client.set_response(
+        "kt00001", {"ord_alow_amt": "000001000000", "return_code": 0}
+    )
+
+    result = runner.invoke(cli, ["-f", "json", "order", "validate", "buy", "005930", "10"])
+
+    data = _doc(result)["data"]
+    assert data["checks"]["symbol_ok"] is True
+    assert data["checks"]["price_known"] is False
+    assert data["valid"] is False
+
+
+def test_validate_quote_inf_does_not_crash(runner, fake_client, market_open):
+    """cur_prc가 "inf"여도 크래시(OverflowError traceback) 없이 구조화된
+    VALIDATION_FAILED envelope로 응답해야 한다.
+
+    수정 전에는 _strip_signed_int(quote.get("cur_prc"))가 int(float("inf"))에서
+    OverflowError를 던졌고, main.py의 전역 핸들러(KiwoomAPIError/KiwoomAuthError/
+    keyring.errors.KeyringError/httpx 계열/click.ClickException만 포착)가 이를
+    잡지 못해 raw traceback + stdout 공백으로 이어졌다 — envelope-항상 계약 위반.
+    """
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "inf", "return_code": 0}
+    )
+    fake_client.set_response(
+        "kt00001", {"ord_alow_amt": "000001000000", "return_code": 0}
+    )
+
+    result = runner.invoke(cli, ["-f", "json", "order", "validate", "buy", "005930", "10"])
+
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert result.exit_code == 1
+    doc = _doc(result)
+    assert doc["error"]["code"] == "VALIDATION_FAILED"
+    assert doc["data"]["checks"]["price_known"] is False
+    assert doc["data"]["est_cost"] == 0
+
+
+def test_validate_explicit_price_overrides_unavailable_quote(runner, fake_client, market_open):
+    """--price를 명시하면 현재가 조회가 실패해도 price_known은 true여야 한다
+    (예상비용 계산에 조회된 시세가 필요 없으므로)."""
+    fake_client.set_response(
+        "ka10001", {"stk_nm": "삼성전자", "cur_prc": "N/A", "return_code": 0}
+    )
+    fake_client.set_response(
+        "kt00001", {"ord_alow_amt": "000001000000", "return_code": 0}
+    )
+
+    result = runner.invoke(
+        cli, ["-f", "json", "order", "validate", "buy", "005930", "10", "--price", "70000"]
+    )
+
+    assert result.exit_code == 0
+    doc = _doc(result)
+    assert doc["data"]["valid"] is True
+    assert doc["data"]["checks"]["price_known"] is True
+    assert doc["data"]["est_cost"] == 700000
 
 
 # ============================================================

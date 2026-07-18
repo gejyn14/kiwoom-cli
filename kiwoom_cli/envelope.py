@@ -75,6 +75,8 @@ DEFAULT = ("UPSTREAM_ERROR", False)
 # error_body(code=..., retryable=...)로 호출부에서 직접 지정한다. 참고용 목록:
 # CONFIRMATION_REQUIRED, VALIDATION_FAILED, IDEMPOTENCY_CONFLICT, LEDGER_BUSY,
 # ORDER_STATUS_UNKNOWN(전송 후 응답 미도착 in-flight 재시도 차단, retryable=False),
+# QUOTE_UNAVAILABLE(--dry-run 시장가 예상비용 계산용 시세를 숫자로 해석할 수
+# 없음 — 빈 값/0 이하/NaN/Inf 등, retryable=False),
 # NOT_CONFIGURED, KEYCHAIN_UNAVAILABLE, NETWORK_ERROR, DEPENDENCY_MISSING.
 # 전체 의미는 AGENTS.md "Error codes" 표 참고.
 

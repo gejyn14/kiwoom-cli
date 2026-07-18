@@ -35,8 +35,16 @@ def parse_quote_price(value: Any) -> float:
     """시세 응답의 가격 문자열 → float. 선행 부호(+/-)는 방향지시자이지 실제
     부호가 아니므로 제거한다 (cur_prc 등 키움 관례).
 
-    빈 값/숫자로 변환 불가/NaN/Inf는 모두 QuoteUnavailable을 던진다 — 조용한
-    0 폴백은 dry-run 예상비용 미리보기를 거짓으로 만든다.
+    빈 값/숫자로 변환 불가/NaN/Inf/0 이하는 모두 QuoteUnavailable을 던진다 —
+    조용한 0 폴백은 dry-run 예상비용 미리보기를 거짓으로 만든다. 실거래 종목에
+    가격 0은 없다 — 거래정지/상장전 등 "시세 없음"을 뜻한다. 원래 버그가
+    정확히 "0"을 만들어냈으므로 이 값을 걸러내지 못하면 이 함수는 자신이
+    막으려는 실패를 재현한다.
+
+    음수를 별도로 취급하지 않는 이유: 위에서 선행 부호를 이미 제거했으므로
+    (키움 API에서 cur_prc의 부호는 방향지시자일 뿐 실제 부호가 아니다), 이
+    지점에 도달한 f는 유효한 숫자 문자열인 한 항상 0 이상이다 — "파싱된 음수
+    시세"는 이 함수의 계약상 나타날 수 없어 별도 메시지가 불필요하다.
     """
     v = str(value if value is not None else "").strip().lstrip("+-")
     if not v:
@@ -47,6 +55,8 @@ def parse_quote_price(value: Any) -> float:
         raise QuoteUnavailable(f"시세 값을 숫자로 변환할 수 없습니다: {value!r}") from None
     if not math.isfinite(f):
         raise QuoteUnavailable(f"시세 값이 유효한 숫자가 아닙니다: {value!r}")
+    if f <= 0:
+        raise QuoteUnavailable(f"시세 값이 0 이하입니다 (시세 없음 — 거래정지/상장전 등): {value!r}")
     return f
 
 

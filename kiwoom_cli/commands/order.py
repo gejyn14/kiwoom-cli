@@ -116,19 +116,49 @@ def _strip_signed_int(value: Any) -> int:
     except ValueError:
         try:
             return int(float(v))
-        except ValueError:
+        except (ValueError, OverflowError):
+            # float(v)가 inf/-inf일 때 int()는 ValueError가 아니라 OverflowError를
+            # 던진다 — 이 분기가 없으면 계좌 잔고류 응답이 예상 밖의 값을 줄 때
+            # 전역 핸들러가 잡지 못하는 traceback으로 이어진다(json 모드 stdout
+            # 공백 — envelope-항상 계약 위반).
             return 0
 
 
 def _quote_price_kr(client, code: str) -> int:
-    """현재가 조회 (ka10001). 시장가 주문의 예상비용 계산용.
+    """현재가 조회 (ka10001). 시장가 주문(주식/신용)의 예상비용 계산용.
 
     가격 파싱은 (검증 등 다른 용도에 쓰이는) `_strip_signed_int`가 아니라
     `parse_quote_price`를 거친다 — 파싱 실패를 조용히 0으로 넘기지 않고
     QuoteUnavailable로 호출자(_dry_run_kr)에 전파한다.
+
+    ka10001은 국내주식 종목코드 전용이다 — 금현물 코드(M04020000 등)는
+    `_quote_price_gold`로 별도 라우팅한다.
     """
     data, _ = client.request("ka10001", {"stk_cd": code}, internal=True)
     return int(parse_quote_price(data.get("cur_prc")))
+
+
+def _quote_price_gold(client, code: str) -> int:
+    """금현물 현재가 조회 (ka50010, 금현물체결추이). 시장가 금현물 주문의
+    예상비용 계산용.
+
+    ka10001(주식기본정보요청)은 금현물 코드를 받지 않는다 — 스펙(docs/미국
+    REST API 문서.xlsx 'ka10001' 시트) request의 stk_cd 설명이 "거래소별
+    종목코드(KRX:039490,NXT:039490_NX,SOR:039490_AL)"로 한정되고, 메뉴 위치도
+    "국내주식 > 종목정보"다. 금현물 코드는 "국내주식 > 시세 > 금현물..." 계열
+    전용 API(ka50010/ka50012/ka50079/ka50087/ka50100/ka50101 등, stk_cd에
+    M04020000/M04020100 명시)로만 조회 가능하다.
+
+    ka50010은 stk_cd만 필요해 가장 단순하고(다른 금현물 시세 API는 base_dt/
+    tic_scope 등 추가 필수 파라미터가 있음) `market gold executions`에서 이미
+    쓰이고 있어 검증된 응답 형태다. gold_cntr 리스트의 첫 원소(최신 체결,
+    응답 예시에서 시간 내림차순 확인됨)의 cntr_pric(체결가)을 현재가로 쓴다.
+    """
+    data, _ = client.request("ka50010", {"stk_cd": code}, internal=True)
+    rows = data.get("gold_cntr") or []
+    if not rows:
+        raise QuoteUnavailable(f"금현물 체결 데이터가 없습니다: {code!r}")
+    return int(parse_quote_price(rows[0].get("cntr_pric")))
 
 
 def _dry_run_kr(api_id: str, side: str, code: str, qty: int, kr_price: int,
@@ -136,15 +166,20 @@ def _dry_run_kr(api_id: str, side: str, code: str, qty: int, kr_price: int,
                 body: dict[str, Any], show_preview) -> None:
     """국내 주문 dry-run. 시장가면 현재가를 조회해 예상비용을 계산한다.
 
-    현재가 파싱이 실패하면(빈 값/숫자 아님/NaN/Inf) price=0인 미리보기를
+    금현물 주문(kt50000/kt50001)은 ka10001이 이해하지 못하는 금현물 코드를
+    쓰므로 시세 조회를 ka50010(_quote_price_gold)으로 라우팅한다 — 그 외
+    (주식/신용, kt10000/1/kt10006/7)는 ka10001(_quote_price_kr) 그대로.
+
+    현재가 파싱이 실패하면(빈 값/숫자 아님/NaN/Inf/0 이하) price=0인 미리보기를
     price_source="market_quote"와 함께 보여주지 않고 QUOTE_UNAVAILABLE로
     exit 2 — "실제 시세로 계산했다"는 거짓 주장을 막는다.
     """
     price, src = kr_price, None
     if not kr_price and side in ("buy", "sell"):
+        quote_fn = _quote_price_gold if api_id.startswith("kt50") else _quote_price_kr
         with KiwoomClient() as c:
             try:
-                price, src = _quote_price_kr(c, code), "market_quote"
+                price, src = quote_fn(c, code), "market_quote"
             except QuoteUnavailable as e:
                 fail_api(
                     f"현재가 조회 결과를 해석할 수 없어 예상비용을 계산할 수 없습니다: {e}",
@@ -418,8 +453,12 @@ def _market_open_kr() -> bool:
 def validate(side: str, code: str, qty: int, price: float, order_type: str | None, dmst_stex_tp: str):
     """주문 사전점검 — 주문을 전송하지 않는 read-only 프리플라이트. (ka10001/kt00001/kt00004)
 
-    symbol_ok / market_open / sufficient_balance / price_ok 를 점검합니다.
-    국내 주식 전용 (미국 종목 미지원). market_open은 KST 시계 휴리스틱입니다.
+    symbol_ok / market_open / sufficient_balance / price_ok / price_known 를
+    점검합니다. 국내 주식 전용 (미국 종목 미지원). market_open은 KST 시계
+    휴리스틱입니다. price_known은 --price 미지정 시 현재가(ka10001의 cur_prc)로
+    예상비용을 계산할 수 있었는지 — 시세를 해석할 수 없으면(빈 값/0 이하/NaN/
+    Inf 등) False이고, 가격을 확정하지 못한 사전점검은 valid: true를 주장하지
+    않는다(est_cost도 신뢰할 수 없는 0이 된다).
 
     예: kiwoom order validate buy 005930 10 --price 70000 -f json
     """
@@ -429,14 +468,30 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
 
     price_ok = price == int(price)  # 국내 지정가는 정수(원)
     with KiwoomClient() as c:
+        quote_price: float | None = None
         try:
             quote, _ = c.request("ka10001", {"stk_cd": code})
-            symbol_ok = bool(str(quote.get("stk_nm") or "").strip()
-                             or _strip_signed_int(quote.get("cur_prc")))
         except KiwoomAPIError:
-            quote = {}
             symbol_ok = False
-        est_price = int(price) if price else _strip_signed_int(quote.get("cur_prc"))
+        else:
+            # 가격 파싱은 (검증 대상이 아닌 다른 필드에 쓰이는) `_strip_signed_int`가
+            # 아니라 dry-run과 동일한 `parse_quote_price`를 거친다 — inf 같은
+            # 값에서 `_strip_signed_int`가 내는 OverflowError(미포착 traceback)를
+            # 피하고, symbol_ok 판정에 쓰는 "시세 있음"의 의미도 dry-run과 통일한다.
+            try:
+                quote_price = parse_quote_price(quote.get("cur_prc"))
+            except QuoteUnavailable:
+                quote_price = None
+            symbol_ok = bool(str(quote.get("stk_nm") or "").strip() or quote_price)
+        if price:
+            est_price = int(price)
+            price_known = True
+        elif quote_price is not None:
+            est_price = int(quote_price)
+            price_known = True
+        else:
+            est_price = 0
+            price_known = False
         est_cost = qty * est_price
         if side == "buy":
             deposit, _ = c.request("kt00001", {"qry_tp": "3"})
@@ -455,6 +510,7 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
         "market_open": _market_open_kr(),
         "sufficient_balance": sufficient,
         "price_ok": price_ok,
+        "price_known": price_known,
     }
     result = {"valid": all(checks.values()), "checks": checks,
               "est_cost": est_cost, "heuristic": True}

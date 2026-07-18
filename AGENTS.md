@@ -93,12 +93,21 @@ kiwoom -f json --all-pages market rank volume
 단일 API 경로에서 사용하세요.
 
 미국 심볼 거래소 자동판별 보조 호출(usa10098)과 주문 `--dry-run`의 시세 조회
-보조 호출(`_quote_price_kr`/`_quote_price_us`)은 내부(`internal`) 호출로 표시되어
-전역 `--next-key`/`--all-pages`가 적용되지 않고 `meta.cont`도 기록하지 않습니다 —
-커서는 항상 명령의 본 조회가 소비/기록합니다. 이 시세 조회 결과(cur_prc)를 숫자로
-해석할 수 없으면(빈 값/NaN/Inf 포함) `price`/`est_cost`를 0으로 조용히 채운 미리보기
-대신 `QUOTE_UNAVAILABLE`(exit 2)로 실패합니다 — `price_source: "market_quote"`가
+보조 호출(`_quote_price_kr`/`_quote_price_us`/`_quote_price_gold`)은 내부
+(`internal`) 호출로 표시되어 전역 `--next-key`/`--all-pages`가 적용되지 않고
+`meta.cont`도 기록하지 않습니다 — 커서는 항상 명령의 본 조회가 소비/기록합니다.
+`_quote_price_gold`(금현물, kt50000/kt50001 dry-run)는 ka10001이 아니라 금현물
+전용 시세 API(ka50010)로 조회합니다 — ka10001은 금현물 코드(M04020000 등)를
+받지 않습니다. 이 시세 조회 결과(cur_prc/cntr_pric)를 숫자로 해석할 수 없으면
+(빈 값/0 이하/NaN/Inf 포함) `price`/`est_cost`를 0으로 조용히 채운 미리보기 대신
+`QUOTE_UNAVAILABLE`(exit 2)로 실패합니다 — `price_source: "market_quote"`가
 실제로는 실패한 조회에 붙는 것을 막기 위함입니다.
+
+`order validate`도 같은 시세 파서를 씁니다: `--price`를 생략하면 현재가(cur_prc)로
+예상비용을 계산하는데, 이 조회가 실패/해석불가면 (validate는 dry-run과 달리
+exit 2로 하드 실패하지 않고) `checks.price_known`이 `false`가 되어 `valid`가
+`false`로 떨어집니다 — 가격을 확정하지 못한 사전점검이 `valid: true`를 주장하지
+않도록 하기 위함입니다.
 
 ## Exit codes
 
@@ -118,7 +127,7 @@ kiwoom -f json --all-pages market rank volume
 | `IDEMPOTENCY_CONFLICT` | ✗ | 같은 `--client-order-id`가 다른 주문 내용으로 이미 사용됨. 재시도라면 인자가 이전 실행과 동일한지 확인, 새 주문이면 새 키 사용. exit 1, 전송되지 않음 |
 | `LEDGER_BUSY` | ✓ | 멱등성 원장 잠금을 획득하지 못함 — 같은 프로필의 다른 주문이 전송 중. 잠시 후 재시도. exit 2 (`IDEMPOTENCY_CONFLICT`와 달리 exit 1이 아님에 유의) |
 | `ORDER_STATUS_UNKNOWN` | ✗ | 이전 시도가 전송 후 응답을 받지 못함. 주문이 체결되었을 수 있어 재전송하지 않음 — `account orders pending`으로 확인 후 새 키 사용. exit 2 |
-| `QUOTE_UNAVAILABLE` | ✗ | `--dry-run` 시장가 예상비용 계산용 시세 조회 결과를 숫자로 해석할 수 없음 (빈 값/NaN/Inf 등). 조용히 0으로 채우지 않고 exit 2로 실패 |
+| `QUOTE_UNAVAILABLE` | ✗ | `--dry-run` 시장가 예상비용 계산용 시세 조회 결과를 숫자로 해석할 수 없음 (빈 값/0 이하/NaN/Inf 등, 금현물 dry-run 포함). 조용히 0으로 채우지 않고 exit 2로 실패. `order validate`는 같은 조건에서 exit 2 대신 `checks.price_known: false` → `VALIDATION_FAILED`(exit 1)로 나타남 |
 | `AUTH_REQUIRED` | ✗ | 토큰 없음. 키체인 불가 환경이면 메시지가 `KIWOOM_TOKEN` 안내 |
 | `TOKEN_EXPIRED` | ✗ | 재로그인 필요 (upstream 8005, HTTP 401) |
 | `INVALID_INPUT` | ✗ | 파라미터 형식/누락 (upstream 1511/1512/1517/2) |
@@ -145,7 +154,7 @@ kiwoom -f json --all-pages market rank volume
 | `--confirm` / `--yes` | 확인 게이트 통과 (없으면 json/csv에서 `CONFIRMATION_REQUIRED`) |
 | `--dry-run` | 전송될 body를 그대로 출력, **아무것도 전송하지 않음**. `--confirm`보다 우선 |
 | `--client-order-id KEY` | 멱등키. 같은 키 재실행 → 재전송 없이 이전 응답 + `idempotent_replay: true` |
-| `order validate buy\|sell CODE QTY` | read-only 사전점검: `symbol_ok` / `market_open`(KST 시계 휴리스틱, `heuristic: true`) / `sufficient_balance` / `price_ok` |
+| `order validate buy\|sell CODE QTY` | read-only 사전점검: `symbol_ok` / `market_open`(KST 시계 휴리스틱, `heuristic: true`) / `sufficient_balance` / `price_ok` / `price_known`(현재가 조회로 예상비용을 계산할 수 있었는지) |
 
 멱등키는 주문 내용(api_id+body)의 fingerprint에 바인딩되며, 조회→전송→기록
 구간은 원장 파일 잠금으로 프로세스 간 직렬화된다. 같은 키로 다른 내용을
@@ -262,7 +271,8 @@ $ kiwoom -f json --fields symbol,price,change_direction stock info 005930
 # 2. 사전점검 (read-only, 주문 미전송)
 $ kiwoom -f json order validate buy 005930 10 --price 70000
 {"ok": true, "data": {"valid": true, "checks": {"symbol_ok": true, "market_open": true,
- "sufficient_balance": true, "price_ok": true}, "est_cost": 700000, "heuristic": true}, ...}
+ "sufficient_balance": true, "price_ok": true, "price_known": true}, "est_cost": 700000,
+ "heuristic": true}, ...}
 
 # 3. dry-run — 전송될 body 확인 (미전송)
 $ kiwoom -f json order buy 005930 10 --price 70000 --type limit --dry-run
