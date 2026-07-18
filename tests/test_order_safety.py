@@ -11,6 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from kiwoom_cli import config, idempotency
+from kiwoom_cli.client import KiwoomAPIError
 from kiwoom_cli.main import cli
 
 
@@ -297,11 +298,9 @@ def test_credit_modify_preview_before_confirm(runner, isolated_env, monkeypatch)
 
 # ── Task 8: in-flight record blocks duplicate after transport failure ──
 
-def test_inflight_record_blocks_duplicate_after_transport_failure(tmp_path, monkeypatch):
-    """전송 중 네트워크 오류 후 같은 키로 재시도하면 재전송하지 않는다."""
+def test_inflight_record_blocks_duplicate_after_transport_failure(runner, isolated_env):
+    """전송 중 네트워크 오류 후 같은 키로 재시도하면 재전송하지 않는다 (inflight-only)."""
     import httpx
-    from kiwoom_cli import idempotency
-    monkeypatch.setattr(idempotency.config, "CONFIG_FILE", tmp_path / "config.toml")
 
     sent = []
 
@@ -312,7 +311,6 @@ def test_inflight_record_blocks_duplicate_after_transport_failure(tmp_path, monk
             sent.append((api_id, body))
             raise httpx.ReadTimeout("timeout")
 
-    runner = CliRunner()
     with mock.patch("kiwoom_cli.commands.order.KiwoomClient", FailingClient):
         r1 = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
                                  "--price", "70000", "--type", "limit",
@@ -338,13 +336,167 @@ def test_inflight_record_blocks_duplicate_after_transport_failure(tmp_path, monk
     assert doc["error"]["retryable"] is False
 
 
-def test_legacy_ledger_without_status_still_replays(tmp_path, monkeypatch):
-    """v2.4~v2.8 원장(status 키 없음)은 종전대로 재생된다."""
-    from kiwoom_cli import idempotency
-    monkeypatch.setattr(idempotency.config, "CONFIG_FILE", tmp_path / "config.toml")
-    ledger = tmp_path / "idempotency"
-    ledger.mkdir(parents=True, exist_ok=True)
-    idempotency.record("old-key", "kt10000", {"ord_no": "0000111"}, fingerprint=None)
-    hit = idempotency.lookup("old-key")
-    assert hit["response"]["ord_no"] == "0000111"
-    assert hit.get("status") != "inflight"
+def test_legacy_ledger_without_status_still_replays(runner, isolated_env):
+    """v2.4~v2.8 원장(status 키 없음)은 CLI 경로에서도 종전대로 재생된다.
+
+    idempotency.record()를 거치지 않고 원장 줄을 직접 써서, 진짜로 "status" 키가
+    없는 레코드를 만든 뒤 CLI를 통해 재생 여부를 검증한다 (모듈 API로는
+    record()가 항상 "status": "done"을 쓰므로 이 경로를 재현할 수 없다).
+    """
+    # buy 005930 10 --price 70000 --type limit 이 실제로 구성하는 body와
+    # 정확히 일치해야 fingerprint가 맞아 재생(replay)으로 처리된다.
+    legacy_body = {
+        "dmst_stex_tp": "KRX",
+        "stk_cd": "005930",
+        "ord_qty": "10",
+        "ord_uv": "70000",
+        "trde_tp": "0",
+        "cond_uv": "",
+    }
+    fp = idempotency.fingerprint("kt10000", legacy_body)
+    ledger = idempotency._ledger_file()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    legacy_rec = {
+        "key": "legacy-no-status",
+        "api_id": "kt10000",
+        "ord_no": "0000111",
+        "fingerprint": fp,
+        # 의도적으로 "status" 키 없음 — v2.4~v2.8 원장 형식
+        "response": {"ord_no": "0000111", "return_code": 0, "return_msg": "정상"},
+        "ts": "2026-01-01T00:00:00+00:00",
+    }
+    with open(ledger, "a", encoding="utf-8") as f:
+        f.write(json.dumps(legacy_rec, ensure_ascii=False) + "\n")
+
+    hit = idempotency.lookup("legacy-no-status")
+    assert "status" not in hit  # 픽스처가 진짜로 status-less 레코드인지 확인
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        result = runner.invoke(cli, [
+            "-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit",
+            "--confirm", "--client-order-id", "legacy-no-status",
+        ])
+    assert result.exit_code == 0
+    doc = json.loads(result.stdout)
+    assert doc["data"]["idempotent_replay"] is True
+    assert doc["data"]["order_no"] == "0000111"
+    mock_cls.assert_not_called()
+
+
+# ── Task 9: upstream rejection does not burn the idempotency key ────────
+
+def test_rejected_order_can_be_retried_with_same_key(runner, isolated_env):
+    """업스트림 구조적 거부(KiwoomAPIError) 후 같은 키+같은 내용으로 재시도하면
+    실제로 재전송된다 (ORDER_STATUS_UNKNOWN으로 막히지 않고, replay로도 처리되지
+    않음) — inflight+rejected, 이어서 inflight+rejected+inflight+done 상태를 검증."""
+    sent = []
+
+    class RejectingClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            raise KiwoomAPIError(-1, "예수금부족")
+
+    args = ["-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit",
+            "--confirm", "--client-order-id", "reject-key"]
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", RejectingClient):
+        r1 = runner.invoke(cli, args)
+    assert r1.exit_code == 2
+    assert len(sent) == 1
+
+    # inflight+rejected 상태 확인
+    hit = idempotency.lookup("reject-key")
+    assert hit["status"] == "rejected"
+    assert hit["response"] is None
+
+    class OkClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            return {"ord_no": "0000555", "return_code": 0}, {}
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", OkClient):
+        r2 = runner.invoke(cli, args)
+    assert r2.exit_code == 0, r2.stdout
+    assert len(sent) == 2, "거부 후 재시도가 실제로 재전송되지 않았다"
+    doc = json.loads(r2.stdout)
+    assert "idempotent_replay" not in doc["data"], "재전송 결과가 replay로 오인됨"
+    assert doc["data"]["order_no"] == "0000555"
+
+    # inflight+rejected+inflight+done 상태 확인 (lookup은 마지막 매치를 반환)
+    lines = idempotency._ledger_file().read_text().strip().splitlines()
+    statuses = [json.loads(line)["status"] for line in lines]
+    assert statuses == ["inflight", "rejected", "inflight", "done"]
+    final_hit = idempotency.lookup("reject-key")
+    assert final_hit["status"] == "done"
+    assert final_hit["response"]["ord_no"] == "0000555"
+
+
+def test_rejected_record_still_conflicts_on_different_body(runner, isolated_env):
+    """거부 기록이 있어도 다른 주문 내용(다른 fingerprint)으로 같은 키를 재사용하면
+    여전히 IDEMPOTENCY_CONFLICT — '거부 후 재전송 허용'이 fingerprint 검사를
+    우회하지 않는다."""
+    sent = []
+
+    class RejectingClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            raise KiwoomAPIError(-1, "예수금부족")
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", RejectingClient):
+        r1 = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                 "--price", "70000", "--type", "limit",
+                                 "--confirm", "--client-order-id", "reject-key-2"])
+    assert r1.exit_code == 2
+    assert len(sent) == 1
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        r2 = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "20",
+                                 "--price", "71000", "--type", "limit",
+                                 "--confirm", "--client-order-id", "reject-key-2"])
+    assert r2.exit_code == 1
+    doc = json.loads(r2.stdout)
+    assert doc["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    mock_cls.assert_not_called()
+    assert len(sent) == 1  # 두 번째 시도는 전송되지 않음
+
+
+# ── Task 10: OSError branches keep their fail-closed / fail-open direction ──
+
+def test_inflight_write_oserror_blocks_send(runner, isolated_env, monkeypatch):
+    """in-flight 기록 실패 시 주문을 전송하지 않는다 (fail closed)."""
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(idempotency, "record_inflight", boom)
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        result = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                     "--price", "70000", "--type", "limit",
+                                     "--confirm", "--client-order-id", "oserror-inflight"])
+    assert result.exit_code == 2
+    mock_cls.assert_not_called()
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is False
+
+
+def test_final_record_oserror_does_not_block_already_sent_order(runner, isolated_env, monkeypatch):
+    """완료 기록 실패는 이미 전송된 주문을 되돌리지 않는다 (fail open, exit 0)."""
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(idempotency, "record", boom)
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(_ok_order_response)
+        result = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                     "--price", "70000", "--type", "limit",
+                                     "--confirm", "--client-order-id", "oserror-final"])
+    assert result.exit_code == 0
+    doc = json.loads(result.stdout)
+    assert doc["data"]["order_no"] == "0000001"

@@ -14,6 +14,7 @@ from typing import Any, Callable
 import click
 
 from .. import envelope, idempotency
+from ..client import KiwoomAPIError
 from ..formatters import _get_format, fail_api, human, print_order_result
 from ..output import err_console
 
@@ -95,6 +96,8 @@ def send_order(api_id: str, body: dict[str, Any], action: str,
     - 같은 키 + 다른 내용: IDEMPOTENCY_CONFLICT (exit 1), 전송하지 않음.
     - 같은 키가 "inflight" 상태(전송 후 응답 미도착 — 타임아웃/연결 끊김/프로세스
       종료)로 남아 있으면 ORDER_STATUS_UNKNOWN (exit 2), 재전송하지 않음.
+    - 같은 키가 "rejected" 상태(업스트림이 구조적으로 거부 — 주문 미실행)이면
+      재전송을 막지 않는다: 새 in-flight 기록을 남기고 다시 전송을 시도한다.
     - fingerprint가 없는 과거(v2.4~v2.5.0) 기록은 종전대로 재생한다.
 
     client_cls: 호출 모듈의 KiwoomClient 바인딩 (테스트 patch 지점 유지).
@@ -118,26 +121,39 @@ def send_order(api_id: str, body: dict[str, Any], action: str,
                 stored = hit.get("fingerprint")
                 if stored is not None and stored != fp:
                     _idempotency_conflict(client_order_id)
-                if hit.get("status") == "inflight" or hit.get("response") is None:
-                    msg = (f"멱등성 키 '{client_order_id}'의 이전 시도는 전송 후 응답을 "
-                           "받지 못했습니다. 주문이 체결되었을 수 있으므로 재전송하지 "
-                           "않습니다. 'kiwoom account orders pending'으로 상태를 확인한 "
-                           "뒤, 새 주문이라면 새 키를 사용하세요.")
-                    if _get_format() == "table":
-                        err_console.print(f"[red]{msg}[/]")
-                    else:
-                        envelope.emit(error=envelope.error_body(
-                            msg, code="ORDER_STATUS_UNKNOWN", retryable=False))
-                    raise SystemExit(2)
-                human(f"[dim]멱등성 키 '{client_order_id}' 기존 기록 — 재전송하지 않고 이전 응답을 반환합니다.[/]")
-                print_order_result({**hit["response"], "idempotent_replay": True}, action)
-                return
+                status = hit.get("status")
+                if status == "rejected":
+                    # 이전 시도는 업스트림이 구조적으로 거부해 주문이 실행되지
+                    # 않았다 — 결과 불명이 아니므로 재전송을 막지 않는다.
+                    pass
+                elif status == "inflight" or hit.get("response") is None:
+                    fail_api(
+                        f"멱등성 키 '{client_order_id}'의 이전 시도는 전송 후 응답을 "
+                        "받지 못했습니다. 주문이 체결되었을 수 있으므로 재전송하지 "
+                        "않습니다. 'kiwoom account orders pending'으로 상태를 확인한 "
+                        "뒤, 새 주문이라면 새 키를 사용하세요.",
+                        code="ORDER_STATUS_UNKNOWN",
+                    )
+                else:
+                    human(f"[dim]멱등성 키 '{client_order_id}' 기존 기록 — 재전송하지 않고 이전 응답을 반환합니다.[/]")
+                    print_order_result({**hit["response"], "idempotent_replay": True}, action)
+                    return
             try:
                 idempotency.record_inflight(client_order_id, api_id, fp)
             except OSError as e:
                 fail_api(f"멱등성 원장에 기록할 수 없어 주문을 전송하지 않았습니다: {e}")
-            with client_cls() as c:
-                data, _ = c.request(api_id, body)
+            try:
+                with client_cls() as c:
+                    data, _ = c.request(api_id, body)
+            except KiwoomAPIError:
+                # 업스트림이 구조적으로 거부 — 주문 미실행. in-flight를 "rejected"로
+                # 종결해 같은 키의 다음 재시도가 영구히 막히지 않도록 한다.
+                try:
+                    idempotency.record_rejected(client_order_id, api_id, fingerprint=fp)
+                except OSError as e:
+                    err_console.print(
+                        f"[yellow]주문이 거부되었으나 원장 기록에 실패했습니다: {e}[/]")
+                raise
             try:
                 idempotency.record(client_order_id, api_id, data, fingerprint=fp)
             except OSError as e:
