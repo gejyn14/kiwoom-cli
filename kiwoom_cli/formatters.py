@@ -803,7 +803,12 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             row = []
             for k in keys:
                 v = str(item.get(k, ""))
-                if k in _USD_FIELDS or (k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4):
+                if (
+                    k in _USD_FIELDS
+                    or k in _ABS_FIELDS
+                    or k in _SIGNED_FIELDS
+                    or (k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4)
+                ):
                     row.append(_smart_fmt(v, k))
                 else:
                     row.append(v)
@@ -824,7 +829,12 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             for k, v in scalar.items():
                 label = _get_label(k)
                 sv = str(v)
-                if k in _USD_FIELDS or (k not in _CODE_FIELDS and sv.lstrip("+-").isdigit() and len(sv) > 4):
+                if (
+                    k in _USD_FIELDS
+                    or k in _ABS_FIELDS
+                    or k in _SIGNED_FIELDS
+                    or (k not in _CODE_FIELDS and sv.lstrip("+-").isdigit() and len(sv) > 4)
+                ):
                     sv = _smart_fmt(sv, k)
                 t.add_row(label, sv)
             console.print(t)

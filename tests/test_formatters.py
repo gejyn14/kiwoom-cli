@@ -3,6 +3,7 @@
 import json
 
 import click
+import pytest
 
 from kiwoom_cli.formatters import (
     _fmt_number,
@@ -146,6 +147,30 @@ def test_account_balance_strips_direction_sign_from_price(capsys):
     out = capsys.readouterr().out
     assert "-68,000" not in out, "현재가에 방향지시자 부호가 그대로 노출됨"
     assert "68,000" in out
+
+
+@pytest.mark.parametrize("raw,expected_absent", [("-980", "-980"), ("-85", "-85")])
+def test_generic_table_strips_sign_on_short_prices(capsys, raw, expected_absent):
+    """4자 이하 가격(ELW·저가주)도 방향지시자 부호를 제거한다."""
+    print_generic_table([{"stk_cd": "900110", "stk_nm": "저가주", "cur_prc": raw}])
+    out = capsys.readouterr().out
+    assert expected_absent not in out
+
+
+def test_generic_table_preserves_leading_zero_on_unclassified_code_field(capsys):
+    """_ABS_FIELDS/_SIGNED_FIELDS/_USD_FIELDS 어디에도 없는 숫자형 코드 필드(예: 업종코드)는
+    수량이 아니므로 길이 게이트를 없애도 앞자리 0이 사라지면 안 된다."""
+    print_generic_table([{"inds_cd": "001", "inds_nm": "종합(KOSPI)"}])
+    out = capsys.readouterr().out
+    assert "001" in out
+
+
+def test_generic_table_scalar_dict_strips_sign_on_short_price(capsys):
+    """스칼라 dict 경로(:827)도 리스트 경로와 동일하게 4자 이하 가격의 부호를 제거한다."""
+    print_generic_table({"stk_cd": "900110", "stk_nm": "저가주", "cur_prc": "-85"})
+    out = capsys.readouterr().out
+    assert "-85" not in out
+    assert "85" in out
 
 
 def test_unified_balance_strips_direction_sign_from_price(capsys):
