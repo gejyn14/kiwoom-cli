@@ -500,3 +500,37 @@ def test_final_record_oserror_does_not_block_already_sent_order(runner, isolated
     assert result.exit_code == 0
     doc = json.loads(result.stdout)
     assert doc["data"]["order_no"] == "0000001"
+
+
+# ── Task 11: pagination suppression pins record_rejected() safety ───────
+
+def test_send_order_forces_single_request_even_with_global_all_pages(runner, isolated_env):
+    """send_order는 전역 --all-pages를 강제로 꺼야 한다.
+
+    record_rejected()의 정확성은 주문 전송이 항상 단일 요청이라는 데 의존한다:
+    여러 페이지를 도는 도중 한 페이지가 체결(성공)되고 다른 페이지에서
+    KiwoomAPIError가 발생하면, 실제로 체결된 주문을 "rejected"(재사용 가능한
+    키)로 잘못 기록하게 된다. 오늘은 주문 API가 cont-yn: Y를 반환하지 않아
+    이중으로 보호되지만, _mutation.send_order가 ctx.obj["all_pages"]를 False로
+    강제하는 코드가 없어지면 그 방어선이 사라진다. 이 테스트는 그 강제 동작
+    자체를 고정한다."""
+    captured = {}
+
+    class RecordingClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            ctx = click.get_current_context(silent=True)
+            captured["all_pages"] = ctx.obj.get("all_pages")
+            captured["next_key_present"] = "next_key" in ctx.obj
+            return {"ord_no": "1", "return_code": 0}, {}
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", RecordingClient):
+        result = runner.invoke(cli, [
+            "--all-pages", "-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit", "--confirm",
+        ])
+    assert result.exit_code == 0, result.stdout
+    # 전역 플래그가 켜져 있었음에도 send_order가 명령 실행 전에 꺼야 한다.
+    assert captured["all_pages"] is False
+    assert captured["next_key_present"] is False

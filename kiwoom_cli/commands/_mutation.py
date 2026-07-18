@@ -102,7 +102,12 @@ def send_order(api_id: str, body: dict[str, Any], action: str,
 
     client_cls: 호출 모듈의 KiwoomClient 바인딩 (테스트 patch 지점 유지).
     """
-    # 주문 전송은 페이지네이션 대상이 아님 — 전역 --all-pages/--next-key를 무시한다
+    # 주문 전송은 페이지네이션 대상이 아님 — 전역 --all-pages/--next-key를 무시한다.
+    # 아래 record_rejected()의 정확성은 이 단일-요청 보장에 의존한다: 여러 페이지를
+    # 도는 도중 한 페이지는 성공(주문 실행)하고 다른 페이지에서 KiwoomAPIError가
+    # 나면, 실제로는 체결된 주문을 "rejected"(재사용 가능)로 잘못 기록하게 된다.
+    # 이 두 줄은 절대 제거하지 말 것 — 주문 API가 cont-yn: Y를 반환하지 않는 것과
+    # 별개로, 멱등성 안전성이 이 코드에 직접 의존한다.
     ctx = click.get_current_context(silent=True)
     if ctx is not None and isinstance(ctx.obj, dict):
         ctx.obj["all_pages"] = False

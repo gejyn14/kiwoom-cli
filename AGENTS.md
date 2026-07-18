@@ -149,11 +149,20 @@ kiwoom -f json --all-pages market rank volume
 Windows(msvcrt)에서만 약 10초 재시도 후 획득 실패로 `LEDGER_BUSY`
 (exit 2, retryable)가 발생한다 — 잠시 후 재시도하면 된다.
 
-전송 직전에 원장에 "inflight" 표식을 남긴 뒤 전송한다. 응답을 받지 못하고
-프로세스가 죽거나 타임아웃이 나도 표식이 남으므로, 같은 키로 재시도하면
-재전송 대신 `ORDER_STATUS_UNKNOWN`(exit 2, retryable=false)을 반환한다 —
-주문이 실제로 체결됐을 수 있으니 `account orders pending`으로 확인 후
-새 키로 재시도하라.
+전송 직전에 원장에 "inflight" 표식을 남긴 뒤 전송한다. 이후 결과는 세 가지로
+갈린다:
+
+- **전송 성공**: 응답을 원장에 기록. 같은 키 재실행 → 재전송 없이 그 응답을
+  반환(`idempotent_replay: true`).
+- **업스트림이 구조적으로 거부**(`return_code`가 0이 아님, `KiwoomAPIError`):
+  주문이 실행되지 않았다는 것이 확인됐으므로 원장을 "rejected"로 종결하고
+  키를 재사용 가능한 상태로 남긴다 — 잘못된 부분을 고쳐 같은 키로 다시
+  보내면 새 in-flight 기록과 함께 다시 전송된다.
+- **전송 결과 자체가 불명**(타임아웃/연결 끊김/프로세스 종료 등 전송 계층
+  오류): 응답을 받지 못했으므로 표식이 "inflight"로 남고, 같은 키로
+  재시도하면 재전송 대신 `ORDER_STATUS_UNKNOWN`(exit 2, retryable=false)을
+  반환한다 — 주문이 실제로 체결됐을 수 있으니 `account orders pending`으로
+  확인한 뒤 사람이 직접 판단해 새 키로 재시도하라.
 
 미국 주식 주문은 body에 자동판별된 거래소가 포함되므로, 같은
 `--client-order-id`로 재실행했는데 그 사이 거래소 판별이 달라지면(캐시 갱신 등)
