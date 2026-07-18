@@ -287,3 +287,77 @@ def test_date_and_time_n_suffixed_fields_are_not_comma_formatted(capsys):
     assert "20241122" in out
     assert "143,000" not in out
     assert "143000" in out
+
+
+# ── Task 4b: 리뷰가 지적한 28개 날짜/시간 필드 (sweep 불완전) ──
+
+
+def test_leading_zero_date_time_fields_are_not_truncated(capsys):
+    """가장 심각한 두 케이스: exp_tm/elwexpr_dt/trde_strt_dt는 선행 0을 가진 값이 실제로
+    관측된다 (ka50087 exp_tm "085957", ka30012 elwexpr_dt "00000000"/만기 없음 sentinel,
+    ka10007 trde_strt_dt "00000000"). _fmt_number는 콤마 포맷 전에 lstrip("0")을 하므로
+    분류 누락 시 콤마 형태를 넘어 값 자체가 사라진다("085957"->"85,957", "00000000"->"0")."""
+    print_generic_table([{
+        "stk_cd": "005930",
+        "exp_tm": "085957",
+        "elwexpr_dt": "00000000",
+        "trde_strt_dt": "00000000",
+    }])
+    out = capsys.readouterr().out
+    assert "85,957" not in out
+    assert "085957" in out
+    # elwexpr_dt/trde_strt_dt 둘 다 "00000000" 그대로 보여야 한다 — 분류 누락 시
+    # lstrip("0")으로 빈 문자열이 되어 "0" 한 글자로 뭉개진다("00000000" 자체가
+    # 사라지므로 in-substring 검사만으로 충분히 검증됨).
+    assert out.count("00000000") == 2, "elwexpr_dt/trde_strt_dt 둘 다 0으로 뭉개지면 안 됨"
+
+
+@pytest.mark.parametrize("field,raw", [
+    ("bid_req_base_tm", "162000"),  # ka10004/ka10087 호가잔량기준시간
+    ("regDay", "20091204"),  # ka10099/ka10100 상장일 (camelCase, legacy 필드명)
+    ("bid_tm", "164000"),  # ka10095 호가시간
+    ("52wk_hgst_pric_dt", "20241004"),  # ka20001/ka20009/usa20100 52주최고가일
+    ("52wk_lwst_pric_dt", "20241031"),  # ka20001/ka20009/usa20100 52주최저가일
+    ("oyr_hgst_dt", "20260514"),  # usa20100 연중최고가일
+    ("oyr_lwst_dt", "20260330"),  # usa20100 연중최저가일
+    ("setl_dt", "20241126"),  # kt00008 결제일자
+    ("d0_setl_dt", "20260626"),  # ust21160 D0 국내결제일자
+    ("d1_setl_dt", "20260629"),  # ust21160 D1 국내결제일자
+    ("d2_setl_dt", "20260630"),  # ust21160 D2 국내결제일자
+    ("d3_setl_dt", "20260701"),  # ust21160 D3 국내결제일자
+    ("d4_setl_dt", "20260702"),  # ust21160 D4 국내결제일자
+    ("bus_dt", "20260624"),  # usa06010/usa06011 영업일자
+    ("trde_cntr_proc_time", "172311"),  # ka10054 매매체결처리시각
+    ("virelis_time", "172511"),  # ka10054 VI해제시각
+    ("sel_scesn_tm", "154706"),  # ka10040/ka10053 매도이탈시간
+    ("buy_scesn_tm", "151615"),  # ka10040/ka10053 매수이탈시간
+    ("deal_dt", "20260511"),  # kt50032/ust21100 거래일자
+    ("sell_dt", "20260611"),  # ust21530 매도일자
+    ("exec_dt", "20241216"),  # ka30012 행사일
+    ("fin_trde_dt", "20241212"),  # ka30005 최종거래일
+    ("flo_dt", "20240320"),  # ka30005 상장일
+    ("cnfm_tm", "153045"),  # kt00007/kt50031 확인시간 (desc HH:mm:ss, 예시값은 spec에서 항상 공백 — 대표값)
+    ("elwfin_trde_dt", "20241212"),  # ka30012 ELW최종거래일
+    ("elwflo_dt", "20240124"),  # ka30012 ELW상장일
+    ("elwpay_dt", "20241218"),  # ka30012 ELW지급일
+    ("lpsuply_end_dt", "20241212"),  # ka30012 LP공급종료일
+    ("lpinitlast_suply_dt", "20241212"),  # ka30005 LP초종공급일
+    ("hgst_pric_dt", "20241031"),  # ka10007 최고가일 (desc=YYYYMMDD, spec 예시는 공백 — 대표값)
+    ("lwst_pric_dt", "20241031"),  # ka10007 최저가일 (위와 동일 사유)
+    ("250hgst_pric_dt", "20241004"),  # ka10001 250최고가일 (desc=YYYYMMDD, spec 예시 자체가 손상됨 — 대표값)
+    ("250lwst_pric_dt", "20241031"),  # ka10001 250최저가일 (위와 동일 사유)
+    ("ord_dt", "20260605"),  # ust21180 주문일
+    ("expires_dt", "20241107083713"),  # au10001 만료일 (14자리 YYYYMMDDHHmmss, raw `kiwoom api au10001` 경유시 노출)
+])
+def test_task_4b_date_time_fields_are_not_comma_formatted(capsys, field, raw):
+    """Task 4b — 리뷰(Finding 2)가 지적한 28개 필드 + 자체 스윕으로 추가 발견한 필드들.
+    docs/미국 REST API 문서.xlsx(339시트, 216/217 커버)를 1차 소스로 스펙 Response
+    Example/Description을 개별 확인함 — 상세 근거는 task-4b-report.md 참고."""
+    print_generic_table([{"stk_cd": "005930", field: raw}])
+    out = capsys.readouterr().out
+    # _fmt_number가 미분류 상태에서 실제로 만들어낼 값(선행 0 제거 후 콤마 그룹핑)을
+    # 그대로 재현해 검사한다 — n자리마다 콤마를 넣는 식의 근사치가 아니라 실제 알고리즘
+    # (lstrip("0") or "0" 후 int()의 3자리 콤마 그룹핑)과 동일해야 오탐/누락이 없다.
+    bad = f"{int(raw.lstrip('0') or '0'):,}"
+    assert bad not in out, f"{field}에 콤마 포맷({bad})이 노출됨"
+    assert raw in out
