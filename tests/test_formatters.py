@@ -149,12 +149,13 @@ def test_account_balance_strips_direction_sign_from_price(capsys):
     assert "68,000" in out
 
 
-@pytest.mark.parametrize("raw,expected_absent", [("-980", "-980"), ("-85", "-85")])
-def test_generic_table_strips_sign_on_short_prices(capsys, raw, expected_absent):
+@pytest.mark.parametrize("raw,expected", [("-980", "980"), ("-85", "85")])
+def test_generic_table_strips_sign_on_short_prices(capsys, raw, expected):
     """4자 이하 가격(ELW·저가주)도 방향지시자 부호를 제거한다."""
     print_generic_table([{"stk_cd": "900110", "stk_nm": "저가주", "cur_prc": raw}])
     out = capsys.readouterr().out
-    assert expected_absent not in out
+    assert raw not in out
+    assert expected in out
 
 
 def test_generic_table_preserves_leading_zero_on_unclassified_code_field(capsys):

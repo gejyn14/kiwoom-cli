@@ -236,6 +236,26 @@ def _smart_fmt(value: str, field_key: str) -> str:
     return _fmt_number(value)
 
 
+# Union of every field _smart_fmt knows how to classify. Fields in this set
+# always bypass the length-gated fallback below (see _needs_fmt).
+_CLASSIFIED_FIELDS = _USD_FIELDS | _ABS_FIELDS | _SIGNED_FIELDS
+
+
+def _needs_fmt(k: str, v: str) -> bool:
+    """Whether print_generic_table should route a cell through _smart_fmt.
+
+    Classified fields (_USD_FIELDS/_ABS_FIELDS/_SIGNED_FIELDS — the project's
+    source of truth for numeric field types) always go through _smart_fmt,
+    regardless of value length. Everything else falls back to the historical
+    heuristic (numeric-looking and >4 chars, excluding known code fields) so
+    unclassified short numeric codes (e.g. leading-zero business codes like
+    inds_cd) keep their pre-existing raw rendering.
+    """
+    if k in _CLASSIFIED_FIELDS:
+        return True
+    return k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4
+
+
 def _find_list(data: dict) -> list | None:
     """Find the first list value in API response."""
     for k, v in data.items():
@@ -803,12 +823,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             row = []
             for k in keys:
                 v = str(item.get(k, ""))
-                if (
-                    k in _USD_FIELDS
-                    or k in _ABS_FIELDS
-                    or k in _SIGNED_FIELDS
-                    or (k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4)
-                ):
+                if _needs_fmt(k, v):
                     row.append(_smart_fmt(v, k))
                 else:
                     row.append(v)
@@ -829,12 +844,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             for k, v in scalar.items():
                 label = _get_label(k)
                 sv = str(v)
-                if (
-                    k in _USD_FIELDS
-                    or k in _ABS_FIELDS
-                    or k in _SIGNED_FIELDS
-                    or (k not in _CODE_FIELDS and sv.lstrip("+-").isdigit() and len(sv) > 4)
-                ):
+                if _needs_fmt(k, sv):
                     sv = _smart_fmt(sv, k)
                 t.add_row(label, sv)
             console.print(t)
