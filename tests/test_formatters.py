@@ -130,3 +130,19 @@ class TestChartDataJson:
         assert len(parsed["data"]["items"]) == 1
         assert parsed["data"]["items"][0]["date"] == "20260101"  # date는 dt가 아니므로 통과
         assert parsed["data"]["raw"][0]["open_pric"] == "100"
+
+
+def test_account_balance_strips_direction_sign_from_price(capsys):
+    """하락 종목의 현재가는 음수로 표시되지 않는다 (부호는 방향지시자)."""
+    from kiwoom_cli.formatters import print_account_eval
+    print_account_eval({
+        "entr": "1000000", "tot_pur_amt": "7000000", "tot_est_amt": "6800000",
+        "stk_acnt_evlt_prst": [{
+            "stk_cd": "A005930", "stk_nm": "삼성전자", "rmnd_qty": "100",
+            "avg_prc": "70000", "cur_prc": "-68000", "evlt_amt": "6800000",
+            "pl_amt": "-200000", "pl_rt": "-2.86",
+        }],
+    })
+    out = capsys.readouterr().out
+    assert "-68,000" not in out, "현재가에 방향지시자 부호가 그대로 노출됨"
+    assert "68,000" in out

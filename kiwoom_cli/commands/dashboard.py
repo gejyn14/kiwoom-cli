@@ -57,7 +57,7 @@ def _build_movers_table(items: list[dict[str, Any]]) -> Table:
         t.add_row(
             item.get("stk_cd", ""),
             item.get("stk_nm", ""),
-            _fmt_number(item.get("cur_prc", "")),
+            _fmt_number(item.get("cur_prc", ""), strip_sign=True),
             Text(_fmt_number(change), style=color),
             Text(rate + "%" if rate else "-", style=color),
             _fmt_number(item.get("trde_qty", item.get("acc_trde_qty", ""))),
