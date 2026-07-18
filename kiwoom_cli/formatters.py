@@ -205,15 +205,30 @@ _ABS_FIELDS = frozenset({
     "52wk_hgst_pric", "52wk_lwst_pric",
     # tdy_high_pric/tdy_low_pric(당일고가/당일저가, ka10018 예시 +/- 확인)
     "tdy_high_pric", "tdy_low_pric",
-    # ka10095(관심종목정보) 호가 1~4단계: 예시에서 "+" 확인. 5단계(sel_5th_bid/
-    # buy_5th_bid)는 sel_5th_bid만 "+" 확인되어 포함, buy_5th_bid는 근거 부족으로 미포함(하단 참고)
+    # ka10095(관심종목정보) 호가 1~5단계: 예시에서 "+" 확인. buy_5th_bid만 예시값이
+    # "121700"으로 부호 없이 나타나지만, 같은 object의 나머지 9개 호가 필드(sel_1th_bid~
+    # sel_5th_bid, buy_1th_bid~buy_4th_bid)가 모두 signed이고 매수호가는 어떤 경우에도
+    # 음수가 될 수 없으므로 부호 제거는 안전하다 — 4개만 벗기고 5번째만 방향지시자를
+    # 노출하면 그 자체로 버그처럼 보인다 (리뷰 Finding 3, 문서 예시가 진짜여도 안전한 판단).
     "sel_1th_bid", "sel_2th_bid", "sel_3th_bid", "sel_4th_bid", "sel_5th_bid",
-    "buy_1th_bid", "buy_2th_bid", "buy_3th_bid", "buy_4th_bid",
+    "buy_1th_bid", "buy_2th_bid", "buy_3th_bid", "buy_4th_bid", "buy_5th_bid",
     # cur_prc_n(지수현재가 짝필드, ka20001/ka20009/ka40008 예시 +/- 확인).
     # _get_label이 "_n" 접미사를 떼고 base 라벨을 쓰지만 멤버십 검사는 원본 키로
     # 하므로 별도 등록 필요 (base cur_prc와 동일 취급).
+    #
+    # 불변식(리뷰 Finding 4에서 확인): _get_label()은 "_n"으로 끝나는 아무 키에나
+    # 접미사를 떼는 *일반* fallback을 쓰지만, 이 멤버십 검사(_ABS_FIELDS/_SIGNED_FIELDS)는
+    # 하드코딩된 개별 키 나열이라 라벨 fallback과 동기화돼 있지 않다. 오늘은 스펙에
+    # "_n" 접미사 필드가 정확히 10개뿐이고(직접 재검증함) 그중 가격류 5개(cur_prc_n/
+    # trde_qty_n/acc_trde_qty_n 및 아래 _SIGNED_FIELDS의 pred_pre_n/flu_rt_n)만 여기
+    # 등록돼 있어 문제가 없지만 — 향후 새 "_n" 가격 필드가 스펙에 추가되면 라벨은
+    # 정상 표시되면서 부호는 조용히 그대로 새어나갈 수 있다.
     "cur_prc_n",
-    # trde_qty_n/acc_trde_qty_n: base(trde_qty/acc_trde_qty)가 이미 ABS이므로 짝필드도 동일 취급
+    # trde_qty_n/acc_trde_qty_n: base(trde_qty/acc_trde_qty)가 이미 ABS이므로 짝필드도
+    # 동일 취급 — 스펙 예시에서 +/- 부호가 관측된 적은 없는 수량 필드다(근거 없이 base를
+    # 따라간 것으로, 형제 필드 정황 증거로 편입한 buy_5th_bid와는 다른 기준). "부호가
+    # 없으니 벗겨도 no-op"이라는 주장은 틀렸다: normalize.py를 거치면 문자열 "890"이
+    # 정수 890으로 타입 자체가 바뀌므로 -f json 소비자에게는 실질적인 변화다 (Finding 4).
     "trde_qty_n", "acc_trde_qty_n",
 })
 

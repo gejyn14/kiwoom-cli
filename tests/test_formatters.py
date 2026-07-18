@@ -241,10 +241,22 @@ def test_generic_table_keeps_real_sign_on_pred_pre_n(capsys):
     ("tdy_low_pric", "-10060", "10,060"),
     ("sel_1th_bid", "-156700", "156,700"),
     ("buy_1th_bid", "-156600", "156,600"),
+    ("buy_5th_bid", "+121700", "121,700"),  # Finding 3: asymmetry fix, siblings all signed
 ])
 def test_generic_table_strips_direction_sign_on_newly_classified_abs_fields(capsys, field, raw, expected):
-    """Task 3b에서 새로 _ABS_FIELDS에 편입된 필드들도 방향지시자 부호를 노출하지 않는다."""
+    """Task 3b에서 새로 _ABS_FIELDS에 편입된 필드들도 방향지시자 부호를 노출하지 않는다.
+
+    부호 있는 콤마 포맷(예: "-70,700")까지 명시적으로 검사해야 한다 — 5자리 이상
+    값은 미분류 상태에서도 fallback 경로(_needs_fmt의 길이 휴리스틱)를 통해 콤마가
+    붙은 "-70,700" 형태로 렌더링된다. 콤마 없는 원본 문자열("-70700")만 검사하면 그
+    substring인 콤마 버전이 항상 포함돼 있어 분류 여부와 무관하게 늘 통과하는
+    무의미한(vacuous) 테스트가 된다 (리뷰 Finding 1 — 10개 중 7개가 이 상태였음).
+    """
     print_generic_table([{"stk_cd": "005930", field: raw}])
     out = capsys.readouterr().out
-    assert raw not in out, f"{field}에 방향지시자 부호가 그대로 노출됨"
+    sign = raw[0]
+    signed_expected = f"{sign}{expected}"
+    assert signed_expected not in out, (
+        f"{field}에 방향지시자 부호가 포함된 콤마 포맷({signed_expected})이 그대로 노출됨"
+    )
     assert expected in out

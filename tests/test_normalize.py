@@ -118,6 +118,47 @@ def test_normalize_record_14_digit_timestamp():
 
 
 # ============================================================
+#  Task 3b classification -> -f json impact (review Finding 2)
+#
+#  formatters._ABS_FIELDS/_SIGNED_FIELDS feed _NUMERIC_FIELDS here, so every
+#  field newly classified in Task 3b also changes -f json output: string ->
+#  number, plus a new "<field>_direction" key for _ABS_FIELDS members that
+#  carried a sign. This is a breaking change for -f json consumers of these
+#  fields (see CHANGELOG "Unreleased").
+# ============================================================
+
+
+def test_normalize_record_task_3b_abs_field_strips_direction_and_types_number():
+    """sel_bid (_ABS_FIELDS, Task 3b): string '-96' -> int 96 + sel_bid_direction."""
+    out = normalize_record({"sel_bid": "-96"})
+    assert out["sel_bid"] == 96
+    assert isinstance(out["sel_bid"], int)
+    assert out["sel_bid_direction"] == "down"
+
+
+def test_normalize_record_task_3b_signed_field_keeps_sign_and_types_number():
+    """pred_pre_n (_SIGNED_FIELDS, Task 3b): string '-278.47' -> float -278.47, no direction key."""
+    out = normalize_record({"pred_pre_n": "-278.47"})
+    assert out["pred_pre_n"] == -278.47
+    assert isinstance(out["pred_pre_n"], float)
+    assert "pred_pre_n_direction" not in out
+
+
+def test_normalize_record_task_3b_n_family_field_types_number():
+    """trde_qty_n (_ABS_FIELDS, Task 3b): string '890' -> int 890 (no sign in source,
+    so no direction key — but the string->int type change alone is still breaking
+    for -f json consumers who expected a string)."""
+    out = normalize_record({"trde_qty_n": "890"})
+    assert out["trde_qty_n"] == 890
+    assert isinstance(out["trde_qty_n"], int)
+    assert "trde_qty_n_direction" not in out
+
+    out_signed = normalize_record({"trde_qty_n": "+890"})
+    assert out_signed["trde_qty_n"] == 890
+    assert out_signed["trde_qty_n_direction"] == "up"
+
+
+# ============================================================
 #  Envelope integration (data = normalized + raw)
 # ============================================================
 

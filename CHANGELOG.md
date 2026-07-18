@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased]
+
+**Breaking**
+- `-f json`(및 `-f csv`) 출력에서 아래 26개 필드의 타입/값이 바뀝니다 (`kiwoom_cli/formatters.py`의
+  `_ABS_FIELDS`/`_SIGNED_FIELDS`에 새로 편입 → `normalize.py`의 `_NUMERIC_FIELDS`가 그대로 이어받음).
+  문자열이던 값이 숫자로 파싱되고, `_ABS_FIELDS` 필드는 부호가 제거된 절대값 + (부호가 있었을 때만)
+  `<필드>_direction`("up"/"down") 동반 키가 추가됩니다. 예: `"sel_bid": "-96"` → `"sel_bid": 96,
+  "sel_bid_direction": "down"`, `"trde_qty_n": "890"` → `"trde_qty_n": 890`.
+  - `_ABS_FIELDS`로 편입(부호 제거 + `_direction` 동반 키 추가 가능): `sel_bid`, `buy_bid`,
+    `cntr_pric`, `pri_sel_bid_unit`, `pri_buy_bid_unit`, `wonju_pric`, `past_curr_prc`,
+    `52wk_hgst_pric`, `52wk_lwst_pric`, `tdy_high_pric`, `tdy_low_pric`, `sel_1th_bid`,
+    `sel_2th_bid`, `sel_3th_bid`, `sel_4th_bid`, `sel_5th_bid`, `buy_1th_bid`, `buy_2th_bid`,
+    `buy_3th_bid`, `buy_4th_bid`, `buy_5th_bid`, `cur_prc_n`, `trde_qty_n`, `acc_trde_qty_n`
+  - `_SIGNED_FIELDS`로 편입(부호 유지, 숫자 타입만 변경): `pred_pre_n`, `flu_rt_n`
+
+### Fixed
+- 호가·체결가 방향지시자 부호가 테이블에 그대로 노출되던 문제 보완 — `sel_bid`/`buy_bid`/
+  `cntr_pric`/`pri_sel_bid_unit`/`pri_buy_bid_unit`/`wonju_pric`/`past_curr_prc`/`52wk_hgst_pric`/
+  `52wk_lwst_pric`/`tdy_high_pric`/`tdy_low_pric`/ka10095 호가 1~5단계(`buy_5th_bid` 포함,
+  형제 필드만 벗겨지고 이것만 남아 비대칭으로 보이던 문제)/`cur_prc_n` 등 26개 필드
+
 ## [2.8.0] - 2026-07-18
 
 **Breaking**
