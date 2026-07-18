@@ -652,7 +652,13 @@ def test_idempotency_same_key_replays_without_sending(runner, fake_client, isola
 
     ledger = isolated_home / "idempotency" / "default-mock.jsonl"
     assert ledger.exists()
-    assert len(ledger.read_text().strip().splitlines()) == 1
+    # in-flight 기록(전송 직전) + 완료 기록(전송 후) = 2줄. 재생(replay)은
+    # 재전송하지 않으므로 두 번째 호출에서는 원장에 추가되지 않는다.
+    lines = ledger.read_text().strip().splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[0])["status"] == "inflight"
+    assert json.loads(lines[-1])["status"] == "done"
+    assert json.loads(lines[-1])["ord_no"] == "0000777"
 
 
 def test_idempotency_different_key_sends(runner, fake_client, isolated_home):

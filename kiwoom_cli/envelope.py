@@ -71,6 +71,13 @@ HTTP_MAP: dict[int, tuple[str, bool]] = {
 
 DEFAULT = ("UPSTREAM_ERROR", False)
 
+# CLI가 직접 발행하는 코드(업스트림 숫자 코드 없음) — CODE_MAP을 거치지 않고
+# error_body(code=..., retryable=...)로 호출부에서 직접 지정한다. 참고용 목록:
+# CONFIRMATION_REQUIRED, VALIDATION_FAILED, IDEMPOTENCY_CONFLICT, LEDGER_BUSY,
+# ORDER_STATUS_UNKNOWN(전송 후 응답 미도착 in-flight 재시도 차단, retryable=False),
+# NOT_CONFIGURED, KEYCHAIN_UNAVAILABLE, NETWORK_ERROR, DEPENDENCY_MISSING.
+# 전체 의미는 AGENTS.md "Error codes" 표 참고.
+
 
 def classify(upstream_code: int | None = None, http_status: int | None = None) -> tuple[str, bool]:
     """(stable_code, retryable)로 분류. http_status가 있으면 우선."""

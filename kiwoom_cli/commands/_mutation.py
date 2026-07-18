@@ -14,7 +14,7 @@ from typing import Any, Callable
 import click
 
 from .. import envelope, idempotency
-from ..formatters import _get_format, human, print_order_result
+from ..formatters import _get_format, fail_api, human, print_order_result
 from ..output import err_console
 
 
@@ -89,10 +89,12 @@ def _idempotency_conflict(key: str) -> None:
 
 def send_order(api_id: str, body: dict[str, Any], action: str,
                client_order_id: str | None, *, client_cls) -> None:
-    """주문 전송 + 멱등성 처리 (원장 잠금 아래에서 조회→전송→기록).
+    """주문 전송 + 멱등성 처리 (원장 잠금 아래에서 조회→in-flight 기록→전송→완료 기록).
 
     - 같은 키 + 같은 내용(fingerprint 일치): 재전송 없이 이전 응답 반환.
     - 같은 키 + 다른 내용: IDEMPOTENCY_CONFLICT (exit 1), 전송하지 않음.
+    - 같은 키가 "inflight" 상태(전송 후 응답 미도착 — 타임아웃/연결 끊김/프로세스
+      종료)로 남아 있으면 ORDER_STATUS_UNKNOWN (exit 2), 재전송하지 않음.
     - fingerprint가 없는 과거(v2.4~v2.5.0) 기록은 종전대로 재생한다.
 
     client_cls: 호출 모듈의 KiwoomClient 바인딩 (테스트 patch 지점 유지).
@@ -116,12 +118,31 @@ def send_order(api_id: str, body: dict[str, Any], action: str,
                 stored = hit.get("fingerprint")
                 if stored is not None and stored != fp:
                     _idempotency_conflict(client_order_id)
+                if hit.get("status") == "inflight" or hit.get("response") is None:
+                    msg = (f"멱등성 키 '{client_order_id}'의 이전 시도는 전송 후 응답을 "
+                           "받지 못했습니다. 주문이 체결되었을 수 있으므로 재전송하지 "
+                           "않습니다. 'kiwoom account orders pending'으로 상태를 확인한 "
+                           "뒤, 새 주문이라면 새 키를 사용하세요.")
+                    if _get_format() == "table":
+                        err_console.print(f"[red]{msg}[/]")
+                    else:
+                        envelope.emit(error=envelope.error_body(
+                            msg, code="ORDER_STATUS_UNKNOWN", retryable=False))
+                    raise SystemExit(2)
                 human(f"[dim]멱등성 키 '{client_order_id}' 기존 기록 — 재전송하지 않고 이전 응답을 반환합니다.[/]")
                 print_order_result({**hit["response"], "idempotent_replay": True}, action)
                 return
+            try:
+                idempotency.record_inflight(client_order_id, api_id, fp)
+            except OSError as e:
+                fail_api(f"멱등성 원장에 기록할 수 없어 주문을 전송하지 않았습니다: {e}")
             with client_cls() as c:
                 data, _ = c.request(api_id, body)
-            idempotency.record(client_order_id, api_id, data, fingerprint=fp)
+            try:
+                idempotency.record(client_order_id, api_id, data, fingerprint=fp)
+            except OSError as e:
+                err_console.print(
+                    f"[yellow]주문은 전송되었으나 원장 기록에 실패했습니다: {e}[/]")
     except idempotency.LedgerLockBusy:
         msg = ("멱등성 원장 잠금을 획득하지 못했습니다 — 같은 프로필의 다른 주문이 "
                "전송 중입니다. 잠시 후 재시도하세요.")

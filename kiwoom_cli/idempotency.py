@@ -5,7 +5,9 @@
 재시도(네트워크 단절, 에이전트 재실행)로 인한 중복 주문을 방지한다.
 
 원장 위치: <config dir>/idempotency/<profile>-<env>.jsonl
-줄 형식: {"key", "api_id", "ord_no", "fingerprint", "response", "ts"}
+줄 형식: {"key", "api_id", "ord_no", "fingerprint", "status", "response", "ts"}
+status: "inflight"(전송 직전 기록, 응답 미도착) | "done"(전송 완료).
+키 없음(v2.4~v2.8 원장)은 "done"으로 간주 — 하위호환.
 """
 
 from __future__ import annotations
@@ -102,6 +104,29 @@ def lookup(key: str) -> dict[str, Any] | None:
     return hit
 
 
+def record_inflight(key: str, api_id: str, fingerprint: str) -> None:
+    """전송 직전에 in-flight 표식을 남긴다.
+
+    전송 후 응답을 받지 못해도(타임아웃·연결 끊김) 원장에 흔적이 남으므로,
+    같은 키로 재시도할 때 재전송 대신 '결과 불명'을 보고할 수 있다.
+    """
+    ledger = _ledger_file()
+    config.ensure_config_dir()
+    config.secure_dir(ledger.parent)
+    rec = {
+        "key": key,
+        "api_id": api_id,
+        "ord_no": "",
+        "fingerprint": fingerprint,
+        "response": None,
+        "status": "inflight",
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    with open(ledger, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    config.secure_file(ledger)
+
+
 def record(key: str, api_id: str, response: dict[str, Any],
            fingerprint: str | None = None) -> None:
     """전송 성공한 주문 응답을 원장에 append."""
@@ -113,6 +138,7 @@ def record(key: str, api_id: str, response: dict[str, Any],
         "api_id": api_id,
         "ord_no": response.get("ord_no", ""),
         "fingerprint": fingerprint,
+        "status": "done",
         "response": response,
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }

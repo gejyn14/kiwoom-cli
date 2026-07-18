@@ -114,6 +114,7 @@ kiwoom -f json --all-pages market rank volume
 | `VALIDATION_FAILED` | ✗ | `order validate` 실패 — 실패 항목은 `error.details` |
 | `IDEMPOTENCY_CONFLICT` | ✗ | 같은 `--client-order-id`가 다른 주문 내용으로 이미 사용됨. 재시도라면 인자가 이전 실행과 동일한지 확인, 새 주문이면 새 키 사용. exit 1, 전송되지 않음 |
 | `LEDGER_BUSY` | ✓ | 멱등성 원장 잠금을 획득하지 못함 — 같은 프로필의 다른 주문이 전송 중. 잠시 후 재시도. exit 2 (`IDEMPOTENCY_CONFLICT`와 달리 exit 1이 아님에 유의) |
+| `ORDER_STATUS_UNKNOWN` | ✗ | 이전 시도가 전송 후 응답을 받지 못함. 주문이 체결되었을 수 있어 재전송하지 않음 — `account orders pending`으로 확인 후 새 키 사용. exit 2 |
 | `AUTH_REQUIRED` | ✗ | 토큰 없음. 키체인 불가 환경이면 메시지가 `KIWOOM_TOKEN` 안내 |
 | `TOKEN_EXPIRED` | ✗ | 재로그인 필요 (upstream 8005, HTTP 401) |
 | `INVALID_INPUT` | ✗ | 파라미터 형식/누락 (upstream 1511/1512/1517/2) |
@@ -147,6 +148,12 @@ kiwoom -f json --all-pages market rank volume
 보내면 `IDEMPOTENCY_CONFLICT`. 잠금 대기는 POSIX(fcntl)에서는 무한 대기하며,
 Windows(msvcrt)에서만 약 10초 재시도 후 획득 실패로 `LEDGER_BUSY`
 (exit 2, retryable)가 발생한다 — 잠시 후 재시도하면 된다.
+
+전송 직전에 원장에 "inflight" 표식을 남긴 뒤 전송한다. 응답을 받지 못하고
+프로세스가 죽거나 타임아웃이 나도 표식이 남으므로, 같은 키로 재시도하면
+재전송 대신 `ORDER_STATUS_UNKNOWN`(exit 2, retryable=false)을 반환한다 —
+주문이 실제로 체결됐을 수 있으니 `account orders pending`으로 확인 후
+새 키로 재시도하라.
 
 미국 주식 주문은 body에 자동판별된 거래소가 포함되므로, 같은
 `--client-order-id`로 재실행했는데 그 사이 거래소 판별이 달라지면(캐시 갱신 등)

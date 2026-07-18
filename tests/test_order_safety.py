@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import click
@@ -292,3 +293,58 @@ def test_credit_modify_preview_before_confirm(runner, isolated_env, monkeypatch)
                                      "0000139", "005930", "1", "70000"])
     assert result.exit_code != 0
     assert calls == ["preview", "confirm"]
+
+
+# ── Task 8: in-flight record blocks duplicate after transport failure ──
+
+def test_inflight_record_blocks_duplicate_after_transport_failure(tmp_path, monkeypatch):
+    """전송 중 네트워크 오류 후 같은 키로 재시도하면 재전송하지 않는다."""
+    import httpx
+    from kiwoom_cli import idempotency
+    monkeypatch.setattr(idempotency.config, "CONFIG_FILE", tmp_path / "config.toml")
+
+    sent = []
+
+    class FailingClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            raise httpx.ReadTimeout("timeout")
+
+    runner = CliRunner()
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", FailingClient):
+        r1 = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                 "--price", "70000", "--type", "limit",
+                                 "--confirm", "--client-order-id", "dup-1"])
+    assert r1.exit_code == 2
+    assert len(sent) == 1
+
+    class OkClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            return {"ord_no": "0000777", "return_code": 0}, {}
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", OkClient):
+        r2 = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                 "--price", "70000", "--type", "limit",
+                                 "--confirm", "--client-order-id", "dup-1"])
+    doc = json.loads(r2.stdout)
+    assert len(sent) == 1, "재시도가 주문을 재전송했다 — 중복 주문"
+    assert r2.exit_code == 2
+    assert doc["error"]["code"] == "ORDER_STATUS_UNKNOWN"
+    assert doc["error"]["retryable"] is False
+
+
+def test_legacy_ledger_without_status_still_replays(tmp_path, monkeypatch):
+    """v2.4~v2.8 원장(status 키 없음)은 종전대로 재생된다."""
+    from kiwoom_cli import idempotency
+    monkeypatch.setattr(idempotency.config, "CONFIG_FILE", tmp_path / "config.toml")
+    ledger = tmp_path / "idempotency"
+    ledger.mkdir(parents=True, exist_ok=True)
+    idempotency.record("old-key", "kt10000", {"ord_no": "0000111"}, fingerprint=None)
+    hit = idempotency.lookup("old-key")
+    assert hit["response"]["ord_no"] == "0000111"
+    assert hit.get("status") != "inflight"
