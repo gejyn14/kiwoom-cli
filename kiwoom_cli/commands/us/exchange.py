@@ -7,7 +7,7 @@ from rich.panel import Panel
 
 from ...client import KiwoomClient
 from ...formatters import human, print_generic_table
-from .._mutation import confirm_gate
+from .._mutation import confirm_gate, suppress_pagination
 
 DIRECTION = {"krw-usd": "1", "usd-krw": "2"}
 _DIRECTION_LABELS = {"krw-usd": "원화 → 달러", "usd-krw": "달러 → 원화"}
@@ -55,6 +55,7 @@ def fx_apply(amount: int, direction: str, confirm: bool):
         border_style="yellow",
     ))
     confirm_gate(confirm)
+    suppress_pagination()  # 환전은 실제 자금 이동 — --all-pages로 재전송하면 안 됨 (감사 N6)
     with KiwoomClient() as c:
         data, _ = c.request("ust31302", {
             "exch_tp": DIRECTION[direction],

@@ -534,3 +534,101 @@ def test_send_order_forces_single_request_even_with_global_all_pages(runner, iso
     # 전역 플래그가 켜져 있었음에도 send_order가 명령 실행 전에 꺼야 한다.
     assert captured["all_pages"] is False
     assert captured["next_key_present"] is False
+
+
+# ── Task 12: 환전 신청 + 조건검색 페이지네이션 가드 (audit N6, task 6) ───
+
+from kiwoom_cli.client import KiwoomClient as _RealKiwoomClient  # noqa: E402
+
+
+def _real_client(*_a, **_k):
+    """실제 KiwoomClient — domain/token만 고정해 프로필/키체인 해석을 우회한다.
+
+    FakeKiwoomClient류의 목은 client.py의 실제 페이지네이션 while 루프를
+    갖고 있지 않아 그 루프를 우회해버린다 — 이 헬퍼는 진짜 KiwoomClient를
+    써서 실제 반복 전송 메커니즘을 그대로 통과시킨다."""
+    return _RealKiwoomClient(domain="https://mock.test", token="test-token")
+
+
+def test_suppress_pagination_clears_all_pages_and_next_key():
+    """suppress_pagination()은 ctx.obj["all_pages"]를 False로 두고 next_key를 제거한다."""
+    from kiwoom_cli.commands._mutation import suppress_pagination
+
+    ctx = click.Context(click.Command("x"), obj={"all_pages": True, "next_key": "K"})
+    with ctx:
+        suppress_pagination()
+    assert ctx.obj["all_pages"] is False
+    assert "next_key" not in ctx.obj
+
+
+def test_suppress_pagination_noop_without_active_context():
+    """활성 click 컨텍스트가 없어도(라이브러리로 호출되는 경우) 예외를 던지지 않는다."""
+    from kiwoom_cli.commands._mutation import suppress_pagination
+
+    suppress_pagination()
+
+
+def test_exchange_apply_single_real_request_despite_all_pages(runner, isolated_env, monkeypatch, httpx_mock):
+    """환전 신청(ust31302) — 실제 KiwoomClient.request()의 페이지네이션 루프를 통해도
+    --all-pages가 반복 전송을 일으키지 않는지 실제 HTTP 요청 횟수로 검증한다.
+
+    가드가 없으면 cont-yn: Y가 계속 오는 한 client.py의 _ALL_PAGES_CAP(50)까지
+    같은 환전 요청이 반복 전송된다 — 감사 N6(high), 실제 자금이 최대 50회 이동."""
+    monkeypatch.setattr("kiwoom_cli.commands.us.exchange.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0, "krw_exmn_amt": "1000000", "buy_fc_amt": "723.85"},
+        headers={"cont-yn": "Y", "next-key": "K"},
+        is_reusable=True,
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "--all-pages", "account", "exchange", "apply", "1000000", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1, (
+        f"환전 요청이 {len(httpx_mock.get_requests())}회 전송됨 (기대: 1회)"
+    )
+
+
+@pytest.mark.parametrize("args", [
+    ["order", "condition", "search", "001", "--confirm"],
+    ["order", "condition", "realtime", "001", "--confirm"],
+    ["order", "condition", "stop", "001", "--confirm"],
+])
+def test_condition_commands_single_real_request_despite_all_pages(
+    runner, isolated_env, monkeypatch, httpx_mock, args,
+):
+    """조건검색 요청/실시간등록/실시간해제(ka10172~4) — confirm_gate는 있지만
+    MUTATION_APIS에는 없어 send_order 경로를 타지 않는다. 스윕 중 추가로 발견된
+    미보호 지점: --all-pages로 반복 전송되지 않아야 한다."""
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0},
+        headers={"cont-yn": "Y", "next-key": "K"},
+        is_reusable=True,
+    )
+    result = runner.invoke(cli, ["-f", "json", "--all-pages", *args])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1, (
+        f"{args[2]} 요청이 {len(httpx_mock.get_requests())}회 전송됨 (기대: 1회)"
+    )
+
+
+def test_send_order_single_real_request_despite_all_pages(runner, isolated_env, monkeypatch, httpx_mock):
+    """send_order 경로(국내 주식 매수, kt10000) — 실제 KiwoomClient.request() 루프를 통해도
+    단일 요청만 나가는지 확인한다. 기존 test_send_order_forces_single_request_even_with_global_all_pages
+    는 ctx.obj 플래그만 스냅샷하는 목을 쓰므로 그 목 자체가 반복 루프를 갖고 있지 않다 —
+    "메커니즘이 아니라 결과"를 증명하려면 실제 클라이언트로 실제 HTTP 요청 수를 세야 한다."""
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0, "ord_no": "0000001"},
+        headers={"cont-yn": "Y", "next-key": "K"},
+        is_reusable=True,
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "--all-pages", "order", "buy", "005930", "10",
+        "--price", "70000", "--type", "limit", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1, (
+        f"매수 주문이 {len(httpx_mock.get_requests())}회 전송됨 (기대: 1회)"
+    )

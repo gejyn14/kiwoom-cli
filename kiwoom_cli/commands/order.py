@@ -37,6 +37,7 @@ from ._mutation import (
     finish_dry_run,
     parse_quote_price,
     send_order,
+    suppress_pagination,
 )
 from .us import order_ops as us_order_ops
 from .us._constants import US_ORDER_TYPES
@@ -936,6 +937,7 @@ def condition_search(seq: str, stex_tp: str, cont_yn: str, next_key: str, confir
     예: kiwoom order condition search 001 --confirm
     """
     confirm_gate(confirm)
+    suppress_pagination()  # 조건검색 요청도 confirm_gate 대상 — --all-pages로 재전송하면 안 됨
 
     body = {
         "trnm": "CNSRREQ",
@@ -963,6 +965,7 @@ def condition_realtime(seq: str, stex_tp: str, confirm: bool):
     예: kiwoom order condition realtime 001 --confirm
     """
     confirm_gate(confirm)
+    suppress_pagination()  # 실시간 등록 반복은 서버측 중복 구독을 유발 — --all-pages 무시
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10173", {
@@ -983,6 +986,7 @@ def condition_stop(seq: str, confirm: bool):
     예: kiwoom order condition stop 001 --confirm
     """
     confirm_gate(confirm)
+    suppress_pagination()  # 해제 요청도 confirm_gate 대상 — --all-pages로 재전송하면 안 됨
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10174", {
