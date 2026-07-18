@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.9.0] - 2026-07-19
 
 **Breaking**
 - `-f json`(`data` 필드)와 **테이블(`-f table`, 기본값) 렌더링** 양쪽에서 아래 26개
@@ -80,11 +80,13 @@
   실행하도록 유도하던 문제 — 변이 응답은 이제 항상 `meta.cont: null`.
 - `kiwoom api`로 주문성 API를 raw 호출할 때 `cont-yn: Y` stderr 힌트("연속조회
   가능")가 위 `meta.cont` 억제와 무관하게 계속 출력되던 문제.
-- 전송 전 인증 실패(토큰 없음/만료)가 실제로는 아무것도 전송하지 않았는데도
+- 전송 전 인증 실패(토큰 없음)가 실제로는 아무것도 전송하지 않았는데도
   멱등성 키를 `inflight`로 영구히 소진해, 재로그인 후 재시도가
   `ORDER_STATUS_UNKNOWN`으로 영구히 막히던 문제 — 실제 HTTP 전송 이전 단계에서만
   발생함이 보장되는 `KiwoomAuthError`를 `KiwoomAPIError`와 동일하게 `rejected`로
-  종결 처리.
+  종결 처리. 업스트림 `return_code: 8005`(만료)도 HTTP 200이므로 `rejected`가 되어
+  키가 재사용 가능하다. 다만 HTTP 401은 요청이 이미 업스트림에 도달한 것이므로
+  의도적으로 `inflight`로 남는다.
 
 ## [2.8.0] - 2026-07-18
 
