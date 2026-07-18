@@ -561,7 +561,7 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str, confirm: bool):
             title = get_description(api_id)
             print_generic_table(data, title=title)
 
-        if headers.get("cont-yn") == "Y":
+        if headers.get("cont-yn") == "Y" and api_id not in MUTATION_APIS:
             err_console.print(f"\n[dim]연속조회 가능 (next-key: {headers.get('next-key', '')})[/]")
 
 

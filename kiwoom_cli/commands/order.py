@@ -930,7 +930,7 @@ def condition_list():
 @click.option("--exchange", "stex_tp", default="K", type=click.Choice(["K"]), help="거래소 (K=KRX)")
 @click.option("--cont-yn", default="", help="연속조회여부")
 @click.option("--next-key", default="", help="연속조회키")
-@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
+@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 조건검색 조회 실행")
 def condition_search(seq: str, stex_tp: str, cont_yn: str, next_key: str, confirm: bool):
     """조건검색 요청 일반 (ka10172).
 
@@ -958,7 +958,7 @@ def condition_search(seq: str, stex_tp: str, cont_yn: str, next_key: str, confir
 @condition.command("realtime")
 @click.argument("seq")
 @click.option("--exchange", "stex_tp", default="K", type=click.Choice(["K"]), help="거래소 (K=KRX)")
-@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
+@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 조건검색 실시간 등록 실행")
 def condition_realtime(seq: str, stex_tp: str, confirm: bool):
     """조건검색 요청 실시간 (ka10173).
 
@@ -979,7 +979,7 @@ def condition_realtime(seq: str, stex_tp: str, confirm: bool):
 
 @condition.command("stop")
 @click.argument("seq")
-@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
+@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 조건검색 실시간 해제 실행")
 def condition_stop(seq: str, confirm: bool):
     """조건검색 실시간 해제 (ka10174).
 

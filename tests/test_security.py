@@ -344,6 +344,34 @@ def test_raw_api_readonly_all_pages_unaffected(runner, isolated_config, monkeypa
     assert captured["all_pages"] is True
 
 
+def test_raw_api_mutation_suppresses_cont_hint(runner, isolated_config, monkeypatch):
+    """변이 API가 cont-yn: Y를 반환해도 raw api의 "연속조회 가능" stderr 힌트가 뜨면
+    안 된다 — meta.cont는 이미 항상 null로 고정되는데(Task 6b), 이 힌트는 raw 응답
+    헤더를 직접 보고 meta.cont/ctx.obj와 무관한 별도 채널로 "이어서 실행하라"고
+    안내해 왔다 (Task 6b 리포트의 concerns에서 지적된 결함)."""
+    fake = FakeKiwoomClient()
+    fake.set_response("kt10000", {"return_code": 0}, {"cont-yn": "Y", "next-key": "K"})
+    monkeypatch.setattr("kiwoom_cli.main.KiwoomClient", lambda: fake)
+
+    result = runner.invoke(cli, [
+        "api", "kt10000", '{"stk_cd":"005930"}', "--confirm",
+    ])
+    assert result.exit_code == 0, result.output
+    assert "연속조회 가능" not in result.output
+
+
+def test_raw_api_readonly_still_shows_cont_hint(runner, isolated_config, monkeypatch):
+    """대조군: 읽기 전용 API가 실제로 연속조회 가능한 경우 힌트는 그대로 유지되어야
+    한다 — 변이 억제가 읽기 전용 힌트 계약까지 깨면 원래 결함보다 더 나쁘다."""
+    fake = FakeKiwoomClient()
+    fake.set_response("ka10001", {"return_code": 0}, {"cont-yn": "Y", "next-key": "K"})
+    monkeypatch.setattr("kiwoom_cli.main.KiwoomClient", lambda: fake)
+
+    result = runner.invoke(cli, ["api", "ka10001", '{"stk_cd":"005930"}'])
+    assert result.exit_code == 0, result.output
+    assert "연속조회 가능" in result.output
+
+
 def test_mutation_apis_cover_all_order_ids():
     from kiwoom_cli.api_spec import MUTATION_APIS
     expected = {

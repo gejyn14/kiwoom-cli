@@ -98,6 +98,29 @@ API 등) 응답은 **`meta.cont`를 절대 포함하지 않습니다** — 업�
 "이어서" 재실행하면 실제 동작(주문·환전 등)이 한 번 더 일어나므로, 변이 응답에서
 `meta.cont`를 찾아 반복 호출하려 하지 마세요.
 
+이 변이 예외는 응답 쪽(`meta.cont`)에서 끝나지 않습니다 — 요청 쪽에서도
+전역 `--all-pages`/`--next-key`를 **그 요청 자체에 대해 조용히 무시**합니다:
+반복 실행이 안전한 조회와 달리, 변이에서 자동 반복은 실제 동작(주문 체결·자금
+이동·서버측 구독 변경)을 여러 번 실행하는 것과 같기 때문입니다. 적용 대상은
+다음 7개 커맨드/경로입니다 (모두 `_mutation.suppress_pagination()`을 요청
+직전에 호출):
+
+- `order buy`/`sell`/`modify`/`cancel` — 국내주식(`kt10000-3`)
+- `order credit buy`/`sell`/`modify`/`cancel` — 신용(`kt10006-9`)
+- `order gold buy`/`sell`/`modify`/`cancel` — 금현물(`kt50000-3`)
+- `order buy`/`sell`/`modify`/`cancel` — 미국주식(`ust20000-3`, 위와 같은
+  `send_order()` 경로 공유)
+- `account exchange apply` — 환전 신청(`ust31302`, 실제 자금 이동)
+- `order condition search`/`realtime`/`stop` — 조건검색 요청/실시간등록/해제
+  (`ka10172-4`, `MUTATION_APIS`에는 없지만 `confirm_gate`가 걸린 서버측
+  상태 변경이라 동일하게 예외 처리됨)
+- raw `kiwoom api <api_id>` — `api_id`가 `MUTATION_APIS`(17개)에 있는 모든 호출
+
+이 커맨드들에 `--all-pages`나 `--next-key`를 붙여도 아무 효과가 없습니다 —
+실제로 나가는 HTTP 요청은 항상 정확히 1개이고, 그 요청에는 `cont-yn`/
+`next-key` 헤더가 실리지 않습니다. 값을 조용히 무시하는 것이지 오류로
+거부하지 않으므로, 스크립트에 남아 있는 전역 플래그가 있어도 안전합니다.
+
 미국 심볼 거래소 자동판별 보조 호출(usa10098)과 주문 `--dry-run`의 시세 조회
 보조 호출(`_quote_price_kr`/`_quote_price_us`/`_quote_price_gold`)은 내부
 (`internal`) 호출로 표시되어 전역 `--next-key`/`--all-pages`가 적용되지 않고

@@ -12,6 +12,7 @@ from click.testing import CliRunner
 
 from kiwoom_cli import config, idempotency
 from kiwoom_cli.client import KiwoomAPIError
+from kiwoom_cli.client import KiwoomClient as _RealKiwoomClient
 from kiwoom_cli.main import cli
 
 
@@ -536,10 +537,7 @@ def test_send_order_forces_single_request_even_with_global_all_pages(runner, iso
     assert captured["next_key_present"] is False
 
 
-# ── Task 12: 환전 신청 + 조건검색 페이지네이션 가드 (audit N6, task 6) ───
-
-from kiwoom_cli.client import KiwoomClient as _RealKiwoomClient  # noqa: E402
-
+# ── Task 6: 환전 신청 + 조건검색 페이지네이션 가드 (audit N6) ───────────
 
 def _real_client(*_a, **_k):
     """실제 KiwoomClient — domain/token만 고정해 프로필/키체인 해석을 우회한다.
@@ -673,6 +671,43 @@ def test_exchange_apply_envelope_has_no_meta_cont(runner, isolated_env, monkeypa
     assert result.exit_code == 0, result.stdout
     assert len(httpx_mock.get_requests()) == 1
     assert json.loads(result.stdout)["meta"]["cont"] is None
+
+
+def test_exchange_apply_outgoing_request_has_no_cont_headers(
+    runner, isolated_env, monkeypatch, httpx_mock,
+):
+    """account exchange apply --next-key PREV — 실제 자금이 이동하는 POST 자체에
+    cont-yn/next-key 헤더가 실리면 안 된다.
+
+    이 결함의 사전-수정 형태(감사 N6 이전)는 정확히 이랬다: 전역 --next-key가
+    ctx.obj에 남아 있으면 client.py:150-158의 페이지네이션 주입 분기
+    (`if obj and not next_key and obj.get("next_key")`)가 그 값을 소비해
+    cont_yn="Y"/next_key="PREV"를 실제 환전 신청 요청에 실어 보냈다.
+    suppress_pagination()이 요청 전에 ctx.obj["next_key"]를 pop하면서 지금은
+    막혀 있지만, 지금까지는 이를 pin하는 테스트가 helper 단위 테스트
+    (test_suppress_pagination_clears_all_pages_and_next_key)와
+    test_raw_api_mutation_clears_global_next_key(test_security.py) 뿐이었다 —
+    둘 다 ctx.obj 스냅샷이거나 FakeKiwoomClient 클래스 치환이라
+    client.py의 실제 주입 분기 자체를 우회한다. 여기서는 실제 KiwoomClient +
+    httpx_mock으로 그 분기를 그대로 통과시켜 진짜 나가는 HTTP 요청의 헤더를
+    검사한다."""
+    monkeypatch.setattr("kiwoom_cli.commands.us.exchange.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0, "krw_exmn_amt": "1000000", "buy_fc_amt": "723.85"},
+        headers={"cont-yn": "N", "next-key": ""},
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "--next-key", "PREV", "account", "exchange", "apply", "1000000", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    reqs = httpx_mock.get_requests()
+    assert len(reqs) == 1
+    assert "next-key" not in reqs[0].headers, (
+        f"환전 신청 요청에 next-key 헤더가 실렸음: {dict(reqs[0].headers)}"
+    )
+    assert "cont-yn" not in reqs[0].headers, (
+        f"환전 신청 요청에 cont-yn 헤더가 실렸음: {dict(reqs[0].headers)}"
+    )
 
 
 def test_raw_api_mutation_envelope_has_no_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
