@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from click.testing import CliRunner
 
@@ -330,6 +332,34 @@ def test_us_sell_rejects_cond_price(runner, us_fake):
     result = runner.invoke(cli, ["order", "sell", "NVDA", "1", "--cond-price", "500", "--confirm"])
     assert result.exit_code == 1
     assert _order_calls(us_fake, "ust20001") == []
+
+
+# ============================================================
+#  v2.9 audit fix: US dry-run est_cost must use real quote (cur_prc)
+# ============================================================
+
+
+def test_us_market_dry_run_uses_real_quote(runner, us_fake):
+    """US 시장가 dry-run의 est_cost는 usa20100의 cur_prc에서 계산된다 (now_pric 아님).
+
+    usa20100 스펙 응답 예시: "cur_prc": "+201.4700". 필드명이 틀리면 quote lookup이
+    항상 미스해 est_cost가 조용히 0으로 렌더링된다 — dry-run의 목적(주문 전 안전
+    점검)을 정확히 무력화하는 버그.
+    """
+    us_fake.set_response(
+        "usa20100", {"return_code": 0, "stk_cd": "NVDA", "cur_prc": "+201.4700"}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "NVDA", "10", "--type", "market", "--dry-run"],
+    )
+    assert result.exit_code == 0
+    doc = json.loads(result.output)
+    payload = doc["data"]
+    assert payload["price"] == pytest.approx(201.47)
+    assert payload["est_cost"] == pytest.approx(2014.70)
+    assert payload["price_source"] == "market_quote"
+    assert _order_calls(us_fake, "ust20000") == []  # dry-run이므로 실제 주문 미전송
 
 
 # ============================================================

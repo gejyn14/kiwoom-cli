@@ -34,11 +34,17 @@ def _validate_us_type(order_type: str, side: str) -> str:
 
 
 def _quote_price_us(client, code: str, stex_tp: str) -> float:
-    """미국주식 현재가 (usa20100). 시장가 주문의 예상비용 계산용."""
+    """미국주식 현재가 (usa20100). 시장가 주문의 예상비용 계산용.
+
+    usa20100 스펙 응답 필드는 cur_prc (예: "+201.4700") — now_pric가 아니다.
+    now_pric는 계좌 잔고 API(ust21070 등)의 현재가 필드 이름이라 헷갈리기 쉽다.
+    now_pric 폴백은 혹시 있을지 모를 다른 시세 응답 형태를 대비한 방어일 뿐,
+    이 API에서 정답은 cur_prc다.
+    """
     data, _ = client.request(
         "usa20100", {"stex_tp": stex_tp, "stk_cd": code.upper()}, internal=True
     )
-    v = str(data.get("now_pric", "0")).strip().lstrip("+-") or "0"
+    v = str(data.get("cur_prc", data.get("now_pric", "0"))).strip().lstrip("+-") or "0"
     try:
         return float(v)
     except ValueError:
