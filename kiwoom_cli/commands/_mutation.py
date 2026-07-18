@@ -61,18 +61,29 @@ def parse_quote_price(value: Any) -> float:
 
 
 def suppress_pagination() -> None:
-    """변이 요청은 페이지네이션 대상이 아님 — 전역 --all-pages/--next-key를 무시한다.
+    """변이 요청은 페이지네이션 대상이 아님 — 전역 --all-pages/--next-key를 무시하고,
+    응답 envelope에도 meta.cont를 남기지 않는다.
 
     반복 실행은 조회에서는 안전하지만(같은 페이지를 다시 읽을 뿐), 변이(주문
     전송·환전 신청 등)에서는 실제 동작을 여러 번 반복 실행하는 것과 같다.
     confirm_gate를 통과한 직후, 실제 요청을 보내기 전에 호출해야 한다 —
     ctx.obj["all_pages"]를 False로 되돌리고 ctx.obj["next_key"]를 제거해
     KiwoomClient.request()의 전역 페이지네이션 루프(--all-pages 반복,
-    --next-key 커서 주입)가 이 요청에 적용되지 않도록 한다."""
+    --next-key 커서 주입)가 이 요청에 적용되지 않도록 한다.
+
+    ctx.obj["suppress_cont"] = True도 여기서 함께 세팅한다. 자동 반복(50회 상한)은
+    이 함수의 위 두 줄로 막히지만, last_cont는 KiwoomClient._request_once()가
+    응답을 받은 "이후"에 기록하므로 이 함수만으로는 막을 수 없다 — 대신
+    _request_once()가 이 플래그를 보고 last_cont 기록 자체를 건너뛴다(client.py
+    참고). 반복 억제와 meta.cont 억제를 같은 호출(suppress_pagination) 한 곳에
+    묶어 두는 이유: 각 변이 호출부가 "meta.cont도 지워야 한다"는 것을 별도로
+    기억해야 하는 설계였다면, 새 변이 커맨드가 추가될 때 그 기억이 누락되는 일이
+    반드시 생긴다 — 이 시리즈에서 고치고 있는 결함들이 바로 그렇게 생겨났다."""
     ctx = click.get_current_context(silent=True)
     if ctx is not None and isinstance(ctx.obj, dict):
         ctx.obj["all_pages"] = False
         ctx.obj.pop("next_key", None)
+        ctx.obj["suppress_cont"] = True
 
 
 def confirm_gate(confirm: bool) -> None:

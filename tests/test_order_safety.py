@@ -632,3 +632,87 @@ def test_send_order_single_real_request_despite_all_pages(runner, isolated_env, 
     assert len(httpx_mock.get_requests()) == 1, (
         f"매수 주문이 {len(httpx_mock.get_requests())}회 전송됨 (기대: 1회)"
     )
+
+
+# ── Task 6b: 변이 응답은 meta.cont를 남기지 않는다 (client.py:112-118) ───
+#
+# suppress_pagination()이 --all-pages 반복 전송(50회 상한)은 막았지만, 응답
+# envelope의 meta.cont는 여전히 살아있었다 — AGENTS.md는 meta.cont가 있으면
+# --next-key로 "이어서" 실행하라고 안내하므로, 변이(주문/환전/조건검색)에서는
+# 그 안내 자체가 실제 동작을 한 번 더 실행하라는 유도가 된다. 실제 HTTP
+# transport(httpx_mock)를 통해 진짜 KiwoomClient.request()가 만든 envelope을
+# 검증한다 — FakeKiwoomClient류의 클래스 치환 목은 last_cont를 기록하는 코드
+# 경로 자체를 우회해 이 결함을 놓친다.
+
+def test_order_buy_envelope_has_no_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
+    """order buy(kt10000) — 업스트림이 cont-yn: Y를 보내더라도 meta.cont는 None."""
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0, "ord_no": "0000001"},
+        headers={"cont-yn": "Y", "next-key": "K"},
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "order", "buy", "005930", "10",
+        "--price", "70000", "--type", "limit", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1
+    assert json.loads(result.stdout)["meta"]["cont"] is None
+
+
+def test_exchange_apply_envelope_has_no_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
+    """account exchange apply(ust31302) — 실제 자금 이동. 동일 결함 재현."""
+    monkeypatch.setattr("kiwoom_cli.commands.us.exchange.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0, "krw_exmn_amt": "1000000", "buy_fc_amt": "723.85"},
+        headers={"cont-yn": "Y", "next-key": "K"},
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "account", "exchange", "apply", "1000000", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1
+    assert json.loads(result.stdout)["meta"]["cont"] is None
+
+
+def test_raw_api_mutation_envelope_has_no_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
+    """kiwoom api ust31302 — raw api 게이트를 거치는 변이 경로도 동일하게 억제."""
+    monkeypatch.setattr("kiwoom_cli.main.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0},
+        headers={"cont-yn": "Y", "next-key": "K"},
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "api", "ust31302", '{"exch_tp":"1","fc_exmn_amt":"1000000"}', "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1
+    assert json.loads(result.stdout)["meta"]["cont"] is None
+
+
+def test_condition_search_envelope_has_no_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
+    """order condition search(ka10172) — MUTATION_APIS 밖의 별도 변이 경로. 동일 결함 재현."""
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0},
+        headers={"cont-yn": "Y", "next-key": "K"},
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "order", "condition", "search", "001", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1
+    assert json.loads(result.stdout)["meta"]["cont"] is None
+
+
+def test_market_read_command_still_advertises_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
+    """대조군: 읽기 전용 명령(주문성 아님)은 여전히 meta.cont를 정상적으로 노출해야
+    한다 — 변이 억제가 읽기 전용 페이지네이션 계약을 깨면 원래 결함보다 더 나쁘다."""
+    monkeypatch.setattr("kiwoom_cli.commands.market.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0},
+        headers={"cont-yn": "Y", "next-key": "K"},
+    )
+    result = runner.invoke(cli, ["-f", "json", "market", "rank", "volume"])
+    assert result.exit_code == 0, result.stdout
+    assert json.loads(result.stdout)["meta"]["cont"] == {"next_key": "K"}

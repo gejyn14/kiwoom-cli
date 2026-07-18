@@ -109,10 +109,19 @@ class KiwoomClient:
         # 연속조회 커서를 Click 컨텍스트에 보관 → json envelope의 meta.cont로 노출
         # (라이브러리로 쓰일 때는 컨텍스트가 없으므로 조용히 건너뜀)
         # record_cont=False: 보조 호출(internal)은 본 조회의 커서 기록을 덮어쓰지 않는다.
+        # ctx.obj["suppress_cont"]: _mutation.suppress_pagination()이 변이 요청
+        # 직전에 세팅한다 — 업스트림이 실제로 cont-yn: Y를 보내더라도 meta.cont는
+        # 항상 None으로 고정한다. 변이(주문 전송·환전 신청 등) 응답에 살아있는
+        # meta.cont는 "--next-key로 이어서 실행"을 유도하는데, 변이에서 그 반복은
+        # 진짜 동작을 한 번 더 실행하는 것이다. suppress_pagination()이 all_pages/
+        # next_key를 되돌리는 시점(요청 전)과 달리 이 판단은 응답을 받은 뒤에만
+        # 가능하므로 suppress_pagination() 내부가 아니라 여기서 처리한다.
         if record_cont:
             ctx = click.get_current_context(silent=True)
             if ctx is not None and isinstance(ctx.obj, dict):
-                if resp_headers["cont-yn"] == "Y" and resp_headers["next-key"]:
+                if ctx.obj.get("suppress_cont"):
+                    ctx.obj["last_cont"] = None
+                elif resp_headers["cont-yn"] == "Y" and resp_headers["next-key"]:
                     ctx.obj["last_cont"] = {"next_key": resp_headers["next-key"]}
                 else:
                     ctx.obj["last_cont"] = None

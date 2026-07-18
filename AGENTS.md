@@ -92,6 +92,12 @@ kiwoom -f json --all-pages market rank volume
 보조 호출 제외 — 아래 참조)에 주입되므로 페이지네이션은 `--market kr|us`처럼
 단일 API 경로에서 사용하세요.
 
+변이(주문 전송·환전 신청·조건검색 요청/실시간/해제·raw `kiwoom api`의 주문성
+API 등) 응답은 **`meta.cont`를 절대 포함하지 않습니다** — 업스트림이 실제로
+연속조회 헤더를 보내더라도 CLI가 항상 `null`로 고정합니다. `--next-key`로
+"이어서" 재실행하면 실제 동작(주문·환전 등)이 한 번 더 일어나므로, 변이 응답에서
+`meta.cont`를 찾아 반복 호출하려 하지 마세요.
+
 미국 심볼 거래소 자동판별 보조 호출(usa10098)과 주문 `--dry-run`의 시세 조회
 보조 호출(`_quote_price_kr`/`_quote_price_us`/`_quote_price_gold`)은 내부
 (`internal`) 호출로 표시되어 전역 `--next-key`/`--all-pages`가 적용되지 않고
