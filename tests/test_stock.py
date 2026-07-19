@@ -527,6 +527,29 @@ def test_investor_consecutive_amount_qty_enum(runner, fake_client, cli_value, ap
     assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
 
 
+def test_investor_consecutive_amount_qty_rejects_two(runner, fake_client):
+    """이전 Choice(["1","2"])에서 받아주던 2는 스펙 밖 값이라 이제 exit 1이어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "consecutive", "--amount-qty", "2"]
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("raw_value,api_value", [("0", "0"), ("1", "1")])
+def test_investor_consecutive_amount_qty_raw_codes_still_work(
+    runner, fake_client, raw_value, api_value
+):
+    """스펙이 정의한 raw 코드 0/1은 하위호환으로 계속 전송돼야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "consecutive", "--amount-qty", raw_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
 @pytest.mark.parametrize(
     "cli_value,api_value",
     [
