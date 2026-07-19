@@ -23,6 +23,8 @@ from ..formatters import (
 )
 from ..output import err_console
 from ._constants import (
+    ACCOUNT_EXCHANGE_NO_SOR,
+    ACCOUNT_EXCHANGE_WITH_SOR,
     ALL_STOCK_QRY,
     ASSET_TYPE,
     CASH_CREDIT,
@@ -474,7 +476,7 @@ def orders_split_detail(order_no: str):
 @click.option("--side", "sell_tp", default="all", type=HumanChoice(TRADE_SIDE), help="매도수구분 (all=전체, sell=매도, buy=매수)")
 @click.option("--code", "stk_cd", default="", help="종목코드")
 @click.option("--from-order", "fr_ord_no", default="", help="시작주문번호")
-@click.option("--exchange", "dmst_stex_tp", default="%", type=click.Choice(["%", "KRX", "NXT", "SOR"]), help="거래소구분 (%=전체)")
+@click.option("--exchange", "dmst_stex_tp", default="all", type=HumanChoice(ACCOUNT_EXCHANGE_WITH_SOR), help="거래소구분 (all=전체)")
 def orders_detail(ord_dt: str, qry_tp: str, stk_bond_tp: str, sell_tp: str, stk_cd: str, fr_ord_no: str, dmst_stex_tp: str):
     """계좌별 주문체결내역 상세. (kt00007)"""
     with KiwoomClient() as c:
@@ -502,7 +504,7 @@ def orders_detail(ord_dt: str, qry_tp: str, stk_bond_tp: str, sell_tp: str, stk_
 @click.option("--qry-type", "qry_tp", default="all", type=HumanChoice(FILLED_QRY), help="조회구분 (all=전체, filled=체결)")
 @click.option("--code", "stk_cd", default="", help="종목코드")
 @click.option("--from-order", "fr_ord_no", default="", help="시작주문번호")
-@click.option("--exchange", "dmst_stex_tp", default="%", type=click.Choice(["%", "KRX", "NXT", "SOR"]), help="거래소구분 (%=전체)")
+@click.option("--exchange", "dmst_stex_tp", default="all", type=HumanChoice(ACCOUNT_EXCHANGE_WITH_SOR), help="거래소구분 (all=전체)")
 def orders_status(ord_dt: str, stk_bond_tp: str, mrkt_tp: str, sell_tp: str, qry_tp: str, stk_cd: str, fr_ord_no: str, dmst_stex_tp: str):
     """계좌별 주문체결현황. (kt00009)"""
     with KiwoomClient() as c:
@@ -651,7 +653,7 @@ def history():
 @click.option("--currency", "crnc_cd", default="", help="통화코드 (국내 전용)")
 @click.option("--product", "gds_tp", default="all", type=HumanChoice(PRODUCT_TYPE), help="상품구분 (all=전체, stock=국내주식; 국내 전용)")
 @click.option("--foreign-exchange", "frgn_stex_code", default="", help="해외거래소코드 (국내 전용)")
-@click.option("--exchange", "dmst_stex_tp", default="%", type=click.Choice(["%", "KRX", "NXT"]), help="국내 거래소구분 (%=전체)")
+@click.option("--exchange", "dmst_stex_tp", default="all", type=HumanChoice(ACCOUNT_EXCHANGE_NO_SOR), help="국내 거래소구분 (all=전체, SOR 없음)")
 def history_transactions(market: str, strt_dt: str, end_dt: str, tp: str, stk_cd: str, crnc_cd: str, gds_tp: str, frgn_stex_code: str, dmst_stex_tp: str):
     """위탁 종합거래내역 — 국내(kt00015) + 미국(ust21100)."""
     if market == "us" and tp in ("6", "7"):

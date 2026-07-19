@@ -1439,3 +1439,30 @@ PROGRAM_TOP_SIDE = {"net-sell": "1", "net-buy": "2"}
 # 값이 완전히 동일하다({raw:0, adjusted:1}) — 구분 불가 클러스터. 금현물과
 # 국내주식은 별개 상품군이라 절대 합치지 말 것.
 CHART_ADJUSTED_PRICE = {"raw": "0", "adjusted": "1"}
+
+# ── Task 36 — account.py 거래소 구분 (dmst_stex_tp) ─────────────────
+#
+# 사용자 결정 E-1: 계획서 원문은 {"all":"%","KRX":"1",...}처럼 전송값
+# 자체를 숫자코드로 바꾸라고 했지만, 이 필드는 현재 "%"/"KRX"/"NXT"/"SOR"
+# 리터럴을 dmst_stex_tp에 그대로 전송한다. 트랜치 E는 표기만 바꾸는
+# 트랜치이므로 전송값은 절대 바꾸지 않는다 — "all"만 추가하고 나머지 값은
+# 그대로 둔다.
+#
+# kt00007(orders_detail)/kt00009(orders_status) 전용 — SOR 포함 4값.
+# ACCOUNT_EXCHANGE_NO_SOR(키·값 둘 다 진부분집합, SOR 제외)과 절대 합치지
+# 말 것 — kt00015는 SOR을 스펙에서 지원하지 않는다.
+#
+# *** 이 상수는 api_id 2개가 공유한다(kt00007/kt00009). 한쪽 스펙만 바뀌면
+# 이 상수를 제자리에서 고치지 말고 분리할 것. ***
+#
+# 키 집합만 보면 EXCHANGE_ALL({KRX,NXT,all})/EXCHANGE_ALL_ZERO(동일 키)와
+# 같아 보이지만 값 스킴이 전혀 다르다(저 둘은 숫자코드 "1"/"2"/"3"·"0",
+# 여기는 리터럴 "KRX"/"NXT"/"%") — 극성/스킴이 달라 절대 합치지 말 것.
+ACCOUNT_EXCHANGE_WITH_SOR = {"all": "%", "KRX": "KRX", "NXT": "NXT", "SOR": "SOR"}
+
+# kt00015(history_transactions) 전용 — SOR 없음 3값. ACCOUNT_EXCHANGE_WITH_SOR의
+# 진짜 부분집합이지만 kt00015 스펙에 SOR이 없으므로 절대 합치지 말 것 —
+# 합치면 kt00015가 스펙에 없는 SOR을 받아들이게 된다. 키 집합이
+# EXCHANGE_ALL/EXCHANGE_ALL_ZERO와 같아 보이는 함정도 위 WITH_SOR 주석과
+# 동일하게 적용된다(값 스킴이 다름, 절대 합치지 말 것).
+ACCOUNT_EXCHANGE_NO_SOR = {"all": "%", "KRX": "KRX", "NXT": "NXT"}

@@ -361,6 +361,10 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     # lending_by_stock의 --all(all_tp)은 스펙에 값이 하나뿐이라(반대쪽
     # 불명) 미확인으로 전환하지 않았다 — raw 텍스트로 남아 있다.
     "PROGRAM_TOP_SIDE", "CHART_ADJUSTED_PRICE",
+    # Task 36 — account.py --exchange(dmst_stex_tp) HumanChoice 전환.
+    # kt00007/kt00009는 SOR 포함 4값, kt00015는 SOR 없는 3값 — 절대 합치지
+    # 말 것(_constants.py 정의부 커플링 주석 참고).
+    "ACCOUNT_EXCHANGE_WITH_SOR", "ACCOUNT_EXCHANGE_NO_SOR",
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -472,7 +476,13 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # --market(mrkt_tp)이 click.Choice(["kospi","kosdaq"])에서
     # HumanChoice(MARKET_ALL)로 전환되며 "전체"(000)에 도달 가능해졌다(사전
     # 존재 결함, 순수 확대 — kospi/kosdaq 기본값·전송값은 그대로다).
-    assert len(converted) == 216
+    #
+    # 219 = 216(위) + Task 36의 순증 3 = account orders detail/orders
+    # status/history transactions의 --exchange(dmst_stex_tp)가
+    # click.Choice(["%"/"KRX"/"NXT"/(SOR)])에서 HumanChoice(ACCOUNT_EXCHANGE_
+    # WITH_SOR/NO_SOR)로 전환되며 "all"이 human 이름으로 추가됐다(전송값은
+    # 그대로 "%" — 사용자 결정 E-1, 순수 확대).
+    assert len(converted) == 219
     assert ("cli stock investor program-top", "trde_upper_tp") in converted
     assert ("cli stock investor program-top", "amt_qty_tp") in converted
     for command in ("tick", "minute", "day", "week", "month", "year"):
@@ -537,6 +547,11 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     assert ("cli market program stock-daily", "amt_qty_tp") not in converted
     # ka50080(gold chart-minute)의 --price-type도 같은 이유로 raw 유지.
     assert ("cli market gold chart-minute", "upd_stkpc_tp") not in converted
+    # Task 36: account.py --exchange 3자리가 이름으로도 못 박혀 있는지 —
+    # 개수만 맞추면 다른 곳이 늘고 여기가 빠져도 통과하기 때문이다.
+    assert ("cli account orders detail", "dmst_stex_tp") in converted
+    assert ("cli account orders status", "dmst_stex_tp") in converted
+    assert ("cli account history transactions", "dmst_stex_tp") in converted
 
 
 # ── Task 8: both-fail envelope (fail_api) ────────────────

@@ -165,7 +165,7 @@ def rank():
 @click.option("--basis", "high_low_close_tp", type=HumanChoice(NEW_HIGH_LOW_BASIS), default="high-low",
               help="기준 (high-low=고저기준, close=종가기준)")
 @click.option("--period", "dt", default="5", help="기간 (5,10,20,60,250)")
-@click.option("--stk-cnd", type=HumanChoice(NEW_HIGH_LOW_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(NEW_HIGH_LOW_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-margin-100,"
                    "only-margin-100,only-margin-40,only-margin-30)")
 @click.option("--vol-type", "trde_qty_tp", type=HumanChoice(NEW_HIGH_LOW_QTY_TYPE_5DIGIT), default="all",
@@ -197,7 +197,7 @@ def rank_new_highlow(mrkt_tp, ntl_tp, high_low_close_tp, dt, stk_cnd, trde_qty_t
               help="상하한구분 (upper,rise,flat,lower,fall,prev-upper,prev-lower)")
 @click.option("--sort", "sort_tp", type=HumanChoice(LIMIT_MOVE_SORT), default="count",
               help="정렬 (code=종목코드순,count=연속횟수순,change-rate=등락률순)")
-@click.option("--stk-cnd", type=HumanChoice(LIMIT_MOVE_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(LIMIT_MOVE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-managed-preferred,"
                    "exclude-margin-100,only-margin-100,only-margin-40,only-margin-30,"
                    "only-margin-20,exclude-managed-preferred-alert)")
@@ -230,7 +230,7 @@ def rank_limit(mrkt_tp, updown_tp, sort_tp, stk_cnd, trde_qty_tp, crd_cnd, trde_
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
 @click.option("--vol-type", "trde_qty_tp", type=HumanChoice(NEAR_HIGHLOW_QTY_TYPE_5DIGIT), default="all",
               help="거래량구분 (all,10k,50k,100k,150k,200k,300k,500k,1000k)")
-@click.option("--stk-cnd", type=HumanChoice(NEAR_HIGHLOW_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(NEAR_HIGHLOW_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-margin-100,"
                    "only-margin-100,only-margin-40,only-margin-30)")
 @click.option("--credit", "crd_cnd", type=HumanChoice(NEAR_HIGHLOW_CREDIT_CND), default="all",
@@ -260,12 +260,12 @@ def rank_near_highlow(high_low_tp, alacc_rt, mrkt_tp, trde_qty_tp, stk_cnd, crd_
 @click.option("--time", "tm", default="5", help="시간")
 @click.option("--vol-type", "trde_qty_tp", type=HumanChoice(SURGE_QTY_TYPE_5DIGIT), default="all",
               help="거래량구분 (all,10k,50k,100k,150k,200k,300k,500k,1000k)")
-@click.option("--stk-cnd", type=HumanChoice(SURGE_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(SURGE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-margin-100,"
                    "only-margin-100,only-margin-40,only-margin-30)")
 @click.option("--credit", "crd_cnd", type=HumanChoice(SURGE_CREDIT_CND), default="all",
               help="신용조건 (all,a,b,c,d,e,all-financing)")
-@click.option("--price-cnd", "pric_cnd", type=HumanChoice(SURGE_PRICE_CND), default="all",
+@click.option("--price-cond", "--price-cnd", "pric_cnd", type=HumanChoice(SURGE_PRICE_CND), default="all",
               help="가격조건 (all,under-1k,1k-2k,2k-3k,5k-10k,over-10k,over-1k)")
 @click.option("--include-limit", "updown_incls", type=HumanChoice(SURGE_INCLUDE_LIMIT), default="no",
               help="상하한포함 (yes,no)")
@@ -291,7 +291,7 @@ def rank_surge(mrkt_tp, flu_tp, tm_tp, tm, trde_qty_tp, stk_cnd, crd_cnd, pric_c
               help="정렬 (net-buy-balance,net-sell-balance,buy-ratio,sell-ratio)")
 @click.option("--vol-type", "trde_qty_tp", type=HumanChoice(ORDERBOOK_TOP_QTY_TYPE_4DIGIT), default="preopen",
               help="거래량구분 (preopen=장시작전(0주이상),10k,50k,100k)")
-@click.option("--stk-cnd", type=HumanChoice(ORDERBOOK_TOP_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(ORDERBOOK_TOP_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
                    "only-margin-40,only-margin-30,only-margin-20)")
 @click.option("--credit", "crd_cnd", type=HumanChoice(ORDERBOOK_TOP_CREDIT_CND), default="all",
@@ -321,7 +321,7 @@ def rank_orderbook_top(mrkt_tp, sort_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp)
 @click.option("--minutes", "tm_tp", default="5", help="분 입력")
 @click.option("--vol-type", "trde_qty_tp", type=HumanChoice(ORDERBOOK_SURGE_QTY_TYPE_BARE), default="1k",
               help="거래량구분 (1k,5k,10k,50k,100k — 전체 없음)")
-@click.option("--stk-cnd", type=HumanChoice(ORDERBOOK_SURGE_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(ORDERBOOK_SURGE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
                    "only-margin-40,only-margin-30,only-margin-20)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
@@ -347,7 +347,7 @@ def rank_orderbook_surge(mrkt_tp, trde_tp, sort_tp, tm_tp, trde_qty_tp, stk_cnd,
 @click.option("--minutes", "tm_tp", default="5", help="분 입력")
 @click.option("--vol-type", "trde_qty_tp", type=HumanChoice(BALANCE_RATE_QTY_TYPE_BARE), default="5k",
               help="거래량구분 (5k,10k,50k,100k — 전체 없음)")
-@click.option("--stk-cnd", type=HumanChoice(BALANCE_RATE_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(BALANCE_RATE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
                    "only-margin-40,only-margin-30,only-margin-20)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
@@ -374,7 +374,7 @@ def rank_balance_rate_surge(mrkt_tp, rt_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp
 @click.option("--vol-type", "trde_qty_tp", type=HumanChoice(VOLUME_SURGE_QTY_TYPE_BARE), default="5k",
               help="거래량구분 (5k,10k,50k,100k,200k,300k,500k,1000k — 전체 없음)")
 @click.option("--time", "tm", default="", help="시간 (선택)")
-@click.option("--stk-cnd", type=HumanChoice(VOLUME_SURGE_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(VOLUME_SURGE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-liquidation,"
                    "exclude-managed-preferred,exclude-margin-100,only-margin-100,"
                    "only-margin-60,only-margin-50,only-margin-40,only-margin-30,"
@@ -402,9 +402,9 @@ def rank_volume_surge(mrkt_tp, sort_tp, tm_tp, trde_qty_tp, tm, stk_cnd, pric_tp
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
 @click.option("--sort", "sort_tp", type=HumanChoice(RANK_CHANGE_SORT), default="rise-rate",
               help="정렬 (rise-rate,rise-price,fall-rate,fall-price,flat)")
-@click.option("--vol-cnd", "trde_qty_cnd", type=HumanChoice(RANK_CHANGE_QTY_CND), default="all",
+@click.option("--volume-cond", "--vol-cnd", "trde_qty_cnd", type=HumanChoice(RANK_CHANGE_QTY_CND), default="all",
               help="거래량조건 (all,10k,50k,100k,150k,200k,300k,500k,1000k)")
-@click.option("--stk-cnd", type=HumanChoice(RANK_CHANGE_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(RANK_CHANGE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-managed-preferred,"
                    "exclude-margin-100,only-margin-100,only-margin-40,only-margin-30,"
                    "only-margin-20,exclude-liquidation,only-margin-50,only-margin-60,"
@@ -413,9 +413,9 @@ def rank_volume_surge(mrkt_tp, sort_tp, tm_tp, trde_qty_tp, tm, stk_cnd, pric_tp
               help="신용조건 (all,a,b,c,d,e,all-financing)")
 @click.option("--include-limit", "updown_incls", type=HumanChoice(RANK_CHANGE_INCLUDE_LIMIT), default="no",
               help="상하한포함 (yes,no)")
-@click.option("--price-cnd", "pric_cnd", type=HumanChoice(RANK_CHANGE_PRICE_CND), default="all",
+@click.option("--price-cond", "--price-cnd", "pric_cnd", type=HumanChoice(RANK_CHANGE_PRICE_CND), default="all",
               help="가격조건 (all,under-1k,1k-2k,2k-5k,5k-10k,over-10k,over-1k,under-10k)")
-@click.option("--amount-cnd", "trde_prica_cnd", type=HumanChoice(RANK_CHANGE_AMOUNT_CND), default="all",
+@click.option("--amount-cond", "--amount-cnd", "trde_prica_cnd", type=HumanChoice(RANK_CHANGE_AMOUNT_CND), default="all",
               help="거래대금조건 (all,30m,50m,100m,300m,500m,1b,3b,5b,10b,30b,50b = 이상)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, updown_incls, pric_cnd, trde_prica_cnd, stex_tp):
@@ -439,16 +439,16 @@ def rank_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, updown_incls, 
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
 @click.option("--sort", "sort_tp", type=HumanChoice(EXPECTED_CHANGE_SORT), default="rise-rate",
               help="정렬 (rise-rate,rise-price,flat,fall-rate,fall-price,volume,upper-limit,lower-limit)")
-@click.option("--vol-cnd", "trde_qty_cnd", type=HumanChoice(EXPECTED_CHANGE_QTY_CND), default="all",
+@click.option("--volume-cond", "--vol-cnd", "trde_qty_cnd", type=HumanChoice(EXPECTED_CHANGE_QTY_CND), default="all",
               help="거래량조건 (all,1k,3k,5k,10k,50k,100k)")
-@click.option("--stk-cnd", type=HumanChoice(EXPECTED_CHANGE_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(EXPECTED_CHANGE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-managed-preferred,"
                    "exclude-margin-100,only-margin-100,only-margin-40,only-margin-30,"
                    "only-margin-20,exclude-liquidation,only-margin-50,only-margin-60,"
                    "exclude-etf,exclude-spac,exclude-etf-etn)")
 @click.option("--credit", "crd_cnd", type=HumanChoice(EXPECTED_CHANGE_CREDIT_CND), default="all",
               help="신용조건 (all,a,b,c,d,exclude-overlimit,e,short,all-financing)")
-@click.option("--price-cnd", "pric_cnd", type=HumanChoice(EXPECTED_CHANGE_PRICE_CND), default="all",
+@click.option("--price-cond", "--price-cnd", "pric_cnd", type=HumanChoice(EXPECTED_CHANGE_PRICE_CND), default="all",
               help="가격조건 (all,under-1k,1k-2k,2k-5k,5k-10k,over-10k,over-1k,under-10k)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_expected_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, pric_cnd, stex_tp):
@@ -551,7 +551,7 @@ def rank_amount(mrkt_tp, mang_stk_incls, stex_tp):
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
 @click.option("--vol-type", "trde_qty_tp", type=HumanChoice(CREDIT_RATIO_QTY_TYPE), default="all",
               help="거래량구분 (all,10k,50k,100k,200k,300k,500k,1000k)")
-@click.option("--stk-cnd", type=HumanChoice(CREDIT_RATIO_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(CREDIT_RATIO_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
                    "only-margin-40,only-margin-30,only-margin-20)")
 @click.option("--include-limit", "updown_incls", type=HumanChoice(CREDIT_RATIO_INCLUDE_LIMIT), default="no",
@@ -813,12 +813,12 @@ def rank_investor_top(trde_tp, mrkt_tp, orgn_tp, amt_qty_tp):
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
 @click.option("--sort", "sort_base", type=HumanChoice(AFTERHOURS_CHANGE_SORT), default="rise-rate",
               help="정렬 (rise-rate=상승률, rise-price=상승폭, fall-rate=하락률, fall-price=하락폭, flat=보합)")
-@click.option("--stk-cnd", type=HumanChoice(AFTERHOURS_CHANGE_STK_CND), default="all",
+@click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(AFTERHOURS_CHANGE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-liquidation,exclude-preferred,"
                    "exclude-managed-preferred,exclude-margin-100,only-margin-100,only-margin-50,"
                    "only-margin-60,only-margin-40,only-margin-30,only-margin-20,exclude-etf,"
                    "exclude-spac,exclude-etf-etn,exclude-etn)")
-@click.option("--vol-cnd", "trde_qty_cnd", type=HumanChoice(AFTERHOURS_CHANGE_QTY_CND), default="all",
+@click.option("--volume-cond", "--vol-cnd", "trde_qty_cnd", type=HumanChoice(AFTERHOURS_CHANGE_QTY_CND), default="all",
               help="거래량조건 (all,100+,500+,1k+,5k+,10k+,50k+,100k+)")
 @click.option("--credit", "crd_cnd", type=HumanChoice(AFTERHOURS_CHANGE_CREDIT_CND), default="all",
               help="신용조건 (all,a,b,c,d,exclude-overlimit,e,short,all-financing)")
@@ -948,7 +948,7 @@ def sector_stocks(inds_cd, mrkt_tp, stex_tp):
 
 
 @sector.command("index")
-@click.option("--inds-cd", default="001", help="업종코드 (001=KOSPI종합, 101=KOSDAQ종합)")
+@click.option("--sector-code", "--inds-cd", "inds_cd", default="001", help="업종코드 (001=KOSPI종합, 101=KOSDAQ종합)")
 def sector_index(inds_cd):
     """전업종 지수. (ka20003)"""
     with KiwoomClient() as c:

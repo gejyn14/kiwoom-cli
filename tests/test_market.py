@@ -2047,3 +2047,77 @@ def test_elw_rank_right_type_call_padding_pinned_against_1digit_sibling():
     assert ELW_RIGHT_TYPE_1DIGIT["call"] == "1"
 
 
+# ============================================================
+#  Task 36 — API 약어 옵션명에 human 별칭 추가
+#  (--stock-cond/--volume-cond/--price-cond/--amount-cond/--sector-code)
+#
+#  구 이름은 별칭으로 남아 있어야 한다 — 지우면 파괴적 변경. 새 이름과
+#  구 이름이 정확히 같은 값을 전송하는지 대표 커맨드 하나씩으로 고정한다.
+# ============================================================
+
+
+def test_rank_new_highlow_stock_cond_alias_matches_old_name(runner, fake_client):
+    """--stock-cond(신규)와 --stk-cnd(구)가 같은 값을 전송해야 한다."""
+    result_new = runner.invoke(cli, [
+        "market", "rank", "new-highlow", "--stock-cond", "exclude-preferred",
+    ])
+    assert result_new.exit_code == 0
+    assert fake_client.calls[0][1]["stk_cnd"] == "3"
+
+    fake_client.calls.clear()
+    result_old = runner.invoke(cli, [
+        "market", "rank", "new-highlow", "--stk-cnd", "exclude-preferred",
+    ])
+    assert result_old.exit_code == 0
+    assert fake_client.calls[0][1]["stk_cnd"] == "3"
+
+
+def test_rank_change_volume_price_amount_cond_aliases_match_old_names(runner, fake_client):
+    """--volume-cond/--price-cond/--amount-cond(신규)가 --vol-cnd/--price-cnd/
+    --amount-cnd(구)와 같은 값을 전송해야 한다."""
+    result_new = runner.invoke(cli, [
+        "market", "rank", "change",
+        "--volume-cond", "500k", "--price-cond", "under-10k", "--amount-cond", "10b",
+    ])
+    assert result_new.exit_code == 0
+    body_new = fake_client.calls[0][1]
+    assert body_new["trde_qty_cnd"] == "0500"
+    assert body_new["pric_cnd"] == "10"
+    assert body_new["trde_prica_cnd"] == "1000"
+
+    fake_client.calls.clear()
+    result_old = runner.invoke(cli, [
+        "market", "rank", "change",
+        "--vol-cnd", "500k", "--price-cnd", "under-10k", "--amount-cnd", "10b",
+    ])
+    assert result_old.exit_code == 0
+    body_old = fake_client.calls[0][1]
+    assert body_old["trde_qty_cnd"] == "0500"
+    assert body_old["pric_cnd"] == "10"
+    assert body_old["trde_prica_cnd"] == "1000"
+
+
+def test_sector_index_sector_code_alias_matches_old_name(runner, fake_client):
+    """--sector-code(신규)와 --inds-cd(구)가 같은 값을 전송해야 한다."""
+    result_new = runner.invoke(cli, ["market", "sector", "index", "--sector-code", "101"])
+    assert result_new.exit_code == 0
+    assert fake_client.calls == [("ka20003", {"inds_cd": "101"})]
+
+    fake_client.calls.clear()
+    result_old = runner.invoke(cli, ["market", "sector", "index", "--inds-cd", "101"])
+    assert result_old.exit_code == 0
+    assert fake_client.calls == [("ka20003", {"inds_cd": "101"})]
+
+
+def test_rank_new_highlow_help_shows_human_name_first():
+    """Click은 처음 선언한 이름을 대표 이름으로 --help에 보여준다 — human
+    이름(--stock-cond)이 구 이름(--stk-cnd)보다 먼저 보여야 한다."""
+    runner_ = CliRunner()
+    result = runner_.invoke(cli, ["market", "rank", "new-highlow", "--help"])
+    assert result.exit_code == 0
+    assert "--stock-cond" in result.output
+    idx_new = result.output.index("--stock-cond")
+    idx_old = result.output.index("--stk-cnd")
+    assert idx_new < idx_old
+
+

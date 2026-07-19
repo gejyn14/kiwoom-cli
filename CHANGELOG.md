@@ -282,6 +282,18 @@ intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
   (각각 `1:전체표시`, `0:종목코드 입력종목만 표시`) 반대쪽 코드를 확인할
   수 없습니다 — raw 텍스트로 남겼습니다(자유 텍스트 그대로라 breaking
   아닙니다).
+- `market`의 API 약어 옵션 5개(`--stk-cnd`/`--vol-cnd`/`--price-cnd`/
+  `--amount-cnd`/`--inds-cd`)에 human 이름 별칭을 추가했습니다
+  (`--stock-cond`/`--volume-cond`/`--price-cond`/`--amount-cond`/
+  `--sector-code`). `--help`에는 새 이름이 대표로 뜨지만 구 이름도 계속
+  통합니다 — 전송값은 그대로입니다.
+- `account orders detail`(kt00007)/`orders status`(kt00009)/`history
+  transactions`(kt00015)의 `--exchange`가 `all`(전체, `dmst_stex_tp`=`%`)을
+  받습니다. 기존 `%`/`KRX`/`NXT`/`SOR`(kt00015는 `SOR` 제외) 호출과
+  기본값은 그대로 동작하는 순수 확대(widening)입니다. kt00007/kt00009는
+  `SOR`을 받지만 kt00015는 스펙에 없어 계속 거부됩니다 — 두 자리를
+  하나의 상수로 합치지 않고 `ACCOUNT_EXCHANGE_WITH_SOR`/
+  `ACCOUNT_EXCHANGE_NO_SOR`로 분리했습니다.
 
 
 ## [2.11.0] - 2026-07-19

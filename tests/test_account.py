@@ -195,3 +195,71 @@ def test_orders_split_detail_sends_order_no(runner, fake_client):
 
     assert result.exit_code == 0
     assert fake_client.calls == [("ka10088", {"ord_no": "0000139"})]
+
+
+# ── Task 36: account.py --exchange (dmst_stex_tp) human alias ──────
+#
+# kt00007(orders detail)/kt00009(orders status) accept SOR; kt00015
+# (history transactions) does not — the value sets must stay separate
+# (ACCOUNT_EXCHANGE_WITH_SOR vs ACCOUNT_EXCHANGE_NO_SOR in _constants.py).
+# Wire values must not change (user decision E-1): "all" is a new human
+# alias for the literal "%" that was already transmitted; "KRX"/"NXT"/"SOR"
+# continue to be transmitted verbatim.
+
+
+@pytest.mark.parametrize(
+    "exchange_arg,expected_wire",
+    [("all", "%"), ("%", "%"), ("KRX", "KRX"), ("NXT", "NXT"), ("SOR", "SOR")],
+)
+def test_orders_detail_exchange_wire_values(runner, fake_client, exchange_arg, expected_wire):
+    """orders detail (kt00007): --exchange all/%/KRX/NXT/SOR all transmit unchanged."""
+    result = runner.invoke(cli, ["account", "orders", "detail", "--exchange", exchange_arg])
+
+    assert result.exit_code == 0
+    api_id, body = fake_client.calls[0]
+    assert api_id == "kt00007"
+    assert body["dmst_stex_tp"] == expected_wire
+
+
+@pytest.mark.parametrize(
+    "exchange_arg,expected_wire",
+    [("all", "%"), ("%", "%"), ("KRX", "KRX"), ("NXT", "NXT"), ("SOR", "SOR")],
+)
+def test_orders_status_exchange_wire_values(runner, fake_client, exchange_arg, expected_wire):
+    """orders status (kt00009): --exchange all/%/KRX/NXT/SOR all transmit unchanged."""
+    result = runner.invoke(cli, ["account", "orders", "status", "--exchange", exchange_arg])
+
+    assert result.exit_code == 0
+    api_id, body = fake_client.calls[0]
+    assert api_id == "kt00009"
+    assert body["dmst_stex_tp"] == expected_wire
+
+
+@pytest.mark.parametrize(
+    "exchange_arg,expected_wire",
+    [("all", "%"), ("%", "%"), ("KRX", "KRX"), ("NXT", "NXT")],
+)
+def test_history_transactions_exchange_wire_values(runner, fake_client, exchange_arg, expected_wire):
+    """history transactions (kt00015): --exchange all/%/KRX/NXT transmit unchanged (no SOR)."""
+    result = runner.invoke(cli, [
+        "account", "history", "transactions",
+        "--from", "20260101", "--to", "20260131",
+        "--exchange", exchange_arg,
+    ])
+
+    assert result.exit_code == 0
+    api_id, body = fake_client.calls[0]
+    assert api_id == "kt00015"
+    assert body["dmst_stex_tp"] == expected_wire
+
+
+def test_history_transactions_exchange_sor_rejected(runner, fake_client):
+    """history transactions (kt00015) has no SOR in its spec — must reject it."""
+    result = runner.invoke(cli, [
+        "account", "history", "transactions",
+        "--from", "20260101", "--to", "20260131",
+        "--exchange", "SOR",
+    ])
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
