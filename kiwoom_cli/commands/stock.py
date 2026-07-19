@@ -25,6 +25,7 @@ from ._constants import (
     AMT_QTY_TP_1_2,
     AMT_QTY_TP_COMBINED,
     BY_STOCK_TOTAL_TRADE_SIDE,
+    CHART_ADJUSTED_PRICE,
     CHECK_YES_1_NO_0,
     CREDIT_GRADE,
     CREDIT_MARKET,
@@ -52,6 +53,7 @@ from ._constants import (
     OPEN_CHANGE_STK_CND,
     PERIOD_RECENT_OR_RANGE,
     PRICE_CLUSTER_CUR_PRC_ENTRY,
+    PROGRAM_TOP_SIDE,
     STK_INDS_TP,
     TODAY_EXEC_TIC_MIN,
     TODAY_PREV_1_2,
@@ -1376,15 +1378,15 @@ def consecutive(
 @investor.command("program-top")
 @click.option(
     "--trade", "trde_upper_tp",
-    type=click.Choice(["1", "2"]),
-    default="2",
-    help="매매구분 (1=순매도, 2=순매수)",
+    type=HumanChoice(PROGRAM_TOP_SIDE),
+    default="net-buy",
+    help="매매구분 (net-sell=순매도, net-buy=순매수)",
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_1_2),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--market", "mrkt_tp",
@@ -1456,9 +1458,9 @@ def chart():
 )
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
@@ -1492,9 +1494,9 @@ def chart_tick(code: str, tic_scope: str, upd_stkpc_tp: str, exchange: str | Non
 )
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--base-date", "base_dt", default="", help="기준일자 (YYYYMMDD, 선택)")
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
@@ -1527,9 +1529,9 @@ def chart_minute(code: str, tic_scope: str, upd_stkpc_tp: str, base_dt: str, exc
 @click.option("--base-date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
@@ -1558,9 +1560,9 @@ def chart_day(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, 
 @click.option("--base-date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
@@ -1589,9 +1591,9 @@ def chart_week(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None,
 @click.option("--base-date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
@@ -1620,9 +1622,9 @@ def chart_month(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None
 @click.option("--base-date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
@@ -1651,21 +1653,21 @@ def chart_year(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None,
 @click.option("--date", "dt", required=True, help="일자 (YYYYMMDD)")
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_1_2),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--trade", "trde_tp",
-    type=click.Choice(["0", "1", "2"]),
-    default="0",
-    help="매매구분 (0=순매수, 1=매수, 2=매도)",
+    type=HumanChoice(TRDE_TP_NET_BUY_BUY_SELL),
+    default="net-buy",
+    help="매매구분 (net-buy=순매수, buy=매수, sell=매도)",
 )
 @click.option(
     "--unit", "unit_tp",
-    type=click.Choice(["1000", "1"]),
-    default="1",
-    help="단위구분 (1000=천주, 1=단주)",
+    type=HumanChoice(INVESTOR_BY_STOCK_UNIT),
+    default="share",
+    help="단위구분 (thousand=천주, share=단주)",
 )
 def chart_investor(code: str, dt: str, amt_qty_tp: str, trde_tp: str, unit_tp: str):
     """종목별투자자기관별 차트 조회. (ka10060)"""
@@ -1690,15 +1692,15 @@ def chart_investor(code: str, dt: str, amt_qty_tp: str, trde_tp: str, unit_tp: s
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_1_2),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--trade", "trde_tp",
-    type=click.Choice(["0", "1", "2"]),
-    default="0",
-    help="매매구분 (0=순매수, 1=매수, 2=매도)",
+    type=HumanChoice(TRDE_TP_NET_BUY_BUY_SELL),
+    default="net-buy",
+    help="매매구분 (net-buy=순매수, buy=매수, sell=매도)",
 )
 def chart_intraday_investor(code: str, mrkt_tp: str, amt_qty_tp: str, trde_tp: str):
     """장중투자자별매매 차트 조회. (ka10064)"""

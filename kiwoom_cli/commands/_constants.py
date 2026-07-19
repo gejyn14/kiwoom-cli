@@ -63,8 +63,12 @@ GOLD_ORDER_TYPES = {"limit": "00", "ioc": "10", "fok": "20"}
 # 극성이 전부 다름). "trde_tp니까 하나로 합치자"는 절대 금지 — 이름에 코드
 # 집합을 새겨서 다른 codebook과 절대 재사용되지 않게 한다.
 # 그룹③ (0:순매수, 1:매수, 2:매도) — ka10059/ka10060/ka10064/ka10066.
-# ka10059는 Task 34a에서 실제로 연결됐다(stock.py:1041). ka10060/ka10064는
-# stock.py chart 서브그룹으로 이번 태스크 범위 밖 — 아직 raw 텍스트.
+# ka10059는 Task 34a에서 실제로 연결됐다(stock.py:1041). ka10060(chart
+# investor)/ka10064(chart intraday-investor)는 Task 34b에서 워크북 확인 후
+# 연결됐다(character-for-character 동일: "0:순매수, 1:매수, 2:매도").
+#
+# *** 이 상수는 api_id 4개가 공유한다. 한쪽 스펙만 바뀌면 이 상수를 제자리에서
+# 고치지 말고 분리할 것 — 제자리 수정은 나머지 셋을 조용히 함께 오염시킨다. ***
 TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 
 # amt_qty_tp(금액수량구분)도 API마다 극성이 다르다(표준 1:금액,2:수량 vs
@@ -74,7 +78,7 @@ TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 # 전용이며, 0:금액,1:수량 짝은 별도로 `AMT_QTY_TP_0_1`이라는 이름을 예약해
 # 둔다(ka10051 이관 시 이 이름으로 추가할 것 — 절대 이 상수를 재사용하지 말 것).
 #
-# *** 이 상수는 api_id 9개가 공유한다. 고치기 전에 9곳 전부를 확인할 것. ***
+# *** 이 상수는 api_id 12개가 공유한다. 고치기 전에 12곳 전부를 확인할 것. ***
 #   market.py:776   ka10065  amt_qty_tp   (Task 31c에서 추가)
 #   market.py:822   ka90009  amt_qty_tp   (Task 31c에서 추가)
 #   market.py:1666  ka90005  amt_qty_tp
@@ -84,12 +88,15 @@ TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 #   stock.py:1221   ka10066  amt_qty_tp
 #   stock.py:1077   ka10059  amt_qty_tp   (Task 34a에서 추가)
 #   stock.py:1112   ka10061  amt_qty_tp   (Task 34a에서 추가)
-# 아홉 시트 모두 요청 코드북은 1:금액, 2:수량으로 동일하다. 다만 표기까지 같지는
+#   stock.py         ka90003  amt_qty_tp   (Task 34b, program-top에서 추가)
+#   stock.py         ka10060  amt_qty_tp   (Task 34b, chart investor에서 추가)
+#   stock.py         ka10064  amt_qty_tp   (Task 34b, chart intraday-investor에서 추가)
+# 열두 시트 모두 요청 코드북은 1:금액, 2:수량으로 동일하다. 다만 표기까지 같지는
 # 않다 — ka90009 시트는 "1:금액(천만), 2:수량(천)"으로 적혀 있는데, 괄호 안은
 # 응답 단위 주석이지 요청 코드가 아니다. required 여부도 갈린다(ka10065는
 # Required=N, ka90009/ka90007/ka90008은 Required=Y). 값이 같으니 공유는
 # 정당하지만, 나중에 한 api_id의 스펙만 바뀌면 이 상수를 제자리에서 고치지
-# 말고 분리할 것 — 제자리 수정은 나머지 여섯을 조용히 함께 오염시킨다.
+# 말고 분리할 것 — 제자리 수정은 나머지 열하나를 조용히 함께 오염시킨다.
 #
 # ka90013(종목일별프로그램매매추이)도 같은 필드·값을 쓰지만 스펙상
 # Required=N이고 기존 기본값이 빈 문자열 ""이다(Required=Y인 위 7곳은 전부
@@ -121,7 +128,9 @@ PERIOD_RECENT_OR_RANGE = {
 
 # ka10131(stock.py) 전용 — netslmt_tp(순매수구분)는 스펙상 "2:순매수(고정값)"
 # 하나뿐이라 다른 선택지가 없다. 다른 endpoint의 순매수/순매도 계열
-# trde_tp 코드북들과는 완전히 별개 필드이니 혼용 금지.
+# trde_tp 코드북들과는 완전히 별개 필드이니 혼용 금지. Task 34b가 추가한
+# PROGRAM_TOP_SIDE({net-sell:1,net-buy:2})의 진짜 부분집합이다(클로저
+# 스크립트로 확인, net-buy:2가 겹친다) — "net-sell" 거부 테스트로 방어.
 NETSLMT_TP_NET_BUY_ONLY = {"net-buy": "2"}
 
 # ka10131(stock.py) 전용 — stk_inds_tp(종목업종구분).
@@ -1177,6 +1186,10 @@ ELW_BALANCE_RANK_SORT = {"buy-balance": "1", "sell-balance": "2"}
 #
 # *** 이 상수는 api_id 4개가 공유한다(ka50079/81/82/83). ka50080은 위 이유로
 # 제외. 한쪽 스펙만 바뀌면 이 상수를 제자리에서 고치지 말고 분리할 것. ***
+#
+# CHART_ADJUSTED_PRICE(stock.py chart 서브그룹, ka10079/80/81/82/83/94, Task
+# 34b)와 값이 완전히 동일하다({raw:0, adjusted:1}) — 구분 불가 클러스터.
+# 금현물(gold)과 국내주식(stock) chart는 별개 상품군이라 절대 합치지 말 것.
 GOLD_PRICE_TYPE = {"raw": "0", "adjusted": "1"}
 
 # ── ka10086/ka10084/ka10055/ka10025/ka10028/ka10052/ka10054/ka10011/
@@ -1365,13 +1378,15 @@ DAILY_BY_INVESTOR_TYPE = {
     "other-corporate": "7100", "institution": "9999",
 }
 
-# ka10059(종목별투자자기관별)/ka10061(종목별투자자기관별합계) 공용 —
-# unit_tp(단위구분, 1000:천주,1:단주). 두 시트 모두 워크북에서
-# character-for-character 동일함을 확인했다. SAME_NET_TRADE_UNIT
-# (ka10062, 값은 같으나 필드명·api_id가 다름)과는 절대 합치지 말 것.
+# ka10059(종목별투자자기관별)/ka10061(종목별투자자기관별합계)/ka10060(chart
+# investor, Task 34b에서 워크북 확인 후 추가) 공용 — unit_tp(단위구분,
+# 1000:천주,1:단주). 세 시트 모두 워크북에서 character-for-character
+# 동일함을 확인했다. SAME_NET_TRADE_UNIT(ka10062, 값은 같으나 필드명·
+# api_id가 다름)과는 절대 합치지 말 것.
 #
-# *** 이 상수는 api_id 2개가 공유한다(ka10059/ka10061). 한쪽 스펙만
-# 바뀌면 이 상수를 제자리에서 고치지 말고 분리할 것. ***
+# *** 이 상수는 api_id 3개가 공유한다(ka10059/ka10061/ka10060). 한쪽
+# 스펙만 바뀌면 이 상수를 제자리에서 고치지 말고 분리할 것 — 제자리 수정은
+# 나머지 둘을 조용히 함께 오염시킨다. ***
 INVESTOR_BY_STOCK_UNIT = {"thousand": "1000", "share": "1"}
 
 # ka10061(종목별투자자기관별합계) 전용 — trde_tp(매매구분). 스펙에는
@@ -1386,4 +1401,40 @@ BY_STOCK_TOTAL_TRADE_SIDE = {"net-buy": "0"}
 # 2:매도)는 AMT_QTY_TP_1_2/TRDE_TP_NET_BUY_BUY_SELL을 공유한다(위
 # 두 상수의 커플링 주석에 이미 두 api_id가 예약돼 있었다) — 별도 상수를
 # 만들지 않는다. AMT_QTY_TP_1_2는 이제 9곳(기존 7 + ka10059/ka10061)이
-# 공유한다.
+# 공유한다(Task 34b가 여기에 ka90003/ka10060/ka10064 세 곳을 추가로 얹어
+# 12곳이 됐다 — 위 AMT_QTY_TP_1_2 정의부 커플링 주석 참고).
+
+# ── Task 34b — stock program_top/chart_*/lending HumanChoice 전환 ──────
+
+# ka90003(프로그램순매수상위50) 전용 — trde_upper_tp(매매상위구분,
+# 1:순매도상위, 2:순매수상위). 값 집합이 BROKER_BY_STOCK_SIDE(ka10038)/
+# FOREIGN_CONSECUTIVE_SIDE(ka10035)/INVESTOR_DAILY_TRADE_SIDE(ka10044)/
+# DAILY_BY_INVESTOR_TRADE_SIDE(ka10058)와 완전히 동일해 어떤 테스트로도
+# 구분할 수 없다(구분 불가 클러스터) — 그래도 필드명(trde_upper_tp vs
+# qry_tp/dt/trde_tp)과 api_id가 전부 다른 별개 개념이니 절대 합치지 말 것.
+# ELW_BROKER_SIDE(ka30002, {net-buy:1,net-sell:2})/FOREIGN_BROKER_SIDE
+# (ka10039)/BROKER_TOP_SIDE(ka10039 다른 필드)/SAME_NET_TRADE_SIDE(ka10062)/
+# INVESTOR_TOP_SIDE(ka10065)와는 키 집합은 같고 값이 정반대(극성 해저드,
+# 클로저 스크립트로 5개 전부 확인) — 기본값이 아닌 이름까지 wire 값을
+# 리터럴로 고정하는 테스트로 방어한다(하나를 고정하면 나머지 넷도 같은
+# 극성 검사로 함께 막힌다). PROGRAM_TOP_SIDE는 FOREIGN_PERIOD_SIDE(ka10034,
+# {net-sell:1,net-buy:2,net-trade:3})의 진짜 부분집합이기도 하다 — "net-trade"
+# 거부 테스트로 방어. 1곳: ka90003(옵션명 --trade 유지).
+PROGRAM_TOP_SIDE = {"net-sell": "1", "net-buy": "2"}
+
+# ka10079(틱차트)/ka10080(분봉차트)/ka10081(일봉차트)/ka10082(주봉차트)/
+# ka10083(월봉차트)/ka10094(년봉차트) 공용 — upd_stkpc_tp(수정주가구분,
+# 0 or 1). 여섯 시트 모두 워크북 Description이 "0 or 1"로 동일하고,
+# ka10081 시트의 개요 문단이 "1"=수정주가적용, 미기재(0)=미적용임을
+# 명시적으로 설명한다(예시: 삼성전자 액면분할 사례). 여섯 시트가 전부
+# character-for-character 동일한 2-값 코드북이라 하나로 공유한다(31b가
+# ka10034/36/37의 dt를 공유했던 것과 같은 패턴).
+#
+# *** 이 상수는 api_id 6개가 공유한다. 한쪽 스펙만 바뀌면 이 상수를 제자리
+# 에서 고치지 말고 분리할 것 — 제자리 수정은 나머지 다섯을 조용히 함께
+# 오염시킨다. ***
+#
+# GOLD_PRICE_TYPE(market.py gold 틱·일·주·월봉차트, ka50079/81/82/83)과
+# 값이 완전히 동일하다({raw:0, adjusted:1}) — 구분 불가 클러스터. 금현물과
+# 국내주식은 별개 상품군이라 절대 합치지 말 것.
+CHART_ADJUSTED_PRICE = {"raw": "0", "adjusted": "1"}
