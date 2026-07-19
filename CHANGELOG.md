@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.10.1] - 2026-07-19
+
 금현물 주문(`order gold buy`/`sell`, kt50000/kt50001)이 API가 받지 않는 주문타입을
 `--type`에 노출하던 결함을 수정했습니다 (live money-path 핫픽스).
 
