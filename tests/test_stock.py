@@ -646,12 +646,18 @@ def test_trader_analysis_broker_required_no_request_sent(runner, fake_client):
     assert fake_client.calls == []
 
 
-def test_trader_analysis_days_5d_sends_5_not_4(runner, fake_client):
-    """--days 5d는 dt="5"를 보내야 한다 (ka10038의 off-by-one 코드북과 달리 5일=5)."""
+def test_trader_analysis_days_5_sends_5_not_4(runner, fake_client):
+    """--days 5는 dt="5"를 보내야 한다 (ka10038의 off-by-one 코드북과 달리 5일=5).
+
+    Task 34a: --days(dt)는 I2 규칙(값→라벨이 단위접미사 부착만으로 유도되는
+    폐쇄집합은 수량 유지) 재적용으로 HumanChoice를 걷어내고 raw 텍스트로
+    되돌렸다 — market.py:503(ka10042, 동일 필드·동일 패턴)과 일관되게 맞춘
+    것이다. "5d" 같은 human 이름은 더 이상 받지 않는다(아래
+    test_trader_analysis_days_human_name_no_longer_accepted 참고)."""
     result = runner.invoke(cli, [
         "stock", "analysis", "trader-analysis", "005930",
         "--from", "20260101", "--to", "20260107", "--broker", "001",
-        "--days", "5d",
+        "--days", "5",
     ])
 
     assert result.exit_code == 0
@@ -695,13 +701,855 @@ def test_trader_analysis_sort_close_human_name(runner, fake_client):
     assert fake_client.calls[0][1]["sort_base"] == "1"
 
 
-def test_trader_analysis_days_raw_code_backcompat(runner, fake_client):
-    """하위호환: --days 5(원시 코드)도 통과해 dt="5"를 보내야 한다."""
+def test_trader_analysis_days_default_unchanged(runner, fake_client):
+    """--days 기본 호출은 변경 전과 동일하게 dt="20"을 보내야 한다(전송 바이트 불변)."""
     result = runner.invoke(cli, [
         "stock", "analysis", "trader-analysis", "005930",
         "--from", "20260101", "--to", "20260107", "--broker", "001",
-        "--days", "5",
     ])
 
     assert result.exit_code == 0
-    assert fake_client.calls[0][1]["dt"] == "5"
+    assert fake_client.calls[0][1]["dt"] == "20"
+
+
+def test_trader_analysis_days_human_name_no_longer_mapped(runner, fake_client):
+    """--days(dt)는 Task 34a에서 raw 텍스트로 되돌아갔다 — "5d" 같은 human 이름은
+    이제 매핑되지 않고 그대로(미변환) 전송된다(ka10042와 동일한 자기서술적
+    수량 취급, I2 규칙)."""
+    result = runner.invoke(cli, [
+        "stock", "analysis", "trader-analysis", "005930",
+        "--from", "20260101", "--to", "20260107", "--broker", "001",
+        "--days", "5d",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == "5d"
+
+
+# ============================================================
+#  Task 34a — HumanChoice 전환 (daily_price ~ by_stock_total)
+# ============================================================
+
+
+# ── daily-price (ka10086) ────────────────────────────────
+
+
+def test_daily_price_default_sends_indc_tp_zero(runner, fake_client):
+    """기본 호출은 종전과 동일하게 indc_tp="0"(수량)을 보내야 한다."""
+    result = runner.invoke(cli, ["stock", "daily-price", "005930", "--date", "20260101"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        ("ka10086", {"stk_cd": "005930", "qry_dt": "20260101", "indc_tp": "0"})
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("quantity", "0"), ("amount", "1")])
+def test_daily_price_display_enum(runner, fake_client, cli_value, api_value):
+    """--display quantity/amount가 indc_tp 0/1로 매핑되어야 한다 (리터럴 핀 —
+    AMT_QTY_TP_0_1(0:금액,1:수량)과 극성이 반대라 자기참조 테스트로는 못
+    잡는다)."""
+    result = runner.invoke(
+        cli, ["stock", "daily-price", "005930", "--date", "20260101", "--display", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["indc_tp"] == api_value
+
+
+def test_daily_price_display_raw_code_backcompat(runner, fake_client):
+    """--display 1(원시 코드)도 통과해 indc_tp="1"을 보내야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "daily-price", "005930", "--date", "20260101", "--display", "1"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["indc_tp"] == "1"
+
+
+# ── today-exec (ka10084) / today-volume (ka10055) ────────
+
+
+def test_today_exec_default_sends_today_tick(runner, fake_client):
+    """기본 호출은 종전과 동일하게 tdy_pred="1", tic_min="0"을 보내야 한다."""
+    result = runner.invoke(cli, ["stock", "today-exec", "005930"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        ("ka10084", {"stk_cd": "005930", "tdy_pred": "1", "tic_min": "0"})
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("today", "1"), ("previous", "2")])
+def test_today_exec_when_enum_literal(runner, fake_client, cli_value, api_value):
+    """--when today/previous가 tdy_pred 1/2로 매핑되어야 한다 (리터럴 핀 —
+    TODAY_PREV_1_2는 다른 today/previous 계열(today:0,previous:1)과 극성이
+    반대라 자기참조 테스트로는 극성 뒤바뀜을 못 잡는다)."""
+    result = runner.invoke(cli, ["stock", "today-exec", "005930", "--when", cli_value])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["tdy_pred"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("tick", "0"), ("minute", "1")])
+def test_today_exec_mode_enum_literal(runner, fake_client, cli_value, api_value):
+    """--mode tick/minute이 tic_min 0/1로 매핑되어야 한다 (리터럴 핀)."""
+    result = runner.invoke(cli, ["stock", "today-exec", "005930", "--mode", cli_value])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["tic_min"] == api_value
+
+
+def test_today_volume_default_sends_today(runner, fake_client):
+    """기본 호출은 종전과 동일하게 tdy_pred="1"을 보내야 한다."""
+    result = runner.invoke(cli, ["stock", "today-volume", "005930"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [("ka10055", {"stk_cd": "005930", "tdy_pred": "1"})]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("today", "1"), ("previous", "2")])
+def test_today_volume_when_enum_literal(runner, fake_client, cli_value, api_value):
+    """--when today/previous가 tdy_pred 1/2로 매핑되어야 한다 (리터럴 핀,
+    today-exec와 TODAY_PREV_1_2를 공유 — 2개 api_id 커플링)."""
+    result = runner.invoke(cli, ["stock", "today-volume", "005930", "--when", cli_value])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["tdy_pred"] == api_value
+
+
+# ── analysis price-cluster (ka10025) ─────────────────────
+
+
+def test_price_cluster_default_sends_cur_prc_entry_zero(runner, fake_client):
+    """기본 호출은 종전과 동일하게 cur_prc_entry="0"(미포함)을 보내야 한다."""
+    result = runner.invoke(cli, ["stock", "analysis", "price-cluster"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10025",
+            {
+                "mrkt_tp": "000", "prps_cnctr_rt": "50", "cur_prc_entry": "0",
+                "prpscnt": "5", "cycle_tp": "100", "stex_tp": "3",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("yes", "1"), ("no", "0")])
+def test_price_cluster_include_current_enum(runner, fake_client, cli_value, api_value):
+    """--include-current yes/no가 cur_prc_entry 1/0로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "price-cluster", "--include-current", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["cur_prc_entry"] == api_value
+
+
+# ── analysis open-change (ka10028) ───────────────────────
+
+
+def test_open_change_default_body_after_qty_cnd_fix(runner, fake_client):
+    """기본 호출 바디 (trde_qty_cnd 결함 수정 후).
+
+    --volume-cond(trde_qty_cnd)는 전환 전 자유 텍스트로 기본값 raw "0"을
+    보내고 있었는데, 스펙(4자리 zero-pad)에는 "0"이 없고 "0000"이 전체조회다
+    — Task 31b의 RANK_CHANGE_QTY_CND와 동일한 패턴의 결함이라 여기서도
+    "0000"으로 교정했다(전송 바이트가 바뀌는 fix, CHANGELOG 기재 대상).
+    나머지 필드는 전송값이 종전과 동일하다.
+    """
+    result = runner.invoke(cli, ["stock", "analysis", "open-change"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10028",
+            {
+                "sort_tp": "1", "trde_qty_cnd": "0000", "mrkt_tp": "000",
+                "updown_incls": "0", "stk_cnd": "0", "crd_cnd": "0",
+                "trde_prica_cnd": "0", "flu_cnd": "1", "stex_tp": "3",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("open", "1"), ("high", "2"), ("low", "3"), ("base", "4")],
+)
+def test_open_change_sort_enum_literal(runner, fake_client, cli_value, api_value):
+    """--sort open/high/low/base가 sort_tp 1/2/3/4로 매핑되어야 한다 (리터럴
+    핀 — NEAR_HIGHLOW_KIND(high:1,low:2)와 high/low 키가 겹치지만 값이 다르다,
+    극성 해저드)."""
+    result = runner.invoke(cli, ["stock", "analysis", "open-change", "--sort", cli_value])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["sort_tp"] == api_value
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("all", "0000"), ("10k", "0010"), ("1000k", "1000")],
+)
+def test_open_change_volume_cond_enum(runner, fake_client, cli_value, api_value):
+    """--volume-cond의 human 이름이 4자리 zero-pad trde_qty_cnd로 매핑되어야
+    한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "open-change", "--volume-cond", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_qty_cnd"] == api_value
+
+
+def test_open_change_volume_cond_rejects_sibling_only_value(runner, fake_client):
+    """OPEN_CHANGE_QTY_CND는 RANK_CHANGE_QTY_CND(ka10027)의 진짜 부분집합이다
+    — "150k"는 RANK_CHANGE_QTY_CND에만 있고 여기엔 없으므로 거부돼야 한다.
+    형제 상수로 바꿔치기하면(OPEN_CHANGE_QTY_CND -> RANK_CHANGE_QTY_CND) 이
+    테스트가 실패한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "open-change", "--volume-cond", "150k"]
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("yes", "1"), ("no", "0")])
+def test_open_change_include_limit_enum(runner, fake_client, cli_value, api_value):
+    """--include-limit yes/no가 updown_incls 1/0로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "open-change", "--include-limit", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["updown_incls"] == api_value
+
+
+def test_open_change_stock_cond_rejects_sibling_only_value(runner, fake_client):
+    """OPEN_CHANGE_STK_CND(9개 값)는 RANK_CHANGE_STK_CND(ka10027,
+    15개 값)의 진짜 부분집합이다 — "exclude-liquidation"은 저쪽에만 있으므로
+    여기서는 거부돼야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "open-change", "--stock-cond", "exclude-liquidation"]
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+def test_open_change_stock_cond_accepts_all_nine_values(runner, fake_client):
+    """OPEN_CHANGE_STK_CND의 9개 값 전부가 stk_cnd로 매핑되어야 한다(자유
+    텍스트 -> enum 전환의 커버리지 확인, breaking 표기 근거)."""
+    expected = {
+        "all": "0", "exclude-managed": "1", "exclude-preferred": "3",
+        "exclude-managed-preferred": "4", "exclude-margin-100": "5",
+        "only-margin-100": "6", "only-margin-40": "7", "only-margin-30": "8",
+        "only-margin-20": "9",
+    }
+    for name, code in expected.items():
+        result = runner.invoke(
+            cli, ["stock", "analysis", "open-change", "--stock-cond", name]
+        )
+        assert result.exit_code == 0
+        assert fake_client.calls[-1][1]["stk_cnd"] == code
+
+
+def test_open_change_credit_cond_rejects_sibling_only_value(runner, fake_client):
+    """OPEN_CHANGE_CREDIT_CND(7개 값)는 EXPECTED_CHANGE_CREDIT_CND/
+    AFTERHOURS_CHANGE_CREDIT_CND(9개 값, ka10029/ka10098)의 진짜 부분집합
+    이다 — "short"/"exclude-overlimit"은 저쪽에만 있으므로 여기서는 거부돼야
+    한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "open-change", "--credit-cond", "short"]
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("all", "0"), ("a", "1"), ("e", "7"), ("all-financing", "9")],
+)
+def test_open_change_credit_cond_enum(runner, fake_client, cli_value, api_value):
+    """--credit-cond human 이름이 crd_cnd로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "open-change", "--credit-cond", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["crd_cnd"] == api_value
+
+
+def test_open_change_amount_cond_50m_literal_pin(runner, fake_client):
+    """--amount-cond 50m이 trde_prica_cnd="5"로 매핑되어야 한다 (리터럴 핀 —
+    VOLUME_RANK_AMOUNT_TYPE(ka10030)의 키 집합을 포함하지만 "50m"만 값이
+    다르다(거기는 "4"), 극성 해저드). 자기참조 테스트로는 이 뒤바뀜을 못
+    잡는다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "open-change", "--amount-cond", "50m"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_prica_cnd"] == "5"
+    assert fake_client.calls[0][1]["trde_prica_cnd"] != "4"
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("all", "0"), ("30m", "3"), ("1b", "100"), ("50b", "5000")],
+)
+def test_open_change_amount_cond_enum(runner, fake_client, cli_value, api_value):
+    """--amount-cond human 이름이 trde_prica_cnd로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "open-change", "--amount-cond", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_prica_cnd"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("top", "1"), ("bottom", "2")])
+def test_open_change_direction_enum(runner, fake_client, cli_value, api_value):
+    """--direction top/bottom이 flu_cnd 1/2로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "open-change", "--direction", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["flu_cnd"] == api_value
+
+
+# ── analysis instant-volume (ka10052) ────────────────────
+
+
+def test_instant_volume_default_body(runner, fake_client):
+    """기본 호출 바디는 종전과 동일해야 한다 (qty_tp는 이번 태스크에서 미전환
+    -- 코드 3/5 라벨 미확인)."""
+    result = runner.invoke(cli, ["stock", "analysis", "instant-volume", "--broker", "001"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10052",
+            {"mmcm_cd": "001", "mrkt_tp": "0", "qty_tp": "0", "pric_tp": "0", "stex_tp": "3"},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("all", "0"), ("kospi", "1"), ("kosdaq", "2"), ("stock", "3")],
+)
+def test_instant_volume_market_enum_literal(runner, fake_client, cli_value, api_value):
+    """--market이 mrkt_tp로 매핑되어야 한다 (리터럴 핀 — mrkt_tp는 이
+    코드베이스에 최소 4개의 서로 다른 코드북이 있다, MARKET_ALL/MARKET_TWO/
+    SECTOR_PRICE_MARKET 등과 절대 합치면 안 됨)."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "instant-volume", "--broker", "001", "--market", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mrkt_tp"] == api_value
+
+
+def test_instant_volume_price_type_rejects_sibling_only_value(runner, fake_client):
+    """INSTANT_VOLUME_PRICE_TYPE(7개 값)는 RANK_CHANGE_PRICE_CND/
+    EXPECTED_CHANGE_PRICE_CND(8개 값, ka10027/ka10029)의 진짜 부분집합이다
+    — "under-10k"는 저쪽에만 있으므로 여기서는 거부돼야 한다."""
+    result = runner.invoke(
+        cli,
+        ["stock", "analysis", "instant-volume", "--broker", "001", "--price-type", "under-10k"],
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("all", "0"), ("under-1k", "1"), ("over-1k", "8"), ("over-10k", "5")],
+)
+def test_instant_volume_price_type_enum(runner, fake_client, cli_value, api_value):
+    """--price-type human 이름이 pric_tp로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "instant-volume", "--broker", "001", "--price-type", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["pric_tp"] == api_value
+
+
+# ── analysis vi-trigger (ka10054) ────────────────────────
+
+
+def test_vi_trigger_default_body(runner, fake_client):
+    """기본 호출 바디는 종전과 동일해야 한다."""
+    result = runner.invoke(cli, ["stock", "analysis", "vi-trigger"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10054",
+            {
+                "mrkt_tp": "000", "bf_mkrt_tp": "0", "motn_tp": "0", "skip_stk": "0",
+                "trde_qty_tp": "0", "trde_prica_tp": "0", "motn_drc": "0", "stex_tp": "3",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("all", "0"), ("regular", "1"), ("after-hours", "2")],
+)
+def test_vi_trigger_session_enum_literal(runner, fake_client, cli_value, api_value):
+    """--session이 bf_mkrt_tp로 매핑되어야 한다 (리터럴 핀 — VOLUME_RANK_SESSION
+    (ka10030)과 all/regular는 값이 같지만 after-hours만 다르다(거기는 "3"),
+    극성 해저드)."""
+    result = runner.invoke(cli, ["stock", "analysis", "vi-trigger", "--session", cli_value])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["bf_mkrt_tp"] == api_value
+
+
+def test_vi_trigger_session_after_hours_not_three(runner, fake_client):
+    """--session after-hours는 bf_mkrt_tp="2"여야 한다 ("3"이 아님 —
+    VOLUME_RANK_SESSION과 바꿔치기하면 "3"이 나가 이 테스트가 실패한다)."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "vi-trigger", "--session", "after-hours"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["bf_mkrt_tp"] == "2"
+    assert fake_client.calls[0][1]["bf_mkrt_tp"] != "3"
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("all", "0"), ("static", "1"), ("dynamic", "2"), ("both", "3")],
+)
+def test_vi_trigger_type_enum(runner, fake_client, cli_value, api_value):
+    """--trigger-type이 motn_tp로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "vi-trigger", "--trigger-type", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["motn_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("yes", "1"), ("no", "0")])
+def test_vi_trigger_volume_type_enum(runner, fake_client, cli_value, api_value):
+    """--volume-type yes/no가 trde_qty_tp 1/0로 매핑되어야 한다 (자유 텍스트
+    -> enum 전환, breaking)."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "vi-trigger", "--volume-type", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_qty_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("yes", "1"), ("no", "0")])
+def test_vi_trigger_amount_type_enum(runner, fake_client, cli_value, api_value):
+    """--amount-type yes/no가 trde_prica_tp 1/0로 매핑되어야 한다 (자유 텍스트
+    -> enum 전환, breaking)."""
+    result = runner.invoke(
+        cli, ["stock", "analysis", "vi-trigger", "--amount-type", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_prica_tp"] == api_value
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value", [("all", "0"), ("rise", "1"), ("fall", "2")]
+)
+def test_vi_trigger_direction_enum(runner, fake_client, cli_value, api_value):
+    """--direction이 motn_drc로 매핑되어야 한다."""
+    result = runner.invoke(cli, ["stock", "analysis", "vi-trigger", "--direction", cli_value])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["motn_drc"] == api_value
+
+
+# ── analysis warrant (ka10011) ───────────────────────────
+
+
+def test_warrant_default_sends_all(runner, fake_client):
+    """기본 호출은 종전과 동일하게 newstk_recvrht_tp="00"을 보내야 한다."""
+    result = runner.invoke(cli, ["stock", "analysis", "warrant"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [("ka10011", {"newstk_recvrht_tp": "00"})]
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("all", "00"), ("warrant-security", "05"), ("warrant-certificate", "07")],
+)
+def test_warrant_type_enum(runner, fake_client, cli_value, api_value):
+    """--type human 이름이 newstk_recvrht_tp로 매핑되어야 한다."""
+    result = runner.invoke(cli, ["stock", "analysis", "warrant", "--type", cli_value])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["newstk_recvrht_tp"] == api_value
+
+
+# ── investor daily-trade (ka10044) ───────────────────────
+
+
+def test_investor_daily_trade_default_sends_net_buy(runner, fake_client):
+    """기본 호출은 종전과 동일하게 trde_tp="2"(순매수)를 보내야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "daily-trade", "--from", "20260101", "--to", "20260107"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10044",
+            {
+                "strt_dt": "20260101", "end_dt": "20260107", "trde_tp": "2",
+                "mrkt_tp": "001", "stex_tp": "3",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("net-sell", "1"), ("net-buy", "2")])
+def test_investor_daily_trade_trade_enum_literal(runner, fake_client, cli_value, api_value):
+    """--trade net-sell/net-buy가 trde_tp 1/2로 매핑되어야 한다 (리터럴 핀 —
+    BROKER_TOP_SIDE(net-buy:1,net-sell:2)와 극성이 정반대라 자기참조
+    테스트로는 뒤바뀜을 못 잡는다)."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "daily-trade", "--from", "20260101", "--to", "20260107",
+              "--trade", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == api_value
+
+
+def test_investor_daily_trade_rejects_net_trade(runner, fake_client):
+    """INVESTOR_DAILY_TRADE_SIDE는 FOREIGN_PERIOD_SIDE(ka10034)의 진짜
+    부분집합이다 — "net-trade"(3)는 저쪽에만 있으므로 거부돼야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "daily-trade", "--from", "20260101", "--to", "20260107",
+              "--trade", "net-trade"]
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+# ── investor stock-institution (ka10045) ─────────────────
+
+
+def test_stock_institution_trend_default_sends_buy(runner, fake_client):
+    """기본 호출은 종전과 동일하게 orgn_prsm_unp_tp="1", for_prsm_unp_tp="1"을
+    보내야 한다."""
+    result = runner.invoke(
+        cli,
+        [
+            "stock", "investor", "stock-institution", "005930",
+            "--from", "20260101", "--to", "20260107",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10045",
+            {
+                "stk_cd": "005930", "strt_dt": "20260101", "end_dt": "20260107",
+                "orgn_prsm_unp_tp": "1", "for_prsm_unp_tp": "1",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("buy", "1"), ("sell", "2")])
+def test_stock_institution_trend_inst_price_enum_literal(
+    runner, fake_client, cli_value, api_value
+):
+    """--inst-price buy/sell이 orgn_prsm_unp_tp 1/2로 매핑되어야 한다 (리터럴
+    핀 — TRADE_SIDE(all:0,sell:1,buy:2)/FOREIGN_BROKER_SIDE(buy:3,sell:4)와
+    키가 겹치지만 값이 다르다, 극성 해저드)."""
+    result = runner.invoke(
+        cli,
+        [
+            "stock", "investor", "stock-institution", "005930",
+            "--from", "20260101", "--to", "20260107", "--inst-price", cli_value,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["orgn_prsm_unp_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("buy", "1"), ("sell", "2")])
+def test_stock_institution_trend_foreign_price_enum_literal(
+    runner, fake_client, cli_value, api_value
+):
+    """--foreign-price buy/sell이 for_prsm_unp_tp 1/2로 매핑되어야 한다 (리터럴
+    핀, INST_FOREIGN_PRICE_TYPE을 --inst-price와 공유)."""
+    result = runner.invoke(
+        cli,
+        [
+            "stock", "investor", "stock-institution", "005930",
+            "--from", "20260101", "--to", "20260107", "--foreign-price", cli_value,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["for_prsm_unp_tp"] == api_value
+
+
+def test_stock_institution_trend_rejects_net_buy(runner, fake_client):
+    """INST_FOREIGN_PRICE_TYPE(buy/sell)은 TRDE_TP_NET_BUY_BUY_SELL
+    (net-buy/buy/sell)의 진짜 부분집합이다 — "net-buy"는 저쪽에만 있으므로
+    거부돼야 한다."""
+    result = runner.invoke(
+        cli,
+        [
+            "stock", "investor", "stock-institution", "005930",
+            "--from", "20260101", "--to", "20260107", "--inst-price", "net-buy",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+# ── investor daily-by-investor (ka10058) ─────────────────
+
+
+def test_daily_by_investor_default_body(runner, fake_client):
+    """기본 호출 바디는 종전과 동일해야 한다 (trde_tp="2", invsr_tp="9000")."""
+    result = runner.invoke(
+        cli,
+        ["stock", "investor", "daily-by-investor", "--from", "20260101", "--to", "20260107"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10058",
+            {
+                "strt_dt": "20260101", "end_dt": "20260107", "trde_tp": "2",
+                "mrkt_tp": "001", "invsr_tp": "9000", "stex_tp": "3",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("net-sell", "1"), ("net-buy", "2")])
+def test_daily_by_investor_trade_enum_literal(runner, fake_client, cli_value, api_value):
+    """--trade net-sell/net-buy가 trde_tp 1/2로 매핑되어야 한다 (리터럴 핀 —
+    BROKER_TOP_SIDE와 극성이 정반대인 클러스터라 자기참조 테스트로는
+    못 잡는다)."""
+    result = runner.invoke(
+        cli,
+        [
+            "stock", "investor", "daily-by-investor",
+            "--from", "20260101", "--to", "20260107", "--trade", cli_value,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == api_value
+
+
+def test_daily_by_investor_trade_rejects_net_trade(runner, fake_client):
+    """DAILY_BY_INVESTOR_TRADE_SIDE는 FOREIGN_PERIOD_SIDE(ka10034)의 진짜
+    부분집합이다 — "net-trade"(3)는 저쪽에만 있으므로 거부돼야 한다."""
+    result = runner.invoke(
+        cli,
+        [
+            "stock", "investor", "daily-by-investor",
+            "--from", "20260101", "--to", "20260107", "--trade", "net-trade",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [
+        ("individual", "8000"), ("foreign", "9000"), ("financial-investment", "1000"),
+        ("investment-trust", "3000"), ("private-fund", "3100"), ("other-financial", "5000"),
+        ("bank", "4000"), ("insurance", "2000"), ("pension", "6000"), ("state", "7000"),
+        ("other-corporate", "7100"), ("institution", "9999"),
+    ],
+)
+def test_daily_by_investor_type_enum(runner, fake_client, cli_value, api_value):
+    """--investor-type의 human 이름 12종이 invsr_tp로 매핑되어야 한다 (자유
+    텍스트 -> enum 전환, breaking)."""
+    result = runner.invoke(
+        cli,
+        [
+            "stock", "investor", "daily-by-investor",
+            "--from", "20260101", "--to", "20260107", "--investor-type", cli_value,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["invsr_tp"] == api_value
+
+
+def test_daily_by_investor_type_default_unchanged(runner, fake_client):
+    """--investor-type 기본 호출은 변경 전과 동일하게 invsr_tp="9000"을
+    보내야 한다."""
+    result = runner.invoke(
+        cli,
+        ["stock", "investor", "daily-by-investor", "--from", "20260101", "--to", "20260107"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["invsr_tp"] == "9000"
+
+
+# ── investor by-stock (ka10059) / by-stock-total (ka10061) ──
+
+
+def test_by_stock_default_body(runner, fake_client):
+    """기본 호출 바디는 종전과 동일해야 한다 (amt_qty_tp="1", trde_tp="0",
+    unit_tp="1")."""
+    result = runner.invoke(cli, ["stock", "investor", "by-stock", "005930", "--date", "20260101"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10059",
+            {
+                "dt": "20260101", "stk_cd": "005930", "amt_qty_tp": "1",
+                "trde_tp": "0", "unit_tp": "1",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("amount", "1"), ("quantity", "2")])
+def test_by_stock_amount_qty_enum(runner, fake_client, cli_value, api_value):
+    """--amount-qty가 amt_qty_tp로 매핑되어야 한다 (AMT_QTY_TP_1_2 공유, 이번
+    태스크에서 ka10059로 확장)."""
+    result = runner.invoke(
+        cli,
+        ["stock", "investor", "by-stock", "005930", "--date", "20260101",
+         "--amount-qty", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value", [("net-buy", "0"), ("buy", "1"), ("sell", "2")]
+)
+def test_by_stock_trade_enum(runner, fake_client, cli_value, api_value):
+    """--trade가 trde_tp로 매핑되어야 한다 (TRDE_TP_NET_BUY_BUY_SELL 공유,
+    이번 태스크에서 ka10059로 확장)."""
+    result = runner.invoke(
+        cli,
+        ["stock", "investor", "by-stock", "005930", "--date", "20260101",
+         "--trade", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("thousand", "1000"), ("share", "1")])
+def test_by_stock_unit_enum(runner, fake_client, cli_value, api_value):
+    """--unit thousand/share가 unit_tp 1000/1로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli,
+        ["stock", "investor", "by-stock", "005930", "--date", "20260101",
+         "--unit", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["unit_tp"] == api_value
+
+
+def test_by_stock_total_default_body(runner, fake_client):
+    """기본 호출 바디는 종전과 동일해야 한다 (amt_qty_tp="1", trde_tp="0",
+    unit_tp="1")."""
+    result = runner.invoke(
+        cli,
+        ["stock", "investor", "by-stock-total", "005930",
+         "--from", "20260101", "--to", "20260107"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10061",
+            {
+                "stk_cd": "005930", "strt_dt": "20260101", "end_dt": "20260107",
+                "amt_qty_tp": "1", "trde_tp": "0", "unit_tp": "1",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("amount", "1"), ("quantity", "2")])
+def test_by_stock_total_amount_qty_enum(runner, fake_client, cli_value, api_value):
+    """--amount-qty가 amt_qty_tp로 매핑되어야 한다 (AMT_QTY_TP_1_2 공유,
+    이번 태스크에서 ka10061로 확장)."""
+    result = runner.invoke(
+        cli,
+        ["stock", "investor", "by-stock-total", "005930",
+         "--from", "20260101", "--to", "20260107", "--amount-qty", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
+def test_by_stock_total_trade_default_sends_net_buy(runner, fake_client):
+    """--trade 기본 호출은 변경 전과 동일하게 trde_tp="0"을 보내야 한다."""
+    result = runner.invoke(
+        cli,
+        ["stock", "investor", "by-stock-total", "005930",
+         "--from", "20260101", "--to", "20260107"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == "0"
+
+
+def test_by_stock_total_trade_rejects_buy_and_sell(runner, fake_client):
+    """ka10061 스펙의 trde_tp는 "0:순매수" 단일값뿐이다. 이전 코드는
+    click.Choice(["0","1","2"])로 스펙에 없는 1/2까지 받고 있었는데,
+    HumanChoice({"net-buy":"0"})로 좁히면서 그 두 값이 거부된다(breaking,
+    이미 click.Choice였던 자리의 값 집합 축소)."""
+    for raw in ("1", "2"):
+        result = runner.invoke(
+            cli,
+            ["stock", "investor", "by-stock-total", "005930",
+             "--from", "20260101", "--to", "20260107", "--trade", raw],
+        )
+        assert result.exit_code == 1
+        assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("thousand", "1000"), ("share", "1")])
+def test_by_stock_total_unit_enum(runner, fake_client, cli_value, api_value):
+    """--unit thousand/share가 unit_tp 1000/1로 매핑되어야 한다 (INVESTOR_BY_STOCK_UNIT
+    공유, ka10059/ka10061)."""
+    result = runner.invoke(
+        cli,
+        ["stock", "investor", "by-stock-total", "005930",
+         "--from", "20260101", "--to", "20260107", "--unit", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["unit_tp"] == api_value
