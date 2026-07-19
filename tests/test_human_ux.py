@@ -261,7 +261,7 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     assert _doc(result)["error"]["code"] == "INVALID_INPUT"
 
 
-@pytest.mark.parametrize("mapping_name", [
+_REGISTERED_MAPPINGS = [
     "DELIST_QRY", "TRADE_SIDE", "ALL_STOCK_QRY", "ORDER_DETAIL_QRY",
     "ASSET_TYPE", "MARKET_STATUS_KOSPI", "FILLED_QRY", "HOLDINGS_EVAL_QRY",
     "TRANSACTION_TYPE", "PRODUCT_TYPE", "ODD_LOT_QRY", "CASH_CREDIT", "HOT_PERIOD",
@@ -338,8 +338,14 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "ELW_CHANGE_RANK_SORT", "ELW_RANK_RIGHT_TYPE_3DIGIT", "ELW_BALANCE_RANK_SORT",
     "EXCLUDE_ENDED_ELW", "GOLD_PRICE_TYPE",
     # Task 34a — stock 일별주가~투자자별매매(daily_price~by_stock_total)
-    # HumanChoice 전환. TRADER_ANALYSIS_PERIOD_5_120은 위 목록에서 제거됐다
-    # (I2 규칙 재적용으로 --days가 raw 텍스트로 되돌아가 더 이상 쓰이지 않음).
+    # HumanChoice 전환. TRADER_ANALYSIS_PERIOD_5_120은 34a 안에서 한 차례
+    # raw 텍스트로 되돌아갔다가 34a 리뷰에서 HumanChoice로 원복됐고, 같은
+    # 리뷰가 market.py ka10042(net-buyer --period)도 이 상수 공유로
+    # 전환했다 — 지금 stock.py ka10043 / market.py ka10042 **두 곳**에
+    # 물려 있다(아래 개수 주석의 "+1"이 그 전환이다). 종전 이 자리에는
+    # "더 이상 쓰이지 않아 목록에서 제거됐다"고 적혀 있었으나 사실이
+    # 아니었고, 같은 파일 아래 개수 주석과도 정면으로 모순됐다.
+    "TRADER_ANALYSIS_PERIOD_5_120",
     "DAILY_PRICE_DISPLAY", "TODAY_PREV_1_2", "TODAY_EXEC_TIC_MIN",
     "PRICE_CLUSTER_CUR_PRC_ENTRY",
     "OPEN_CHANGE_SORT", "OPEN_CHANGE_QTY_CND", "OPEN_CHANGE_INCLUDE_LIMIT",
@@ -361,11 +367,18 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     # lending_by_stock의 --all(all_tp)은 스펙에 값이 하나뿐이라(반대쪽
     # 불명) 미확인으로 전환하지 않았다 — raw 텍스트로 남아 있다.
     "PROGRAM_TOP_SIDE", "CHART_ADJUSTED_PRICE",
+    # 34b 리뷰 fix에서 chart intraday-investor의 --market이
+    # click.Choice에서 HumanChoice(MARKET_ALL)로 전환됐는데 이 목록에는
+    # 빠져 있었다(아래 219 카운트에는 이미 반영돼 있었다).
+    "MARKET_ALL",
     # Task 36 — account.py --exchange(dmst_stex_tp) HumanChoice 전환.
     # kt00007/kt00009는 SOR 포함 4값, kt00015는 SOR 없는 3값 — 절대 합치지
     # 말 것(_constants.py 정의부 커플링 주석 참고).
     "ACCOUNT_EXCHANGE_WITH_SOR", "ACCOUNT_EXCHANGE_NO_SOR",
-])
+]
+
+
+@pytest.mark.parametrize("mapping_name", _REGISTERED_MAPPINGS)
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
     mapping = getattr(_constants, mapping_name)
@@ -373,6 +386,44 @@ def test_every_mapping_converts_all_human_names(mapping_name):
     for human, code in mapping.items():
         assert hc.convert(human, None, None) == code    # human 이름 → 코드
         assert hc.convert(code, None, None) == code     # 원시 코드 하위호환
+
+
+def test_registry_covers_every_wired_mapping():
+    """위 목록이 실제 HumanChoice 배선과 정확히 일치하는지 고정한다.
+
+    이 목록은 손으로 관리돼 왔고, 실제로 두 건(MARKET_ALL,
+    TRADER_ANALYSIS_PERIOD_5_120)이 배선돼 있는데도 빠져 있었다 — 목록에
+    없으면 그 상수는 human 이름 왕복 검증을 아예 받지 못한다. 개수만
+    세면 한쪽이 늘고 다른 쪽이 빠져도 통과하므로 집합으로 비교한다.
+    """
+    import click
+
+    from kiwoom_cli.commands import _constants
+    from kiwoom_cli.main import cli as root_cli
+
+    def walk(cmd):
+        for p in cmd.params:
+            if isinstance(p, click.Option):
+                m = getattr(p.type, "mapping", None)
+                if isinstance(m, dict):
+                    yield m
+        if isinstance(cmd, click.Group):
+            for sub in cmd.commands.values():
+                yield from walk(sub)
+
+    by_id = {
+        id(v): n for n in dir(_constants)
+        if isinstance(v := getattr(_constants, n), dict)
+    }
+    wired = {by_id[id(m)] for m in walk(root_cli) if id(m) in by_id}
+    registered = set(_REGISTERED_MAPPINGS)
+
+    assert wired - registered == set(), (
+        f"HumanChoice에 배선됐는데 목록에 없는 상수: {sorted(wired - registered)}"
+    )
+    assert registered - wired == set(), (
+        f"목록에는 있는데 배선되지 않은 상수: {sorted(registered - wired)}"
+    )
 
 
 def test_all_converted_decorators_use_human_choice(runner, isolated_env):
