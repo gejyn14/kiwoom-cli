@@ -463,6 +463,20 @@ class TestFlatDict:
         """리스트만 있고 재귀할 dict도 없으면 여전히 빈 리스트 — 호출부가 리스트를 따로 출력한다."""
         assert _flat_dict({"items": [1, 2]}) == []
 
+    def test_empty_dict_returns_empty(self):
+        """회귀 고정용 — 빈 dict는 애초에 반복할 게 없으니 [] (falsification 테스트 아님)."""
+        assert _flat_dict({}) == []
+
+    def test_dict_of_empty_dicts_returns_empty(self):
+        """회귀 고정용 — 중첩 dict가 스칼라를 하나도 안 갖고 있으면 여전히 [] (falsification 테스트 아님)."""
+        assert _flat_dict({"info": {}}) == []
+
+    def test_collision_last_write_wins(self):
+        """실제 API 데이터에서는 나올 수 없는 형태(dot이 든 리터럴 키)지만, 문서화된
+        저하 모드(last-write-wins)를 명시적으로 고정해둔다."""
+        result = _flat_dict({"a.x": 1, "a": {"x": 2}})
+        assert result == [{"a.x": 2}]
+
 
 class TestGenericTableCsvScalarSummary:
     """print_generic_table의 csv 분기 — 리스트가 있어도 스칼라/딕트 요약이 사라지면 안 된다."""

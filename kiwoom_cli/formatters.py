@@ -119,6 +119,27 @@ def _flat_dict(data: dict) -> list[dict]:
     return [clean] if clean else []
 
 
+def _emit_csv_summary_then_blocks(summary_rows: list[dict], list_blocks: list[list[dict]]) -> None:
+    """csv 모드 공용 출력 순서: 스칼라 요약 블록 먼저, 그 다음 리스트 블록(들).
+
+    두 종류의 블록이 모두 있을 때만 사이에 빈 줄 하나를 둔다 (한 스트림에 여러
+    CSV 테이블을 이어 붙일 때 헤더 행이 서로 뒤섞이지 않도록 구분). `list_blocks`
+    자체가 비어 있지 않으면(원소인 개별 블록이 빈 리스트여도) "리스트 블록이
+    존재한다"로 취급한다 — `print_generic_table`(리스트 타입 키가 있는지)과
+    `print_account_eval`(보유종목이 있는지)가 이 "존재" 판정을 각자 다른 값으로
+    미리 계산해 넘겨주므로, 호출부가 list_blocks를 어떻게 구성하느냐로 두 곳의
+    기존 동작이 그대로 재현된다. `print_generic_table`의 table 모드 dict 분기
+    (스칼라 요약 먼저, 리스트는 그 다음)와 순서를 맞춘다.
+    """
+    if summary_rows:
+        _output_csv(summary_rows)
+    if list_blocks:
+        if summary_rows:
+            print()  # 두 CSV 블록을 빈 줄로 구분
+        for block in list_blocks:
+            _output_csv(block)
+
+
 def _sign_color(value: str) -> str:
     """Return color based on sign: red for positive (상승), blue for negative (하락)."""
     s = value.strip()
@@ -542,15 +563,8 @@ def print_account_eval(data: dict[str, Any]) -> None:
         _output_json(data)
         return
     if fmt == "csv":
-        # print_generic_table의 csv 분기(스칼라 요약 먼저, 리스트는 그 다음)와 순서를 맞춘다.
         holdings = data.get("stk_acnt_evlt_prst", [])
-        flat = _flat_dict(data)
-        if flat:
-            _output_csv(flat)
-        if holdings:
-            if flat:
-                print()  # 두 CSV 블록을 빈 줄로 구분
-            _output_csv(holdings)
+        _emit_csv_summary_then_blocks(_flat_dict(data), [holdings] if holdings else [])
         return
     summary = Table(title="💰 계좌평가현황", show_header=False, border_style="dim")
     summary.add_column("항목", style="cyan", width=20)
@@ -941,16 +955,8 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
         if isinstance(data, list):
             _output_csv(data)
         elif isinstance(data, dict):
-            # Table 모드의 dict 분기(스칼라 요약 먼저, 리스트는 그 다음)와 순서를 맞춘다.
             lists = {k: v for k, v in data.items() if isinstance(v, list)}
-            summary = _flat_dict(data)
-            if summary:
-                _output_csv(summary)
-            if lists:
-                if summary:
-                    print()  # 두 CSV 블록을 빈 줄로 구분
-                for lv in lists.values():
-                    _output_csv(lv)
+            _emit_csv_summary_then_blocks(_flat_dict(data), list(lists.values()))
         return
 
     # Table mode (default)
