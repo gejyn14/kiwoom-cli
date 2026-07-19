@@ -179,6 +179,9 @@ exit 2로 하드 실패하지 않고) `checks.price_known`이 `false`가 되어 
 통합 명령(`account balance/deposit/pnl/orders --market all`)에서 국내·미국이 모두
 실패하면 json 모드는 `UPSTREAM_ERROR` envelope + exit 2를 반환합니다. table 모드도
 동일한 경우 빨간 stderr 메시지와 함께 exit 2로 종료합니다(이전에는 조용히 exit 0).
+`dashboard`(계좌 잔고+거래량 상위)도 동일한 계약입니다 — 두 API가 모두 실패하면
+포맷 불문 exit 2, 하나만 실패하면 나머지로 계속 진행(exit 0, json은 해당 키가
+명시적 `null`).
 
 ## 주문 안전장치
 

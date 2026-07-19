@@ -116,10 +116,11 @@ def dashboard():
             movers_failed = True
             err_console.print(f"[dim]거래량 상위 조회 실패: {e}[/]")
 
+    if acct_failed and movers_failed:
+        fail_api("계좌·거래량 조회가 모두 실패했습니다.")
+
     # ── JSON / CSV output ─────────────────────────────────
     if fmt in ("json", "csv"):
-        if acct_failed and movers_failed:
-            fail_api("계좌·거래량 조회가 모두 실패했습니다.")
         combined: dict[str, Any] = {}
         if acct_failed:
             combined["account"] = None

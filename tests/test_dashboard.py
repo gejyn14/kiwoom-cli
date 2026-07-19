@@ -111,6 +111,22 @@ def test_dashboard_account_only_fails_reports_explicit_null(runner, fake_client)
     assert len(doc["data"]["top_volume"]) == 1
 
 
+def test_dashboard_both_fail_table_mode_exits_2_on_stderr(runner, fake_client):
+    """table 모드에서도 양쪽 모두 실패하면 exit 2 + 빨간 stderr 메시지 (조용한 성공 금지).
+
+    account.py의 _run_unified와 동일한 계약: table 모드도 json/csv와 마찬가지로
+    exit 2로 종료해야 한다 (AGENTS.md 179-181, "table 모드도 동일한 경우
+    빨간 stderr 메시지와 함께 exit 2로 종료합니다").
+    """
+    _make_selectively_failing(fake_client, fail_account=True, fail_movers=True)
+
+    result = runner.invoke(cli, ["dashboard"])
+
+    assert result.exit_code == 2
+    assert "모두 실패" in result.stderr
+    assert result.stdout == "" or "계좌 요약" not in result.stdout
+
+
 def test_dashboard_success_json_shape_unchanged(runner, fake_client):
     """양쪽 다 성공하면 기존 json 모양(account dict + top_volume list)이 유지된다."""
     fake_client.set_response("kt00004", ACCOUNT_RESPONSE)
