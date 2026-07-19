@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 
@@ -168,7 +169,15 @@ def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
     ctx.obj["profile"] = profile
     ctx.obj["fields"] = [s.strip() for s in fields.split(",") if s.strip()] if fields else None
 
-    resolved_profile = config.resolve_profile(profile)
+    try:
+        resolved_profile = config.resolve_profile(profile)
+    except click.ClickException:
+        # config.toml이 손상된 경우 루트 콜백에서 여기서 죽으면 그 어떤
+        # 서브커맨드도(복구용인 'config setup'조차) 실행될 기회가 없다 — 실제
+        # 진단/복구는 각 서브커맨드가 필요할 때 load_config()를 다시 호출해
+        # 스스로 판단하게 둔다: config_setup은 자신의 폴백으로 복구하고,
+        # 나머지는 자기 몸체에서 동일하게 NOT_CONFIGURED로 정상 실패한다.
+        resolved_profile = profile or "default"
     if not config.is_valid_profile_name(resolved_profile):
         fail_input(
             f"잘못된 프로필 이름 '{resolved_profile}' — "
@@ -183,15 +192,20 @@ def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
     # v2.7 이하가 만든 느슨한 권한(0755/0644)을 매 실행 시 조인다 — 생성은 하지 않음
     config.harden_permissions()
 
-    # Auto-migrate plaintext credentials into the keychain
-    if config.migrate_from_plaintext():
-        from .output import err_console
-        err_console.print("[yellow]인증정보를 키체인으로 이전했습니다.[/]")
+    try:
+        # Auto-migrate plaintext credentials into the keychain
+        if config.migrate_from_plaintext():
+            from .output import err_console
+            err_console.print("[yellow]인증정보를 키체인으로 이전했습니다.[/]")
 
-    # Auto-migrate pre-profile config to profile-aware format
-    if config.migrate_to_profiles():
-        from .output import err_console
-        err_console.print("[yellow]프로필 형식으로 마이그레이션 완료.[/]")
+        # Auto-migrate pre-profile config to profile-aware format
+        if config.migrate_to_profiles():
+            from .output import err_console
+            err_console.print("[yellow]프로필 형식으로 마이그레이션 완료.[/]")
+    except click.ClickException:
+        # 위와 같은 이유로 건너뛴다 — 마이그레이션은 유효한 config.toml을
+        # 전제로 하므로, 손상된 파일 위에서는 서브커맨드가 판단하게 둔다.
+        pass
 
     # Legacy password-encrypted format: credentials must be re-entered
     if config.is_legacy_encrypted():
@@ -261,9 +275,24 @@ def config_setup(ctx, profile: str | None, appkey: str | None, secretkey: str | 
         # Old password-encrypted entries are unusable — purge before writing new keys
         config.purge_legacy_credentials()
         config.clear_legacy_sentinels()
+    try:
+        cfg = config.load_config()
+    except click.ClickException:
+        # config.toml이 손상된 경우에도 setup은 이걸 복구하는 명령이어야 한다 —
+        # 어차피 아래에서 덮어쓸 것이므로 기본값에서 새로 시작한다. 이 명령이
+        # 실패하면 (load_config()가 재발생시키는 NOT_CONFIGURED로) 안내하는
+        # 'kiwoom config setup을 다시 실행하세요'가 그 자체로 다시 실패하는
+        # 무한루프가 됐었다.
+        err_console.print(
+            f"[yellow]config.toml이 손상되어 있어 기본값으로 새로 씁니다 ({config.CONFIG_FILE}).[/]"
+        )
+        cfg = copy.deepcopy(config.DEFAULT_CONFIG)
+    # load_config()가 성공한 뒤에만 키체인에 쓴다 — 실패 케이스가 위에서
+    # 처리되므로 여기 도달했다는 것은 cfg 구성이 확정됐다는 뜻이고, appkey/
+    # secretkey를 먼저 써버린 뒤 이후 단계가 죽어 키체인만 반쯤 갱신된 채
+    # 남는 상황을 막는다.
     config.set_appkey(appkey, profile=profile)
     config.set_secretkey(secretkey, profile=profile)
-    cfg = config.load_config()
     cfg.setdefault("profiles", {}).setdefault(profile, {})["domain"] = domain
     if account:
         cfg["profiles"][profile]["account"] = account

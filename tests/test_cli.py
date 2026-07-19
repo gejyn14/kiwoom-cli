@@ -249,6 +249,36 @@ def test_corrupted_config_toml_returns_not_configured_envelope(runner, monkeypat
     assert str(cfg_file) in doc["error"]["message"]
 
 
+def test_config_setup_recovers_from_corrupted_config_toml(runner, monkeypatch, tmp_path):
+    """`config setup`은 그 자체가 손상된 config.toml을 복구하는 명령으로 안내되므로
+    (NOT_CONFIGURED 메시지가 'kiwoom config setup을 다시 실행하세요'라고 말한다),
+    손상된 파일 위에서도 성공해야 한다 — 실패하면 안내를 따른 에이전트가
+    똑같은 오류를 계속 반복해서 받는 무한루프가 된다."""
+    from kiwoom_cli import config
+
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("this is not [ valid toml", encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)
+    monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+    monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+
+    result = runner.invoke(cli, [
+        "-f", "json", "config", "setup",
+        "--appkey", "AK", "--secretkey", "SK", "--domain", "mock",
+    ])
+
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert result.exit_code == 0, result.output
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is True
+    assert doc["data"]["profile"] == "default"
+    assert doc["data"]["domain"] == "mock"
+    # 파일이 실제로 다시 쓰였는지 확인 — 이제 유효한 toml이어야 한다.
+    assert config.load_config()["profiles"]["default"]["domain"] == "mock"
+    assert config.get_appkey(profile="default") == "AK"
+
+
 def test_non_json_response_returns_upstream_error_envelope(runner, monkeypatch, httpx_mock):
     """HTTP 200 유지보수 페이지처럼 응답 바디가 JSON이 아니면 resp.json()이
     json.JSONDecodeError를 던져 escape했다."""

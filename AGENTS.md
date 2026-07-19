@@ -28,6 +28,8 @@ kiwoom-cli는 AI 에이전트가 파싱 없이 안전하게 쓰도록 설계된 
 - `data` — 성공 페이로드. API 응답은 **정규화된 타입 필드** + 원본(`data.raw`).
   리스트형 응답은 `{"items": [...], "raw": [...]}`.
 - `meta.env` — `"mock"`(모의투자) 또는 `"prod"`(실거래). **주문 전 반드시 확인하세요.**
+  설정을 읽을 수 없는 오류 envelope(`NOT_CONFIGURED` — 손상된 config.toml)에서는
+  `null`일 수 있습니다 — 실제로 알 수 없는 값을 `"mock"`으로 지어내지 않습니다.
 - `meta.cont` — 연속조회 커서. 값이 있으면 `--next-key <값>`으로 다음 페이지.
 - `error` — `{"code", "retryable", "message", "upstream_code", "details"?}`.
 

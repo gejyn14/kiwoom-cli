@@ -100,13 +100,21 @@ def build_meta() -> dict[str, Any]:
     try:
         profile = config.resolve_profile(obj.get("profile"))
         env = config.get_domain_key(profile)
-    except click.ClickException:
+    except click.ClickException as e:
         # config.toml이 손상된 경우(config.load_config()가 재발생시키는
         # NOT_CONFIGURED ClickException) meta 구성이 load_config()를 다시 호출해
         # 같은 오류를 또 던지면, 그 오류 자체를 알리는 envelope 생성이 깨진다 —
-        # 서브 정보일 뿐이므로 안전한 기본값으로 대체한다.
+        # 서브 정보일 뿐이므로 안전한 기본값으로 대체한다. 이 폴백은 그 특정
+        # 원인(NOT_CONFIGURED)에만 좁혀 적용한다 — resolve_profile/get_domain_key가
+        # 나중에 다른 이유로 ClickException을 던지게 되어도 조용히 삼켜지지
+        # 않도록.
+        if getattr(e, "code", None) != "NOT_CONFIGURED":
+            raise
         profile = obj.get("profile") or "default"
-        env = "mock"
+        # env는 실제로 알 수 없으므로 "mock"을 지어내지 않는다 — AGENTS.md가
+        # 에이전트에게 주문 전 meta.env로 prod/mock을 확인하라고 안내하므로,
+        # 허용적인 방향("mock"이라 안전할 것)으로 거짓 값을 주는 것이 더 위험하다.
+        env = None
     return {"profile": profile, "env": env, "cont": obj.get("last_cont") or None}
 
 

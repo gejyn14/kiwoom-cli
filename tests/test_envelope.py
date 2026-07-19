@@ -66,6 +66,26 @@ def test_success_envelope_shape(runner, fake_stock):
     assert doc["meta"]["cont"] is None
 
 
+# ── build_meta: 손상된 config에서 env는 null (지어내지 않는다) ──
+
+
+def test_meta_env_is_null_not_fabricated_mock_on_corrupt_config(runner, isolated_config):
+    """config.toml이 손상되면 meta.env는 알 수 없다 — 예전에는 여기서 "mock"을
+    지어냈는데, AGENTS.md는 에이전트에게 주문 전 meta.env로 prod/mock을
+    확인하라고 안내한다. 실제로는 모르는데 "mock"(안전해 보이는 쪽)이라고
+    답하는 것은 허용적인 방향의 거짓말이라 오히려 위험하다."""
+    cfg_file = isolated_config / "config.toml"
+    cfg_file.write_text("this is not [ valid toml", encoding="utf-8")
+
+    result = runner.invoke(cli, ["-f", "json", "config", "show"])
+
+    assert result.exit_code == 1
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "NOT_CONFIGURED"
+    assert doc["meta"]["env"] is None
+
+
 # ── 에러 envelope ─────────────────────────────────────
 
 
@@ -200,6 +220,28 @@ def test_selected_dict_key_does_not_deep_strip_nested_raw():
 
     data = {"body": {"x": {"raw": 1}}}
     assert project_fields(data, ["body"]) == {"body": {"x": {"raw": 1}}}
+
+
+# ── build_meta: 폴백은 NOT_CONFIGURED에만 좁혀 적용 ──────
+
+
+def test_build_meta_fallback_only_catches_not_configured(monkeypatch):
+    """build_meta의 except click.ClickException은 config.load_config()가
+    재발생시키는 NOT_CONFIGURED 하나만을 위한 안전장치다. resolve_profile이나
+    get_domain_key가 나중에 다른 이유로 ClickException을 던지게 되면(예: 잘못된
+    프로필 이름), 그 오류가 이 폴백에 조용히 삼켜져 안전한 기본값으로
+    둔갑해서는 안 된다 — 그러면 진짜 원인이 사라진다."""
+    import click
+
+    from kiwoom_cli import config, envelope
+
+    def _raise_unrelated(*a, **k):
+        raise click.ClickException("무관한 다른 오류")
+
+    monkeypatch.setattr(config, "resolve_profile", _raise_unrelated)
+
+    with pytest.raises(click.ClickException, match="무관한 다른 오류"):
+        envelope.build_meta()
 
 
 # ── classify ──────────────────────────────────────────
