@@ -308,7 +308,7 @@ kiwoom stock info 005930              # 기본정보 (PER, PBR, 시가총액 등
 kiwoom stock price 005930             # 현재가 한 줄
 kiwoom stock orderbook 005930         # 10단계 호가창
 kiwoom stock daily 005930             # 일별 시세
-kiwoom stock daily 005930 --type week # 주별 시세
+kiwoom stock chart week 005930 --base-date 20260301  # 주별 시세
 kiwoom stock exec 005930              # 체결정보
 kiwoom stock trader 005930            # 거래원
 kiwoom stock foreign 005930           # 외국인 매매동향
@@ -485,7 +485,7 @@ kiwoom order credit buy 005930 10 --type market --confirm
 kiwoom order credit sell 005930 10 --type market --confirm
 
 # 금현물
-kiwoom order gold buy M04020000 1 --type market --confirm
+kiwoom order gold buy M04020000 1 --price 145000 --confirm  # 금현물은 시장가가 없어 지정가만 가능
 kiwoom order gold balance             # 잔고
 kiwoom order gold pending             # 미체결
 

@@ -60,6 +60,7 @@ def test_us_apis_have_korean_descriptions():
 from kiwoom_cli.commands.us._constants import (  # noqa: E402
     US_BUY_TYPES,
     US_EXCHANGE,
+    US_LIMIT_TYPES,
     US_MARKET_TYPES,
     US_ORDER_TYPES,
     US_SELL_ONLY_TYPES,
@@ -369,6 +370,72 @@ def test_us_market_types_reject_price(runner, us_fake, otype):
     assert result.exit_code == 1
     api_id = "ust20001" if side == "sell" else "ust20000"
     assert _order_calls(us_fake, api_id) == []
+
+
+# ── Task 14b: US 지정가 계열(US_LIMIT_TYPES)에 --price가 없으면 거부한다
+# (ust20000/ust20001 스펙: "trde_tp가 00(지정가),30(LOC)...인 경우 필수 입력").
+# 반대 방향(시장가 계열에 --price)은 이미 test_us_market_types_reject_price가
+# 덮는다 — 이 블록은 그 여집합인 US_LIMIT_TYPES를 전부 덮는다. ──
+
+
+@pytest.mark.parametrize("otype", sorted(US_LIMIT_TYPES))
+def test_us_limit_types_require_price(runner, us_fake, otype):
+    """US_LIMIT_TYPES의 모든 멤버가 --price 없이 쓰이면 전송 전에 거부되는지
+    행동으로 검증한다. 수정 전에는 ord_uv=""로 실제 전송되므로(exit 0),
+    먼저 이 테스트가 그 상태에서 RED임을 확인했다.
+
+    stop-limit은 매도 전용이라 side=sell, 나머지는 buy로 보낸다."""
+    side = "sell" if otype in US_SELL_ONLY_TYPES else "buy"
+    args = ["order", side, "NVDA", "10", "--type", otype, "--confirm"]
+    if otype in US_STOP_TYPES:
+        args += ["--stop", "199.99"]
+    result = runner.invoke(cli, args)
+    assert result.exit_code == 1
+    api_id = "ust20001" if side == "sell" else "ust20000"
+    assert _order_calls(us_fake, api_id) == []
+
+
+def test_us_market_missing_price_still_succeeds(runner, us_fake):
+    """회귀 방지: --type market에 --price가 없는 건 정상 동작이다 (시장가는
+    가격이 없어야 정상 — 새 가드가 US_MARKET_TYPES까지 잘못 삼키지 않는지 확인)."""
+    result = runner.invoke(
+        cli, ["order", "buy", "NVDA", "10", "--type", "market", "--confirm"]
+    )
+    assert result.exit_code == 0
+    body = _order_calls(us_fake, "ust20000")[0][1]
+    assert body["ord_uv"] == ""
+
+
+def test_us_market_with_price_still_rejected(runner, us_fake):
+    """기존 동작 불변 확인: --type market --price 100은 여전히 exit 1
+    (가격을 쓰지 않는 유형에 가격을 준 경우 — 기존 가드)."""
+    result = runner.invoke(
+        cli, ["order", "buy", "NVDA", "10", "--type", "market", "--price", "100", "--confirm"]
+    )
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust20000") == []
+
+
+def test_us_limit_with_price_sends_ord_uv(runner, us_fake):
+    """--type limit --price 100은 정상 전송되고 ord_uv가 채워진다."""
+    result = runner.invoke(
+        cli, ["order", "buy", "NVDA", "10", "--type", "limit", "--price", "100", "--confirm"]
+    )
+    assert result.exit_code == 0
+    body = _order_calls(us_fake, "ust20000")[0][1]
+    assert body["ord_uv"] == "100"
+
+
+def test_us_limit_missing_price_json_envelope(runner, us_fake):
+    """-f json 모드에서 envelope의 error.code == "INVALID_INPUT"이고 exit 1."""
+    result = runner.invoke(
+        cli, ["-f", "json", "order", "buy", "NVDA", "10", "--type", "limit", "--confirm"]
+    )
+    assert result.exit_code == 1
+    doc = json.loads(result.output)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "INVALID_INPUT"
+    assert _order_calls(us_fake, "ust20000") == []
 
 
 def test_kr_buy_unchanged_and_fractional_price_rejected(runner, us_fake):

@@ -20,7 +20,28 @@ from ..formatters import (
     print_stock_info,
 )
 from ..output import console
-from ._constants import EXCHANGE_ALL, MARKET_ALL, MARKET_PROGRAM, MARKET_TWO
+from ._constants import (
+    AMT_QTY_TP_0_1,
+    AMT_QTY_TP_1_2,
+    AMT_QTY_TP_COMBINED,
+    CHECK_YES_1_NO_0,
+    CREDIT_GRADE,
+    CREDIT_MARKET,
+    EXCHANGE_ALL,
+    HumanChoice,
+    INTRADAY_INVESTOR,
+    MARKET_ALL,
+    MARKET_PROGRAM,
+    MARKET_TWO,
+    NETSLMT_TP_NET_BUY_ONLY,
+    PERIOD_RECENT_OR_RANGE,
+    STK_INDS_TP,
+    TRADER_ANALYSIS_DATE_MODE,
+    TRADER_ANALYSIS_PERIOD_5_120,
+    TRADER_ANALYSIS_POSITION,
+    TRADER_ANALYSIS_SORT,
+    TRDE_TP_NET_BUY_BUY_SELL,
+)
 from .us import stock_ops as us_stock_ops
 from .us.detect import is_us_symbol
 
@@ -104,21 +125,17 @@ def orderbook(code: str, exchange: str | None):
 
 @stock.command("daily")
 @click.argument("code")
-@click.option(
-    "--type", "qry_type",
-    type=click.Choice(["day", "week", "month"]),
-    default="day",
-    help="조회 구분 (day/week/month)",
-)
-def daily(code: str, qry_type: str):
-    """일/주/월별 시세 조회. (ka10005)"""
-    tp_map = {"day": "1", "week": "2", "month": "3"}
+def daily(code: str):
+    """일별 시세 조회. (ka10005)
+
+    ka10005는 종목코드만 받으며 기간을 고르는 파라미터가 없다.
+    주/월별 시세는 `stock chart week`/`stock chart month`(ka10082/ka10083)를 사용할 것.
+    """
     with KiwoomClient() as c:
-        data, _ = c.request("ka10005", {"stk_cd": code, "qry_tp": tp_map[qry_type]})
+        data, _ = c.request("ka10005", {"stk_cd": code})
         items = _find_list(data)
-        title = {"day": "일별", "week": "주별", "month": "월별"}[qry_type]
         if items:
-            print_chart_data(items, title=f"{code} {title} 시세")
+            print_chart_data(items, title=f"{code} 일별 시세")
         else:
             print_generic_table(data, title="시세")
 
@@ -482,18 +499,38 @@ def credit_trend(code: str, dt: str, qry_tp: str):
 
 
 @credit.command("available")
-def credit_available():
+@click.option(
+    "--market", "mrkt_deal_tp",
+    type=HumanChoice(CREDIT_MARKET),
+    default="all",
+    help="시장거래구분 (all=전체, kospi=코스피, kosdaq=코스닥)",
+)
+@click.option(
+    "--grade", "crd_stk_grde_tp",
+    type=HumanChoice(CREDIT_GRADE),
+    default="all",
+    help="신용종목등급구분 (all=전체, a~e=A~E군)",
+)
+@click.option("--code", "stk_cd", default=None, help="종목코드 (미지정 시 전체)")
+def credit_available(mrkt_deal_tp: str, crd_stk_grde_tp: str, stk_cd: str | None):
     """신용융자 가능종목 조회. (kt20016)"""
+    body: dict = {
+        "crd_stk_grde_tp": crd_stk_grde_tp,
+        "mrkt_deal_tp": mrkt_deal_tp,
+    }
+    if stk_cd:
+        body["stk_cd"] = stk_cd
     with KiwoomClient() as c:
-        data, _ = c.request("kt20016", {})
+        data, _ = c.request("kt20016", body)
         print_generic_table(data, title="신용융자 가능종목")
 
 
 @credit.command("inquiry")
-def credit_inquiry():
+@click.argument("code")
+def credit_inquiry(code: str):
     """신용융자 가능문의. (kt20017)"""
     with KiwoomClient() as c:
-        data, _ = c.request("kt20017", {})
+        data, _ = c.request("kt20017", {"stk_cd": code})
         print_generic_table(data, title="신용융자 가능문의")
 
 
@@ -693,29 +730,33 @@ def open_change(
 @click.option("--to", "end_dt", required=True, help="종료일자 (YYYYMMDD)")
 @click.option(
     "--date-type", "qry_dt_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="조회구분 (0=기간, 1=일자)",
+    type=HumanChoice(TRADER_ANALYSIS_DATE_MODE),
+    default="start-end",
+    help="조회기간구분 (period=기간으로 조회, start-end=시작일자·종료일자로 조회)",
 )
 @click.option(
     "--pot", "pot_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="당일/전일 (0=당일, 1=전일)",
+    type=HumanChoice(TRADER_ANALYSIS_POSITION),
+    default="today",
+    help="시점구분 (today=당일, previous=전일)",
 )
 @click.option(
     "--days", "dt",
-    type=click.Choice(["5", "10", "20", "40", "60", "120"]),
-    default="20",
-    help="기간 (5/10/20/40/60/120일)",
+    type=HumanChoice(TRADER_ANALYSIS_PERIOD_5_120),
+    default="20d",
+    help="기간 (5d/10d/20d/40d/60d/120d)",
 )
 @click.option(
     "--sort", "sort_base",
-    type=click.Choice(["1", "2"]),
-    default="2",
-    help="정렬기준 (1=종가순, 2=날짜순)",
+    type=HumanChoice(TRADER_ANALYSIS_SORT),
+    default="date",
+    help="정렬기준 (close=종가순, date=날짜순)",
 )
-@click.option("--broker", "mmcm_cd", default="", help="회원사코드")
+@click.option(
+    "--broker", "mmcm_cd",
+    required=True,
+    help="회원사코드 (조회: kiwoom stock brokers)",
+)
 @click.option(
     "--exchange", "stex_tp",
     type=click.Choice(["KRX", "NXT", "all"]),
@@ -1109,27 +1150,37 @@ def by_stock_total(
 @investor.command("intraday")
 @click.option(
     "--market", "mrkt_tp",
-    type=click.Choice(["kospi", "kosdaq"]),
+    type=click.Choice(["all", "kospi", "kosdaq"]),
     default="kospi",
-    help="시장구분 (kospi/kosdaq)",
+    help="시장구분 (all=전체, kospi=코스피, kosdaq=코스닥)",
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    default="1",
-    help="금액수량구분 (1=금액&수량)",
+    type=HumanChoice(AMT_QTY_TP_COMBINED),
+    default="combined",
+    help="금액수량구분 (combined=금액&수량, 스펙상 고정값)",
 )
-@click.option("--investor-type", "invsr", default="1000", help="투자자별")
+@click.option(
+    "--investor-type", "invsr",
+    type=HumanChoice(INTRADAY_INVESTOR),
+    default="foreign",
+    help=(
+        "투자자별 (foreign=외국인, institution=기관계, investment-trust=투신, "
+        "insurance=보험, bank=은행, pension=연기금, state=국가, "
+        "other-corporate=기타법인)"
+    ),
+)
 @click.option(
     "--foreign-all", "frgn_all",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="외국계전체 (0/1)",
+    type=HumanChoice(CHECK_YES_1_NO_0),
+    default="no",
+    help="외국계전체 (yes=체크, no=미체크)",
 )
 @click.option(
     "--simultaneous", "smtm_netprps_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="동시순매수구분 (0/1)",
+    type=HumanChoice(CHECK_YES_1_NO_0),
+    default="no",
+    help="동시순매수구분 (yes=체크, no=미체크)",
 )
 @click.option(
     "--exchange", "stex_tp",
@@ -1148,7 +1199,7 @@ def intraday(
     """장중투자자별매매 조회. (ka10063)"""
     with KiwoomClient() as c:
         data, _ = c.request("ka10063", {
-            "mrkt_tp": MARKET_TWO[mrkt_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp],
             "amt_qty_tp": amt_qty_tp,
             "invsr": invsr,
             "frgn_all": frgn_all,
@@ -1161,21 +1212,21 @@ def intraday(
 @investor.command("after-close")
 @click.option(
     "--market", "mrkt_tp",
-    type=click.Choice(["kospi", "kosdaq"]),
+    type=click.Choice(["all", "kospi", "kosdaq"]),
     default="kospi",
-    help="시장구분 (kospi/kosdaq)",
+    help="시장구분 (all=전체, kospi=코스피, kosdaq=코스닥)",
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_1_2),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--trade", "trde_tp",
-    type=click.Choice(["1", "2"]),
-    default="2",
-    help="매매구분 (1=순매도, 2=순매수)",
+    type=HumanChoice(TRDE_TP_NET_BUY_BUY_SELL),
+    default="net-buy",
+    help="매매구분 (net-buy=순매수, buy=매수, sell=매도)",
 )
 @click.option(
     "--exchange", "stex_tp",
@@ -1187,7 +1238,7 @@ def after_close(mrkt_tp: str, amt_qty_tp: str, trde_tp: str, stex_tp: str):
     """장마감후투자자별매매 조회. (ka10066)"""
     with KiwoomClient() as c:
         data, _ = c.request("ka10066", {
-            "mrkt_tp": MARKET_TWO[mrkt_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp],
             "amt_qty_tp": amt_qty_tp,
             "trde_tp": trde_tp,
             "stex_tp": EXCHANGE_ALL[stex_tp],
@@ -1196,9 +1247,14 @@ def after_close(mrkt_tp: str, amt_qty_tp: str, trde_tp: str, stex_tp: str):
 
 
 @investor.command("consecutive")
-@click.option("--period", "dt", default="5", help="기간 (일수)")
-@click.option("--from", "strt_dt", default="", help="시작일자 (YYYYMMDD, 선택)")
-@click.option("--to", "end_dt", default="", help="종료일자 (YYYYMMDD, 선택)")
+@click.option(
+    "--period", "dt",
+    type=HumanChoice(PERIOD_RECENT_OR_RANGE),
+    default="5d",
+    help="기간 (recent=최근일, 3d/5d/10d/20d/120d, range=시작/종료일자로 조회)",
+)
+@click.option("--from", "strt_dt", default="", help="시작일자 (YYYYMMDD, --period range일 때 사용)")
+@click.option("--to", "end_dt", default="", help="종료일자 (YYYYMMDD, --period range일 때 사용)")
 @click.option(
     "--market", "mrkt_tp",
     type=click.Choice(["kospi", "kosdaq"]),
@@ -1207,20 +1263,21 @@ def after_close(mrkt_tp: str, amt_qty_tp: str, trde_tp: str, stex_tp: str):
 )
 @click.option(
     "--net-type", "netslmt_tp",
-    default="2",
-    help="순매수구분 (2=순매수)",
+    type=HumanChoice(NETSLMT_TP_NET_BUY_ONLY),
+    default="net-buy",
+    help="순매수구분 (net-buy=순매수, 스펙상 고정값)",
 )
 @click.option(
     "--stock-sector", "stk_inds_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="종목/업종 (0=종목, 1=업종)",
+    type=HumanChoice(STK_INDS_TP),
+    default="stock",
+    help="종목/업종구분 (stock=종목, sector=업종)",
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_0_1),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--exchange", "stex_tp",

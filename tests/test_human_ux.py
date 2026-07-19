@@ -265,6 +265,20 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "DELIST_QRY", "TRADE_SIDE", "ALL_STOCK_QRY", "ORDER_DETAIL_QRY",
     "ASSET_TYPE", "MARKET_STATUS_KOSPI", "FILLED_QRY", "HOLDINGS_EVAL_QRY",
     "TRANSACTION_TYPE", "PRODUCT_TYPE", "ODD_LOT_QRY", "CASH_CREDIT", "HOT_PERIOD",
+    "STOCK_CONDITION", "MANAGED_STOCK_INCLUDE", "VOLUME_RANK_SORT",
+    "VOLUME_RANK_CREDIT_TYPE", "VOLUME_RANK_QTY_TYPE", "VOLUME_RANK_PRICE_TYPE",
+    "VOLUME_RANK_AMOUNT_TYPE", "VOLUME_RANK_SESSION", "BROKER_BY_STOCK_SIDE",
+    "PERIOD_DAYS_OFF_BY_ONE", "ELW_BROKER_QTY_TYPE", "ELW_BROKER_SIDE",
+    "ELW_BROKER_PERIOD", "ELW_BROKER_END_SKIP",
+    "TRADER_ANALYSIS_DATE_MODE", "TRADER_ANALYSIS_POSITION",
+    "TRADER_ANALYSIS_SORT", "TRADER_ANALYSIS_PERIOD_5_120",
+    # 아래 13개는 HumanChoice 데코레이터에 실제로 물려 있는데도 이 목록에
+    # 빠져 있었다. GOLD_ORDER_TYPES는 금현물 주문 경로다.
+    "GOLD_ORDER_TYPES", "CREDIT_MARKET", "CREDIT_GRADE",
+    "AMT_QTY_TP_0_1", "AMT_QTY_TP_1_2", "AMT_QTY_TP_COMBINED",
+    "INTRADAY_INVESTOR", "MIN_TIC_TP", "CHECK_YES_1_NO_0",
+    "NETSLMT_TP_NET_BUY_ONLY", "PERIOD_RECENT_OR_RANGE",
+    "STK_INDS_TP", "TRDE_TP_NET_BUY_BUY_SELL",
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -276,29 +290,38 @@ def test_every_mapping_converts_all_human_names(mapping_name):
 
 
 def test_all_converted_decorators_use_human_choice(runner, isolated_env):
-    """18개 전환 옵션이 전부 HumanChoice로 남아있는지 데코레이터 레벨에서 고정."""
+    """전환 옵션이 전부 HumanChoice로 남아있는지 데코레이터 레벨에서 고정.
+
+    루트(`cli`)부터 전체 트리를 훑는다. 예전에는 account/market/stock만
+    손으로 나열해 order 그룹이 통째로 빠져 있었고, 그 바람에 금현물 주문의
+    `--order-type`(GOLD_ORDER_TYPES) 2개가 집계에서 누락됐다. 그룹을
+    새로 추가해도 자동으로 잡히도록 루트에서 내려간다.
+    """
     import click
     from kiwoom_cli.commands import _constants
-    from kiwoom_cli.commands.account import account
-    from kiwoom_cli.commands.market import market
+    from kiwoom_cli.main import cli as root_cli
 
-    def _iter_options(cmd):
-        yield from ((cmd, p) for p in cmd.params if isinstance(p, click.Option))
+    def _iter_options(cmd, path=()):
+        here = path + (cmd.name,)
+        yield from ((here, p) for p in cmd.params if isinstance(p, click.Option))
         if isinstance(cmd, click.Group):
             for sub in cmd.commands.values():
-                yield from _iter_options(sub)
+                yield from _iter_options(sub, here)
 
     converted = [
-        (cmd.name, p.name) for cmd, p in list(_iter_options(account)) + list(_iter_options(market))
+        (" ".join(path), p.name)
+        for path, p in _iter_options(root_cli)
         if isinstance(p.type, _constants.HumanChoice)
     ]
-    # 19, not 18: balance's and asset's --delist are two separate physical decorators
-    # that both apply DELIST_QRY (task-6-brief.md Step 4 lists them as distinct bullets,
-    # "orders pending" through "history journal" sum to 18 in account.py alone), plus
-    # market.py's rank hot --period = 19. The brief's prose summary ("17 + 1 = 18") undercounts
-    # by one relative to its own itemized decorator list; this assertion pins the verified
-    # ground truth instead. See task-6-report.md for the full recount.
-    assert len(converted) == 19
+    # 55 = account/market/stock를 훑던 시절의 53 + order 그룹의 2
+    # (order gold buy --order-type, order gold sell --order-type — 둘 다
+    # GOLD_ORDER_TYPES). order는 이 테스트가 한 번도 훑은 적이 없어 주문
+    # 경로인데도 고정되지 않고 있었다.
+    assert len(converted) == 55
+    # 금현물 주문 두 건은 이름으로도 못 박아 둔다. 개수만 맞추면 다른 곳이
+    # 늘고 여기가 빠져도 통과하기 때문이다.
+    assert ("cli order gold buy", "order_type") in converted
+    assert ("cli order gold sell", "order_type") in converted
 
 
 # ── Task 8: both-fail envelope (fail_api) ────────────────

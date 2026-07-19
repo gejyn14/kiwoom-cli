@@ -1,6 +1,363 @@
 # Changelog
 
-## [Unreleased]
+## [2.11.0] - 2026-07-19
+
+`market rank volume`(ka10030)의 `--include-managed` help 문구가 스펙과 정반대였고,
+`market rank amount`(ka10032)는 극성이 반대인 동일 이름 옵션을 그대로 쓰고
+있었습니다. `market rank broker-by-stock`(ka10038)은 `--period`/`--from`·`--to`를
+함께 줘도 기간(`dt`)이 항상 우선하고 있었고, `market elw broker-top`(ka30002)의
+`--issuer` 기본값은 자릿수부터 틀린 값(12자리, 필드는 3자리)을 매번 전송하고
+있었습니다. 네 곳 모두 교정하고, 이 참에 두 명령의 나머지 자유 텍스트 옵션도
+human-readable 이름으로 전환했습니다.
+
+`market program time-trend`(ka90005)/`market program daily-trend`(ka90010)의
+`--market`이 스펙에 정의되지 않은 코드를 보내고 있었고, 정정과 함께
+`--unit`/`--tick-type`에 human-readable 이름을 추가했습니다(하위호환).
+
+`stock investor after-close`(ka10066)의 `--trade` 값이 스펙과 반대였고, 정정과
+함께 두 옵션에 raw 숫자코드와 함께 쓸 수 있는 human-readable 이름을
+추가했습니다(하위호환).
+
+`stock investor consecutive`(ka10131)의 `--amount-qty` 값이 스펙과 반대였고,
+정정과 함께 세 옵션에 raw 숫자코드와 함께 쓸 수 있는 human-readable 이름을
+추가했습니다(하위호환).
+
+`stock investor intraday`(ka10063)는 요청 바디 6개 필드 중 5개가 스펙과 어긋나
+있었습니다. 정정과 함께 네 옵션에 raw 숫자코드와 함께 쓸 수 있는
+human-readable 이름을 추가했습니다(하위호환).
+
+`stock credit inquiry`(kt20017)는 필수 필드를 받을 방법이 없어 `{}`만
+전송했고, `stock credit available`(kt20016)도 필수 `mrkt_deal_tp`를
+누락하고 있었습니다.
+
+`stock daily`(ka10005)가 스펙에 없는 `qry_tp` 필드를 지어내 보내고 있었습니다.
+이번 릴리스에서 유일하게 "원래 되던 것이 안 되는" breaking 변경입니다 —
+위 항목들과 달리 옵션 자체가 제거됩니다.
+
+`stock analysis trader-analysis`(ka10043)는 `--from`/`--to`가 이미
+`required=True`인데도 `--date-type`(`qry_dt_tp`) 기본값이 `"0"`(기간으로 조회)이라
+그 필수 날짜를 API가 무시하고 있었고, `--broker`(`mmcm_cd`, Required=Y)는
+기본값이 빈 문자열이었습니다. 두 곳을 고치고, 나머지 원시 숫자 코드 옵션
+(`--date-type`/`--pot`/`--sort`/`--days`)도 human-readable 이름으로 전환했습니다.
+
+미국주식 주문(`order buy`/`sell`, ust20000/ust20001)에서 지정가 계열
+(`limit`/`vwap-limit`/`twap-limit`/`loc`/`stop-limit`)에 `--price`를 주지 않으면
+`ord_uv=""`로 조용히 전송되고 있었습니다. 이 유형은 미국·국내·금현물 주문
+경로가 반복해서 갖고 있던 같은 버그의 **세 번째 인스턴스**입니다 — "가격을
+쓰지 않는 유형에 `--price`를 준 경우"는 이미 막고 있었지만, 반대 방향인
+"가격이 필수인 유형에 `--price`가 없는 경우"는 막지 않았습니다. 금현물
+(kt50000/kt50001)은 v2.10.1에서 이미 같은 가드를 받았습니다.
+
+**Fixed**
+
+- **`market rank volume`(ka10030) `mang_stk_incls`(관리종목포함) help가 스펙과
+  반대였습니다.** 스펙은 `0:관리종목 포함, 1:관리종목 미포함`인데 help 문구는
+  `"(0=미포함, 1=포함)"`이라고 정반대로 적혀 있었습니다. 실제 기본값(`"0"`)
+  전송 자체는 안 바뀌었지만(코드값은 원래도 `"0"`), 사용자가 문구를 믿고
+  값을 뒤집어 지정하면 반대 결과를 받았습니다. 이번에 옵션을
+  `--stock-condition`(`STOCK_CONDITION`, 15개 값)으로 바꾸며 스펙대로 고쳤습니다.
+- **`market elw broker-top`(ka30002) `--issuer`의 기본값이 12자리(`"000000000000"`)
+  였는데 스펙(`isscomp_cd`)은 길이 3입니다.** 형제 ELW 커맨드에서 복붙된
+  값으로, 지정하지 않고 호출하면 매번 무효한 발행사코드를 그대로 전송하고
+  있었습니다. 기본값을 제거하고 필수 옵션으로 바꿨습니다.
+- **`market rank broker-by-stock`(ka10038)에서 `--from`/`--to`(기간 조회)를 줘도
+  `dt`가 항상 함께 전송돼 기간 조회가 무시되고 있었습니다.** 스펙은 "시작일자와
+  종료일자로 조회를 원하는 경우 기간(dt)값은 빈값으로 설정"이라고 명시하는데,
+  기존 코드는 `dt` 기본값(`"1"`)을 항상 보냈습니다. 이제 `--from`/`--to`가
+  주어지면 `dt` 키 자체를 body에서 제외합니다(빈 문자열이 아니라 키 제외 —
+  CLI로 직접 확인).
+- **`--market`(`mrkt_tp`)이 스펙에 없는 코드를 보내고 있었습니다.** ka90005/
+  ka90010 스펙(Request Body, `docs/미국 REST API 문서.xlsx`)의 `mrkt_tp`는
+  길이 10의 P-코드이고 값이 `stex_tp`(거래소구분)와 **연동**됩니다(코스피
+  -1:`P00101`, -2:`P001_NX01`, -3:`P001_AL01`; 코스닥-1:`P10102`,
+  -2:`P101_NX02`, -3:`P101_AL02`). 기존 코드는 `--market`이 자유 텍스트였고
+  기본값 `"0"`을 그대로 전송했는데, 이는 형제 API인 ka90007
+  (`0:코스피,1:코스닥`)의 코드북에서 복붙된 값으로 이 두 엔드포인트에는
+  애초에 정의되어 있지 않았습니다.
+- ka90010 스펙 시트는 코스닥+거래소구분값3을 `P001_AL02`로 적어 ka90005의
+  `P101_AL02`와 모순됩니다. 이 모순은 워크북뿐 아니라 키움 공식 GitHub
+  저장소(`kiwoom_docs/시세.md`, Postman 컬렉션, examples 스크립트,
+  `kiwoom_api_spec.json`) 전체에서 동일하게 나타나, 키움 자체 소스로는
+  어느 쪽이 오타인지 판정할 수 없었습니다. 코스닥 코드가 전부 `P101_`
+  접두사라는 점에 근거해 두 엔드포인트 모두 `P101_AL02`로 통일했습니다 —
+  이건 검증된 사실이 아니라 판단이며, 근거는
+  `kiwoom_cli/commands/_constants.py`의 `PROGRAM_MARKET_BY_EXCHANGE` 주석에
+  남겨 두었습니다.
+- **`--trade` 기본값이 실제로는 순매도(2) 데이터를 반환하고 있었습니다.**
+  스펙(ka10066 Request Body)은 `trde_tp`를 `0:순매수, 1:매수, 2:매도`로
+  정의하는데, 기존 코드는 `Choice(["1","2"])`에 `default="2"`였고 help는
+  `1=순매도, 2=순매수`라고 적어 실제 동작과 정반대로 안내했습니다. 진짜
+  순매수 코드인 `0`은 Choice 목록에 없어 애초에 지정할 수 없었습니다.
+- **`--amount-qty` 기본값이 실제로는 수량(1) 데이터를 반환하고 있었습니다.**
+  스펙(ka10131 Request Body)은 `amt_qty_tp`를 `0:금액, 1:수량`으로 정의하는데,
+  기존 코드는 `Choice(["1","2"])`에 `default="1"`이었고 help는 `1=금액,
+  2=수량`이라고 적어 실제 동작과 어긋났습니다(전송값 `1`은 스펙상 수량이지
+  help가 말한 금액이 아니었습니다). 스펙에 없는 값 `2`도 Choice 목록에는
+  올라 있었습니다.
+- **`--investor-type`(`invsr`) 기본값이 스펙 밖 값 `"1000"`을 보내고
+  있었습니다.** ka10063 스펙(Request Body)의 `invsr`는 Length=1인
+  `6:외국인, 7:기관계, 1:투신, 0:보험, 2:은행, 3:연기금, 4:국가, 5:기타법인`
+  코드북인데, 기존 기본값 `"1000"`은 다른 API(ka10058)의 `invsr_tp`
+  코드북을 복붙한 것이라 길이부터 이 엔드포인트에 정의되지 않은 값이었습니다.
+- **`--market`(`mrkt_tp`)이 `000:전체`를 지정할 방법이 없었습니다.** 기존
+  코드는 `kospi`/`kosdaq` 두 값만 허용했습니다(`MARKET_TWO`). 스펙에는
+  `000:전체, 001:코스피, 101:코스닥` 세 값이 있어 `MARKET_ALL`로
+  교체했습니다.
+- **`--amount-qty`(`amt_qty_tp`)가 자유 텍스트였습니다.** 스펙상 값이
+  `1: 금액&수량` 하나뿐인데 자유 텍스트 `default="1"`이라 임의 값을 그대로
+  전송할 수 있었습니다. 전송값 자체(`"1"`)는 맞았으므로 동작 변화는
+  없습니다.
+- **`--foreign-all`(`frgn_all`)/`--simultaneous`(`smtm_netprps_tp`)가 원시
+  코드 `0`/`1`만 노출했습니다.** 둘 다 스펙상 `1:체크, 0:미체크`인 동일
+  코드북이라 공용 상수 하나(`CHECK_YES_1_NO_0`)로 정리했습니다.
+- `--exchange`(`stex_tp`)는 이미 `EXCHANGE_ALL`(`1:KRX, 2:NXT, 3:통합`)로
+  스펙과 정확히 일치해 이번 변경 대상이 아닙니다.
+- **`credit inquiry`가 필수 `stk_cd`를 아예 보내지 않아 호출 자체가
+  성립하지 않았습니다.** kt20017 Request Body는 `stk_cd`(Required=Y)
+  하나뿐인데 커맨드에 이를 받을 인자/옵션이 없어 항상 `{}`를 전송했고,
+  API가 이를 거부했습니다. 이제 종목코드를 위치 인자로 받아
+  `{"stk_cd": <code>}`를 전송합니다.
+- **`credit available`이 필수 `mrkt_deal_tp`를 누락했습니다.** kt20016
+  Request Body는 `mrkt_deal_tp`(Required=Y, `%:전체, 1:코스피,
+  0:코스닥`)를 요구하는데 기존 코드는 아예 보내지 않았습니다. 이제
+  `--market`(기본 `all`→`"%"`)으로 항상 전송합니다. 같은 요청 바디의
+  선택 필드 `crd_stk_grde_tp`(`--grade`, 기본 `all`→`"%"`, 항상 전송)와
+  `stk_cd`(`--code`, 미지정 시 키 자체를 생략— 빈 문자열 아님)도 함께
+  노출했습니다.
+- **`--date-type` 기본값이 사용자가 반드시 입력해야 하는 `--from`/`--to`를
+  무력화하고 있었습니다.** ka10043 Request Body(`docs/미국 REST API 문서.xlsx`)의
+  `qry_dt_tp`는 `0:기간으로 조회, 1:시작일자·종료일자로 조회`인데, 기존 기본값
+  `"0"`은 `--from`/`--to`가 `required=True`로 항상 채워지는데도 API가 이를 무시하고
+  `dt`(기간) 기준으로 조회하게 만들었습니다. 기본값을 `"1"`(start-end)로
+  바꿨습니다 — CLI로 직접 확인: `stock analysis trader-analysis 005930 --from
+  20260101 --to 20260107 --broker 001` 기본 호출의 전송 body가
+  `qry_dt_tp="0"`에서 `"1"`로 바뀝니다.
+- **`--broker`(`mmcm_cd`)가 Required=Y 필드인데 기본값이 빈 문자열이었습니다.**
+  옵션을 생략하면 항상 빈 `mmcm_cd`를 전송했습니다(회원사 코드 조회는
+  `stock brokers`, ka10102). 이제 필수 옵션으로 승격했고, help에
+  `stock brokers`를 안내합니다.
+- **`order buy NVDA 10 --type limit`이 `--price` 없이 `ord_uv=""`로
+  전송되고 있었습니다.** ust20000/ust20001 스펙(`docs/미국 REST API
+  문서.xlsx`)의 `ord_uv` Description은 "trde_tp가 00(지정가),30(LOC)...인
+  경우 필수 입력, 그 외 시장가 거래유형 설정 시 입력 값은 빈 값 처리"라고
+  명시합니다 — `Required` 컬럼만 보면 `N`이라 선택 항목처럼 보이지만,
+  지정가 계열에서는 사실상 필수입니다. 이제 지정가 계열
+  (`US_LIMIT_TYPES` = `limit`/`vwap-limit`/`twap-limit`/`loc`/`stop-limit`,
+  시장가 계열의 정확한 여집합)에서 `--price` 없이 호출하면 `INVALID_INPUT`으로
+  즉시 종료하고, 요청 자체를 전송하지 않습니다(CLI로 직접 확인 — 5종 전부와
+  `--type market`/`--type market --price` 회귀 케이스 포함).
+- 국내 주문(`order buy`/`sell`, `order credit buy`)에는 아직 같은 가드가
+  없습니다. 국내 지정가도 `ord_uv`를 빈 문자열로 전송하고 있어 문제는 그대로
+  남아 있지만, 서버가 이 값을 거부하기 때문에 잘못된 주문이 나가지는 않습니다.
+  CLI가 미리 걸러줬을 `exit 1` 대신 API 오류(`exit 2`)가 돌아오는 차이입니다.
+  가드의 근거는 있습니다 — 키움 공식 CLI(kwcli)가 함께 배포하는
+  `order_price_policies.csv`가 국내 지정가 매수·매도·신용매수에 대해 `--price`를
+  required로 지정합니다. 워크북의 `ord_uv` Description은 "단위: 원"이 전부라
+  이번 검토에서는 근거가 없다고 판단했는데, 확인이 부족했습니다. 다음
+  릴리스에서 국내 경로에도 같은 가드를 넣겠습니다.
+
+**Breaking**
+
+- **`market rank volume`에서 `--include-managed`가 제거되고 `--stock-condition`으로
+  대체됩니다.** 필드(`mang_stk_incls`)가 boolean이 아니라 15종 종목필터이기
+  때문입니다(kwcli `rankings today-volume --stock-condition`과 이름을 맞췄습니다).
+  기존 `--include-managed` 호출은 이제 "No such option" 오류로 exit 1이 됩니다.
+- **`market elw broker-top`의 `--issuer`가 이제 필수입니다.** 이전엔 항상
+  무효한 기본값을 전송했으므로, 이는 "동작하던 게 깨지는" 변경이 아니라
+  "항상 실패하던 호출이 이제 명확히 실패"하는 변경입니다. `--issuer` 없이
+  호출하면 exit 1.
+- **자유 텍스트였던 아래 옵션들이 enum으로 좁혀져, 스펙 밖 값을 넘기면
+  exit 1이 됩니다** (모두 `HumanChoice`라 기존에 쓰던 raw 숫자 코드는 계속
+  동작합니다 — 하위호환):
+  - `market rank volume`: `--sort`, `--stock-condition`(신규, 舊 `--include-managed`),
+    `--credit-type`, `--vol-type`, `--price-type`, `--amount-type`, `--session`
+  - `market rank amount`: `--include-managed`
+  - `market rank broker-by-stock`: `--type`, `--period`
+  - `market elw broker-top`: `--vol-type`, `--type`, `--period`, `--exclude-expired`
+- **자유 텍스트였던 아래 옵션들도 enum으로 좁혀져, 매핑에 없는 값을 넘기면
+  exit 1이 됩니다** (모두 `HumanChoice`라 기존 raw 숫자 코드는 계속
+  동작합니다):
+  - `market program time-trend`/`daily-trend`: `--unit`, `--tick-type`
+  - `stock investor consecutive`: `--period`, `--net-type`
+- **`market rank broker-by-stock`에서 `--period`와 `--from`/`--to`를 함께 주면
+  이제 `INVALID_INPUT`으로 exit 1입니다.** 스펙상 두 조회 방식은 상호 배타적이라
+  (기간 조회 시 `dt`는 빈값이어야 함) 동시 지정은 의미가 정의되지 않은 조합이었고,
+  전에는 조용히 `dt`가 우선 적용됐습니다.
+- **`market rank broker-by-stock`에서 `--from`/`--to` 중 하나만 주면 이제
+  `INVALID_INPUT`으로 exit 1입니다.** 전에는 한쪽만 줘도 요청이 나갔지만
+  `dt`(기본 `"1"`)가 함께 전송돼, 스펙상 기간 조회가 이겨 사용자가 준 날짜는
+  무시됐습니다. 스펙 조건("시작일자와 종료일자로 조회를 원하는 경우")은 둘
+  다를 뜻하므로, 이제 `--from`/`--to`는 함께 주거나 둘 다 생략해야 합니다.
+- **`--market` 전송값이 `"0"`/`"1"`에서 P-코드로 바뀝니다.** 이전 기본값
+  `"0"`은 스펙에 없는 값이었으므로 이건 고쳐진 것이지 기능이 바뀐 게
+  아닙니다. 다만 `--market`은 이전에 자유 텍스트(`type=` 없음)였다가 이제
+  `click.Choice(["kospi","kosdaq"])`로 좁아져, 임의 문자열(예: raw P-코드를
+  직접 넘기던 호출)을 그대로 전달하던 동작은 더 이상 동작하지 않습니다 —
+  `--unit`/`--tick-type`과 달리 `--market`은 `HumanChoice`가 아니라 순수
+  `click.Choice`라 raw 코드 하위호환이 없습니다(값이 `stex_tp`와 함께 2단
+  조회에 쓰이기 때문입니다).
+- **`--trade`의 기본값이 `trde_tp=2`(매도)에서 `trde_tp=0`(순매수)로
+  바뀌었습니다.** 이건 이름 체계와 무관한 별개의 변경입니다 — raw 코드를
+  직접 지정하는 호출(`--trade 2`, `--trade sell` 등)은 위와 같이 계속
+  똑같은 데이터를 반환하지만, **`--trade`를 아예 지정하지 않고 기본값에
+  의존하던 호출**은 이제 다른 데이터(순매수 상위 종목)를 받습니다. 이전에
+  기본값으로 매도 데이터를 받던 스크립트는 명시적으로 `--trade sell`을
+  추가해야 이전과 같은 데이터를 계속 받습니다.
+- **`--amount-qty`의 기본값이 `amt_qty_tp=1`(수량)에서 `amt_qty_tp=0`(금액)로
+  바뀌었습니다.** 이건 이름 체계와 무관한 별개의 변경입니다 — raw 코드를
+  직접 지정하는 호출(`--amount-qty 1`, `--amount-qty quantity` 등)은 위와
+  같이 계속 똑같은 데이터(수량)를 반환하지만, **`--amount-qty`를 아예
+  지정하지 않고 기본값에 의존하던 호출**은 이제 다른 데이터(금액)를
+  받습니다. 이전에 기본값으로 수량 데이터를 받던 스크립트는 명시적으로
+  `--amount-qty quantity`를 추가해야 이전과 같은 데이터를 계속 받습니다.
+- **`--amount-qty`(ka10131)에서 `2`를 더 이상 받지 않습니다.** 이전 Choice
+  목록은 `["1","2"]`였고 `--amount-qty 2`는 `amt_qty_tp="2"`를 그대로
+  전송했지만, 스펙(`0:금액, 1:수량`)에 없는 값이었습니다. 이제 `2`를 넘기면
+  전송 전에 `exit 1`입니다. raw `0`/`1`은 계속 동작합니다.
+- **`--investor-type`의 기본 전송값이 `invsr="1000"`에서 `invsr="6"`(외국인)로
+  바뀌었습니다.** 기존 기본 호출은 스펙 밖 값을 보내고 있었으므로, 이전에
+  기본값에 의존하던 호출은 이제 다른(그리고 실제로 유효한) 데이터를
+  받습니다.
+- **`--investor-type`가 자유 텍스트에서 스펙값 8개(`invsr` 코드북)만 받는
+  enum이 되었습니다.** 기존엔 `type=` 지정이 없어 어떤 문자열이든 그대로
+  `invsr`로 전송했습니다. 이제 그 8개 값(및 대응하는 사람이 읽는 이름)
+  이외의 입력은 전송 전에 `exit 1`로 거부됩니다. 실제로 확인된 회귀:
+  이전 기본값이었던 `--investor-type 1000`, 그리고 `--investor-type 9`
+  둘 다 이전에는 각각 `invsr="1000"`/`invsr="9"`를 그대로 전송했지만
+  지금은 `exit 1`입니다. 스펙에 없는 값을 쓰던 스크립트만 영향을
+  받습니다.
+- **`--amount-qty`가 자유 텍스트에서 스펙값 하나(`combined`/`1`)만 받는
+  enum이 되었습니다.** `1` 이외의 값(예: `--amount-qty 2`)은 이제 전송
+  전에 `exit 1`로 거부됩니다. 스펙에 없는 값을 쓰던 스크립트만 영향을
+  받습니다.
+- **`credit inquiry`가 이제 종목코드 인자를 요구합니다.** 인자 없이
+  호출하면 `exit 1`(Click 필수 인자 누락 → 이 프로젝트는 `UsageError`를
+  `EXIT_INPUT=1`로 재매핑합니다, `main.py`)로 종료합니다. 다만 인자 없는
+  기존 호출은 어차피 `{}`를 보내 API가 거부하고 있었으므로, "정상 동작하던
+  것이 깨지는" 종류의 breaking은 아닙니다.
+- **`--type`(`week`/`month`) 옵션이 제거됐습니다.** ka10005 Request Body는
+  `stk_cd` 하나뿐이고(스펙: `docs/미국 REST API 문서.xlsx`) 기간을 고르는
+  파라미터가 존재하지 않습니다. 기존 코드는 `qry_tp`라는 필드를 지어내
+  보냈는데, 서버는 이 필드를 인식하지 못해 무시하고 항상 일별 데이터를
+  반환했습니다 — 다만 CLI는 `--type week`/`--type month`일 때 제목만
+  "주별"/"월별"로 바꿔 달았습니다. 즉 **이전에도 실제로는 항상 일별
+  데이터였고, 라벨만 잘못돼 있었습니다.** `--type week`/`--type month`를
+  쓰던 스크립트는 이제 `exit 1`, `Error: No such option '--type'.`로
+  실패합니다(Click의 "No such option" 경로 — 이 프로젝트는 `UsageError`를
+  `EXIT_INPUT=1`로 재매핑하므로 Click 기본값 2가 아니라 1로 종료합니다).
+  주/월별 시세가 실제로 필요하면 `stock chart week`/`stock chart month`
+  (ka10082/ka10083)를 쓸 것 — 이쪽은 실제로 다른 기간 데이터를 반환하는
+  진짜 엔드포인트입니다.
+- **`--date-type` 기본 전송값이 `qry_dt_tp="0"`에서 `"1"`로 바뀝니다.** 다만
+  이전 동작은 사용자가 필수로 입력한 `--from`/`--to`를 API가 조용히 무시하는
+  것이었으므로, 이는 **고쳐진 것이지 기능이 바뀐 게 아닙니다** — 이전에
+  기본 호출로 얻던 "기간(dt) 기준 조회 결과"에 의존하던 스크립트만 영향을
+  받으며, 그 결과 자체가 사용자가 지정한 날짜 범위와 무관했습니다.
+- **`--broker`가 이제 필수입니다.** 이전엔 생략 시 빈 값(`mmcm_cd=""`)을
+  전송했고 — Required=Y 필드에 빈 값이므로 서버가 거부했을 값입니다 — 이제
+  생략하면 `Error: Missing option '--broker'.`로 `exit 1`이고 요청 자체가
+  나가지 않습니다(CLI로 직접 실행해 확인).
+- **지정가 계열 미국주식 주문에서 `--price`를 생략하던 호출이 이제
+  `exit 1`입니다.** 다만 이 호출은 **원래 정상 동작한 적이 없습니다** —
+  `ord_uv=""`를 서버가 거부했거나, 사용자가 의도하지 않은 방식으로
+  처리됐을 주문입니다. 조용히 잘못 나가던 요청이 이제 전송 전에
+  막힙니다. 영향받는 명령: `order buy`/`sell --type limit|vwap-limit|
+  twap-limit|loc`(매수/매도), `order sell --type stop-limit`(매도 전용),
+  그리고 `--dry-run`도 동일하게 막힙니다 — `order buy NVDA 10 --type limit
+  --dry-run`은 이제 body를 출력하는 대신 `exit 1`입니다. `--price`를
+  지정하면 이전과 동일하게 동작합니다.
+
+**Non-breaking (사람이 읽는 이름 추가, 하위호환 / 순수 확장)**
+
+- **`market rank amount`(ka10032)의 `--include-managed`가 이제 `no`/`yes`
+  이름도 받습니다.** 전송값은 그대로입니다: `no`→`mang_stk_incls=0`,
+  `yes`→`mang_stk_incls=1`. `market rank volume`(ka10030)의 동일 이름 필드와
+  **극성이 정반대**임을 두 커맨드 모두 테스트로 고정했습니다
+  (`STOCK_CONDITION`은 `0=포함`, `MANAGED_STOCK_INCLUDE`는 `0=미포함`).
+- **`market rank amount`의 `--exchange`가 이제 `all`(통합, `stex_tp=3`)도
+  받습니다.** 스펙(`stex_tp`)에 `3:통합`이 있었는데 기존 코드는 `KRX`/`NXT`
+  두 값만 허용했습니다. 순수 추가이며 기본값(`KRX`) 호출의 전송 body는
+  변경 전후 동일함을 CLI로 확인했습니다.
+- **`market rank broker-by-stock`(ka10038)의 `--period`가 이제 `previous`/`5d`/
+  `10d`/`20d`/`40d`/`60d`/`120d` 같은 이름도 받습니다.** 이 필드는
+  코드가 하루씩 어긋난 off-by-one 코드북입니다(`5일=4`, `10일=9`, `120일=119`).
+  전송값은 그대로이며(`previous`→`dt=1` 등), kwcli
+  `rankings broker-by-stock --period` 값과 일치를 확인했습니다.
+- **나머지 신규 human-readable 옵션들의 전송값도 전부 전환 전과 동일합니다**
+  (기본 호출의 body를 CLI로 직접 실행해 확인): `rank volume`의
+  `--sort=volume→sort_tp=1`, `--credit-type=all→crd_tp=0`,
+  `--vol-type=all→trde_qty_tp=0`, `--price-type=all→pric_tp=0`,
+  `--amount-type=all→trde_prica_tp=0`, `--session=all→mrkt_open_tp=0`;
+  `elw broker-top`의 `--vol-type=all→trde_qty_tp=0`,
+  `--type=net-buy→trde_tp=1`, `--period=previous→dt=1`,
+  `--exclude-expired=exclude→trde_end_elwskip=1`.
+  - `rank volume`의 `--vol-type`(`trde_qty_tp`) 값 중 `500`은 스펙 원문 설명이
+    "500만주이상"(5,000,000)으로 적혀 있어 다른 항목들의 산술 패턴
+    (코드값×1,000주)과 어긋납니다. 스펙 문구 쪽이 틀렸다고 보고 이름은 패턴을
+    따라 `500k`로 붙였는데, 키움 공식 kwcli의 `maps/arguments.csv`가
+    `rankings today-volume`(=ka10030)의 같은 필드를 9개 값 전부 동일하게
+    (`500k=500` 포함) 매핑하고 있어 확인됐습니다.
+- **`--unit`/`--tick-type`이 이제 `amount`/`quantity`, `tick`/`minute` 같은
+  사람이 읽는 이름도 받습니다.** 기존에 숫자 코드(`1`/`2`, `0`/`1`)를 직접
+  넘기던 스크립트는 **그대로 동작합니다** — `HumanChoice`가 raw API 코드를
+  하위호환으로 계속 허용하기 때문입니다. 전송값도 이름 추가 전과 동일합니다:
+  `amount`→`amt_qty_tp=1`, `quantity`→`amt_qty_tp=2`;
+  `tick`→`min_tic_tp=0`, `minute`→`min_tic_tp=1`.
+- **`--exchange`가 이제 `all`(통합, `stex_tp=3`)도 받습니다.** 스펙에
+  `3:통합`이 있었는데 기존 코드는 `KRX`/`NXT` 두 값만 허용했습니다. 순수
+  추가라 기존 호출은 영향 없습니다(기본값 `KRX` 그대로, 실제로 CLI를
+  실행해 기본값 호출의 전송 body가 변경 전후 동일함을 확인했습니다).
+- **`--trade`/`--amount-qty`가 이제 `net-buy`/`buy`/`sell`, `amount`/`quantity`
+  같은 사람이 읽는 이름도 받습니다.** 기존에 숫자 코드(`1`/`2`/`0`)를 직접
+  넘기던 스크립트는 **그대로 동작합니다** — `HumanChoice`가 raw API 코드를
+  하위호환으로 계속 허용하기 때문입니다(`kiwoom_cli/commands/_constants.py`
+  `HumanChoice.convert`). 전송값도 이름 추가 전과 동일합니다:
+  `net-buy`→`trde_tp=0`, `buy`→`trde_tp=1`, `sell`→`trde_tp=2`;
+  `amount`→`amt_qty_tp=1`, `quantity`→`amt_qty_tp=2`. 이름으로 바꿀 필요
+  없이 기존 호출을 그대로 둬도 됩니다.
+- **`--market`이 이제 `all`도 받습니다.** 스펙에 `000:전체`가 있었는데
+  기존 코드는 `kospi`/`kosdaq` 두 값만 허용했습니다. 순수 추가라 기존
+  호출은 영향 없습니다(기본값 `kospi` 그대로).
+- **`--amount-qty`/`--period`/`--stock-sector`가 이제 `amount`/`quantity`,
+  `recent`/`3d`/`5d`/`10d`/`20d`/`120d`/`range`, `stock`/`sector` 같은 사람이
+  읽는 이름도 받습니다.** 스펙이 정의한 숫자 코드를 직접 넘기던 스크립트는
+  **그대로 동작합니다** — `HumanChoice`가 raw API 코드를 하위호환으로 계속
+  허용하기 때문입니다. 다만 `--amount-qty 2`는 예외로, 스펙에 없는 값이라
+  이제 거부됩니다(아래 Breaking 참고). 전송값은 이름 추가 전과 동일합니다:
+  `recent`→`dt=1`,
+  `3d`→`dt=3`, `5d`→`dt=5`, `10d`→`dt=10`, `20d`→`dt=20`, `120d`→`dt=120`,
+  `range`→`dt=0`; `stock`→`stk_inds_tp=0`, `sector`→`stk_inds_tp=1`.
+
+  `--net-type`도 사람이 읽는 이름(`net-buy`)만 노출되도록 바뀌었지만 스펙상
+  값이 `2`(순매수) 하나뿐이라 기존 자유 입력 `--net-type 2`도 계속
+  `netslmt_tp=2`를 보냅니다. `--exchange`는 이미 이전 정리에서 전환되어
+  이번 변경 대상이 아닙니다.
+- **`--investor-type`/`--amount-qty`/`--foreign-all`/`--simultaneous`가
+  이제 사람이 읽는 이름도 받습니다.** 새 매핑의 값(=스펙이 정의한 코드)을
+  직접 넘기던 스크립트는 **그대로 동작합니다** — `HumanChoice`가 raw API
+  코드도 하위호환으로 계속 허용하기 때문입니다. 전송값도 이름 추가 전과
+  동일합니다: `foreign`→`invsr=6`, `institution`→`invsr=7`,
+  `investment-trust`→`invsr=1`, `insurance`→`invsr=0`, `bank`→`invsr=2`,
+  `pension`→`invsr=3`, `state`→`invsr=4`, `other-corporate`→`invsr=5`;
+  `combined`→`amt_qty_tp=1`; `yes`→`1`, `no`→`0`(`frgn_all`/
+  `smtm_netprps_tp` 공통 — 스펙의 값이 이 두 개뿐이라 완전히
+  하위호환입니다). `--market`에 `all`이 추가된 것도 순수 추가라 기존
+  호출은 영향 없습니다(기본값 `kospi` 그대로). **단, `--investor-type`과
+  `--amount-qty`는 매핑에 없는 값(스펙 밖 raw 코드)을 넘기던 호출까지는
+  하위호환하지 않습니다 — 위 Breaking 참고.**
+- `credit available --market`은 `MARKET_KOSPI_KOSDAQ`(kospi=0, kosdaq=1)과
+  극성이 반대인 `CREDIT_MARKET`(kospi=1, kosdaq=0)을 씁니다 — kt20016
+  고유 코드북이라 다른 엔드포인트에 영향 없습니다. `HumanChoice`가 원시
+  코드도 하위호환으로 허용하고, 두 커맨드 모두 이전에는 옵션이 하나도
+  없었으므로 여기서 "옵션 하위호환 깨짐"에 해당하는 변경은 없습니다.
+- **`--date-type`가 `period`(`qry_dt_tp=0`)/`start-end`(`=1`)를, `--pot`가
+  `today`(`pot_tp=0`)/`previous`(`=1`)를, `--sort`가 `close`(`sort_base=1`)/
+  `date`(`=2`)를 받습니다.** 전송값은 원시 코드와 동일함을 CLI로 확인했습니다.
+- **`--days`가 `5d`/`10d`/`20d`/`40d`/`60d`/`120d` 이름도 받습니다.** 이
+  코드북은 `5일=5`로 코드가 일수와 그대로 일치합니다 — `market rank
+  broker-by-stock`(ka10038)의 `dt`(`5일=4`, `10일=9`, ... 하루씩 어긋나는
+  off-by-one 코드북)와 값 집합이 다르므로 절대 혼용하지 않도록 CLI 테스트로
+  `--days 5d → dt="5"`(`"4"` 아님)를 고정했습니다.
 
 ## [2.10.1] - 2026-07-19
 
