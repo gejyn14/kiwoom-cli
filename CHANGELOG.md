@@ -99,6 +99,36 @@ kwcli 이중 확인).
   있는 값(사람 이름·raw 코드 모두)의 동작은 바뀌지 않으므로 정상적인 호출에는
   영향이 없습니다.
 
+`market sector`/`market theme`의 6개 커맨드(ka10051/ka20001/ka20002/ka20009/
+ka10101/ka90001)의 숫자코드 옵션도 human-readable 이름으로 전환했습니다.
+이번 청크도 순수 표기 전환입니다 — 7개 옵션 전부 기본 호출이 종전과 완전히
+동일한 body를 전송합니다(wire-value fix 없음, 워크북·kwcli arguments.csv
+이중 확인). `sector index`(ka20003)의 `--inds-cd`, `sector chart tick/minute`
+(ka20004/05)의 `--scope`, `theme groups`/`theme stocks`의 `--date-type`은
+각각 업종코드 조회 대상, 자기서술적 수량, 자유 입력 일수(1~99일)라 이번
+전환 대상이 아닙니다(raw 텍스트 유지).
+
+**Non-breaking (사람이 읽는 이름 추가, 하위호환)**
+
+- `sector investor`(ka10051)의 `--unit`(`amt_qty_tp`)이 human-readable
+  이름을 받습니다(`--unit quantity` 등). `stock investor consecutive`
+  (ka10131)와 코드북이 동일해(0:금액,1:수량) 기존 `AMT_QTY_TP_0_1`을
+  공유합니다.
+- `sector current`/`sector stocks`/`sector daily`(ka20001/02/09)의
+  `--market`(`mrkt_tp`)이 human-readable 이름을 받습니다(`kospi`/`kosdaq`/
+  `kospi200`). 세 API 모두 워크북 문구가 character-for-character 동일해
+  하나의 코드북(`SECTOR_PRICE_MARKET`)으로 수렴시켰습니다. 기존
+  `MARKET_KOSPI_KOSDAQ`(kospi/kosdaq 2값)의 진짜 상위집합이지만 재사용하지
+  않고 별도 상수를 새로 뒀습니다.
+- `sector codes`(ka10101)의 `--market`이 human-readable 이름 5개
+  (`kospi`/`kosdaq`/`kospi200`/`kospi100`/`krx100`)를 받습니다. 위
+  `SECTOR_PRICE_MARKET`의 진짜 상위집합이라 별도 이름(`SECTOR_CODES_MARKET`)
+  으로 분리했습니다 — `sector current`/`stocks`/`daily`에서 `kospi100`/
+  `krx100`을 주면 거부됩니다(그 3개 API 스펙엔 없는 값입니다).
+- `theme groups`(ka90001)의 `--type`(`qry_tp`)/`--sort`(`flu_pl_amt_tp`)가
+  human-readable 이름을 받습니다(`--type stock`, `--sort change-top` 등).
+  raw 숫자코드도 그대로 통과하므로 기존 호출은 영향이 없습니다.
+
 ## [2.11.0] - 2026-07-19
 
 `market rank volume`(ka10030)의 `--include-managed` help 문구가 스펙과 정반대였고,
