@@ -264,16 +264,20 @@ def _sync_stocks() -> list[dict]:
 @stock.command("sync")
 def sync():
     """전 시장 종목 리스트를 다운받아 캐시에 저장. (ka10099)"""
+    from pathlib import Path
+
     from .. import envelope
     from ..config import CACHE_DIR
     from ..output import err_console
     with err_console.status("[dim]종목 리스트 동기화 중...[/]", spinner="dots"):
         items = _sync_stocks()
-    cache_path = str(CACHE_DIR / "stocks.json")
-    if _get_format() != "table":
-        envelope.emit(data={"synced": len(items), "cache": cache_path})
-    else:
-        human(f"동기화 완료: {len(items)}개 종목 저장 (~/.kiwoom/cache/stocks.json)")
+    cache_path = CACHE_DIR / "stocks.json"
+    home = Path.home()
+    cache_display = f"~/{cache_path.relative_to(home)}" if cache_path.is_relative_to(home) else str(cache_path)
+    if _get_format() == "json":
+        envelope.emit(data={"synced": len(items), "cache": str(cache_path)})
+        return
+    human(f"동기화 완료: {len(items)}개 종목 저장 ({cache_display})")
 
 
 @stock.command("search")

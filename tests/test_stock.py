@@ -137,6 +137,20 @@ def test_sync_emits_json_envelope(runner, fake_client, tmp_stock_cache):
     assert doc["data"]["cache"].endswith("stocks.json")
 
 
+def test_sync_csv_stdout_is_empty(runner, fake_client, tmp_stock_cache):
+    """stock sync -f csv 는 stdout에 아무것도 남기지 않아야 한다 (CSV 계약).
+
+    envelope.emit은 항상 JSON을 찍으므로 `_get_format() != "table"` 게이트로는
+    -f csv에서도 JSON 블롭이 stdout에 새어나간다. csv 모드에서는 완료 메시지가
+    stderr로만 가고 stdout은 완전히 비어 있어야 한다.
+    """
+    result = runner.invoke(cli, ["-f", "csv", "stock", "sync"])
+
+    assert result.exit_code == 0
+    assert result.stdout == ""
+    assert "동기화 완료" in result.stderr
+
+
 def test_search_empty_result_emits_json_envelope(runner, tmp_stock_cache):
     """검색 결과가 없을 때도 -f json은 파싱 가능한 envelope을 출력해야 한다.
 
