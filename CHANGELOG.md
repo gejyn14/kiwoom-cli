@@ -82,6 +82,55 @@
   받습니다. 이전에 기본값으로 수량 데이터를 받던 스크립트는 명시적으로
   `--amount-qty quantity`를 추가해야 이전과 같은 데이터를 계속 받습니다.
 
+`stock investor intraday`(ka10063)는 요청 바디 6개 필드 중 5개가 스펙과 어긋나
+있었습니다. 정정과 함께 네 옵션에 raw 숫자코드와 함께 쓸 수 있는
+human-readable 이름을 추가했습니다(하위호환).
+
+**Fixed**
+
+- **`--investor-type`(`invsr`) 기본값이 스펙 밖 값 `"1000"`을 보내고
+  있었습니다.** ka10063 스펙(Request Body)의 `invsr`는 Length=1인
+  `6:외국인, 7:기관계, 1:투신, 0:보험, 2:은행, 3:연기금, 4:국가, 5:기타법인`
+  코드북인데, 기존 기본값 `"1000"`은 다른 API(ka10058)의 `invsr_tp`
+  코드북을 복붙한 것이라 길이부터 이 엔드포인트에 정의되지 않은 값이었습니다.
+- **`--market`(`mrkt_tp`)이 `000:전체`를 지정할 방법이 없었습니다.** 기존
+  코드는 `kospi`/`kosdaq` 두 값만 허용했습니다(`MARKET_TWO`). 스펙에는
+  `000:전체, 001:코스피, 101:코스닥` 세 값이 있어 `MARKET_ALL`로
+  교체했습니다.
+- **`--amount-qty`(`amt_qty_tp`)가 자유 텍스트였습니다.** 스펙상 값이
+  `1: 금액&수량` 하나뿐인데 자유 텍스트 `default="1"`이라 임의 값을 그대로
+  전송할 수 있었습니다. 전송값 자체(`"1"`)는 맞았으므로 동작 변화는
+  없습니다.
+- **`--foreign-all`(`frgn_all`)/`--simultaneous`(`smtm_netprps_tp`)가 원시
+  코드 `0`/`1`만 노출했습니다.** 둘 다 스펙상 `1:체크, 0:미체크`인 동일
+  코드북이라 공용 상수 하나(`CHECK_YES_NO`)로 정리했습니다.
+- `--exchange`(`stex_tp`)는 이미 `EXCHANGE_ALL`(`1:KRX, 2:NXT, 3:통합`)로
+  스펙과 정확히 일치해 이번 변경 대상이 아닙니다.
+
+**Non-breaking (사람이 읽는 이름 추가, 하위호환)**
+
+- **`--investor-type`/`--amount-qty`/`--foreign-all`/`--simultaneous`가
+  이제 사람이 읽는 이름도 받습니다.** 기존에 숫자 코드를 직접 넘기던
+  스크립트는 **그대로 동작합니다** — `HumanChoice`가 raw API 코드를
+  하위호환으로 계속 허용하기 때문입니다. 전송값도 이름 추가 전과
+  동일합니다: `foreign`→`invsr=6`, `institution`→`invsr=7`,
+  `investment-trust`→`invsr=1`, `insurance`→`invsr=0`, `bank`→`invsr=2`,
+  `pension`→`invsr=3`, `state`→`invsr=4`, `other-corporate`→`invsr=5`;
+  `combined`→`amt_qty_tp=1`; `yes`→`1`, `no`→`0`(`frgn_all`/
+  `smtm_netprps_tp` 공통). `--market`에 `all`이 추가된 것도 순수 추가라
+  기존 호출은 영향 없습니다(기본값 `kospi` 그대로).
+
+**Breaking**
+
+- **`--investor-type`의 기본 전송값이 `invsr="1000"`에서 `invsr="6"`(외국인)로
+  바뀌었습니다.** 기존 기본 호출은 스펙 밖 값을 보내고 있었으므로, 이전에
+  기본값에 의존하던 호출은 이제 다른(그리고 실제로 유효한) 데이터를
+  받습니다.
+- **`--amount-qty`가 자유 텍스트에서 스펙값 하나(`combined`/`1`)만 받는
+  enum이 되었습니다.** `1` 이외의 값(예: `--amount-qty 2`)은 이제 전송
+  전에 `exit 1`로 거부됩니다. 스펙에 없는 값을 쓰던 스크립트만 영향을
+  받습니다.
+
 ## [2.10.1] - 2026-07-19
 
 금현물 주문(`order gold buy`/`sell`, kt50000/kt50001)이 API가 받지 않는 주문타입을
