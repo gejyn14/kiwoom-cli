@@ -15,6 +15,7 @@ from .._mutation import (
     send_order,
 )
 from ._constants import (
+    US_LIMIT_TYPES,
     US_MARKET_TYPES,
     US_ORDER_TYPES,
     US_SELL_ONLY_TYPES,
@@ -39,6 +40,13 @@ def _validate_us_type(order_type: str, side: str, price: float) -> str:
     — ord_uv는 그 유형들에서 빈 값 처리되므로(스펙), 안 그러면 사용자가 지정한
     가격이 조용히 버려지고 시장가로 체결된다(v2.9 audit finding N2).
 
+    반대 방향도 거부한다 — order_type이 지정가 계열(US_LIMIT_TYPES)인데 price가
+    없으면 ord_uv=""로 전송되어 거부되거나 의도치 않게 처리된다(ust20000/
+    ust20001 스펙: "trde_tp가 00(지정가),30(LOC)...인 경우 필수 입력"). 이
+    가드가 없으면 `order buy NVDA 10 --type limit`이 조용히 ord_uv=""로
+    전송된다(task 14b — 국내 kt10000/kt10001은 대상 아님: 그쪽 ord_uv
+    Description엔 "단위: 원"뿐이고 이 조건부 필수 문구가 없다).
+
     price는 필수 위치 인자다 — 기본값 0을 두면 그 값 자체가 이 가드를 조용히
     건너뛰는 우회로가 되어, 이 작업 전체가 막으려는 바로 그 실패 모드(가격
     무시)가 다음 호출부 추가 때 재발할 수 있다(v2.9 audit finding 1).
@@ -51,6 +59,12 @@ def _validate_us_type(order_type: str, side: str, price: float) -> str:
         fail_input(
             f"'{order_type}' 주문유형은 가격을 사용하지 않습니다. "
             "--price를 빼거나 --type limit을 지정하세요."
+        )
+    if not price and order_type in US_LIMIT_TYPES:
+        fail_input(
+            f"'{order_type}' 주문유형은 가격이 필수입니다 (지정가 계열이며 "
+            "시장가로 처리되지 않습니다). --price를 지정하세요.",
+            code="INVALID_INPUT",
         )
     return US_ORDER_TYPES[order_type]
 

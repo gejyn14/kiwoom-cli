@@ -36,3 +36,9 @@ US_STOP_TYPES = frozenset({"stop", "stop-limit"})
 # "지정가" 계열이라 제외 — 시장가 변형인 moc(33)/vwap(36)/twap(37)/stop(35)
 # 만 포함한다. stop-limit(34)은 트리거 후 지정가로 체결되므로 제외.
 US_MARKET_TYPES = frozenset({"market", "moc", "vwap", "twap", "stop"})
+
+# ord_uv(주문단가)가 필수인 지정가 계열 — ust20000/ust20001 스펙:
+# "trde_tp가 00(지정가),30(LOC)...인 경우 필수 입력".
+# US_MARKET_TYPES의 여집합으로 정의한다 — 새 주문유형이 추가되면 둘 중 어디에
+# 속하는지 반드시 결정하게 되고, 어느 쪽에도 안 넣는 실수가 불가능해진다.
+US_LIMIT_TYPES = frozenset(US_ORDER_TYPES) - US_MARKET_TYPES
