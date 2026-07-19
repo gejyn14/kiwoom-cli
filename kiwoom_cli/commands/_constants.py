@@ -123,3 +123,11 @@ AMT_QTY_TP_COMBINED = {"combined": "1"}
 # 등) — 이름에 극성(1=yes/0=no)과 값을 박아 넣은 것은 그것들과 절대 합치지
 # 말라는 뜻이다. 절대 합치지 말 것.
 CHECK_YES_1_NO_0 = {"yes": "1", "no": "0"}
+
+# kt20016 mrkt_deal_tp(시장거래구분). 코스피=1, 코스닥=0 으로
+# MARKET_KOSPI_KOSDAQ(kospi:0, kosdaq:1)과 극성이 정확히 **반대**다.
+# 전체가 "%"인 것도 이 엔드포인트 고유. 1곳: kt20016. 절대 합치지 말 것.
+CREDIT_MARKET = {"all": "%", "kospi": "1", "kosdaq": "0"}
+
+# kt20016 crd_stk_grde_tp(신용종목등급구분). kwcli --credit-grade 값과 동일.
+CREDIT_GRADE = {"all": "%", "a": "A", "b": "B", "c": "C", "d": "D", "e": "E"}

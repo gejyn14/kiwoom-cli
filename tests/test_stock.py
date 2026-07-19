@@ -205,6 +205,84 @@ def test_credit_trend_sends_correct_api(runner, fake_client):
     ]
 
 
+def test_credit_inquiry_sends_stk_cd(runner, fake_client):
+    """credit inquiry 039490 -> {"stk_cd": "039490"} to kt20017.
+
+    Previously this command sent {} (no way to supply the required stk_cd),
+    so the call was rejected by the API outright.
+    """
+    result = runner.invoke(cli, ["stock", "credit", "inquiry", "039490"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [("kt20017", {"stk_cd": "039490"})]
+
+
+def test_credit_inquiry_requires_code_argument(runner, fake_client):
+    """credit inquiry without a code argument fails and makes no request.
+
+    Click's UsageError (missing argument) is remapped project-wide to
+    EXIT_INPUT=1 (see main.py: click.exceptions.UsageError.exit_code =
+    EXIT_INPUT), not Click's default of 2 -- exit code 1 means 입력오류 here.
+    """
+    result = runner.invoke(cli, ["stock", "credit", "inquiry"])
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+def test_credit_available_default_sends_all_market_and_grade(runner, fake_client):
+    """credit available with no options -> mrkt_deal_tp/crd_stk_grde_tp default to "%", no stk_cd key."""
+    result = runner.invoke(cli, ["stock", "credit", "available"])
+
+    assert result.exit_code == 0
+    assert len(fake_client.calls) == 1
+    api_id, body = fake_client.calls[0]
+    assert api_id == "kt20016"
+    assert body == {"crd_stk_grde_tp": "%", "mrkt_deal_tp": "%"}
+    assert "stk_cd" not in body
+
+
+def test_credit_available_market_kosdaq_sends_0_not_1(runner, fake_client):
+    """credit available --market kosdaq must send mrkt_deal_tp="0" (kt20016 polarity is
+    inverted vs. the common MARKET_KOSPI_KOSDAQ codebook where kosdaq=1) -- "1" would be
+    a polarity-reuse bug.
+    """
+    result = runner.invoke(
+        cli, ["stock", "credit", "available", "--market", "kosdaq"]
+    )
+
+    assert result.exit_code == 0
+    _, body = fake_client.calls[0]
+    assert body["mrkt_deal_tp"] == "0"
+
+
+def test_credit_available_market_kospi_sends_1(runner, fake_client):
+    """credit available --market kospi sends mrkt_deal_tp="1" (kt20016 polarity)."""
+    result = runner.invoke(
+        cli, ["stock", "credit", "available", "--market", "kospi"]
+    )
+
+    assert result.exit_code == 0
+    _, body = fake_client.calls[0]
+    assert body["mrkt_deal_tp"] == "1"
+
+
+def test_credit_available_code_and_grade_options(runner, fake_client):
+    """credit available --code 039490 --grade a -> stk_cd="039490", crd_stk_grde_tp="A"."""
+    result = runner.invoke(
+        cli,
+        [
+            "stock", "credit", "available",
+            "--code", "039490", "--grade", "a",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, body = fake_client.calls[0]
+    assert body["stk_cd"] == "039490"
+    assert body["crd_stk_grde_tp"] == "A"
+
+
 # ============================================================
 #  Analysis subgroup
 # ============================================================

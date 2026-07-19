@@ -25,6 +25,8 @@ from ._constants import (
     AMT_QTY_TP_1_2,
     AMT_QTY_TP_COMBINED,
     CHECK_YES_1_NO_0,
+    CREDIT_GRADE,
+    CREDIT_MARKET,
     EXCHANGE_ALL,
     HumanChoice,
     INTRADAY_INVESTOR,
@@ -497,18 +499,38 @@ def credit_trend(code: str, dt: str, qry_tp: str):
 
 
 @credit.command("available")
-def credit_available():
+@click.option(
+    "--market", "mrkt_deal_tp",
+    type=HumanChoice(CREDIT_MARKET),
+    default="all",
+    help="시장거래구분 (all=전체, kospi=코스피, kosdaq=코스닥)",
+)
+@click.option(
+    "--grade", "crd_stk_grde_tp",
+    type=HumanChoice(CREDIT_GRADE),
+    default="all",
+    help="신용종목등급구분 (all=전체, a~e=A~E군)",
+)
+@click.option("--code", "stk_cd", default=None, help="종목코드 (미지정 시 전체)")
+def credit_available(mrkt_deal_tp: str, crd_stk_grde_tp: str, stk_cd: str | None):
     """신용융자 가능종목 조회. (kt20016)"""
+    body: dict = {
+        "crd_stk_grde_tp": crd_stk_grde_tp,
+        "mrkt_deal_tp": mrkt_deal_tp,
+    }
+    if stk_cd:
+        body["stk_cd"] = stk_cd
     with KiwoomClient() as c:
-        data, _ = c.request("kt20016", {})
+        data, _ = c.request("kt20016", body)
         print_generic_table(data, title="신용융자 가능종목")
 
 
 @credit.command("inquiry")
-def credit_inquiry():
+@click.argument("code")
+def credit_inquiry(code: str):
     """신용융자 가능문의. (kt20017)"""
     with KiwoomClient() as c:
-        data, _ = c.request("kt20017", {})
+        data, _ = c.request("kt20017", {"stk_cd": code})
         print_generic_table(data, title="신용융자 가능문의")
 
 
