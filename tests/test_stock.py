@@ -298,3 +298,13 @@ def test_investor_after_close_market_all_supported(runner, fake_client):
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["mrkt_tp"] == "000"
+
+
+def test_investor_after_close_market_kosdaq_supported(runner, fake_client):
+    """MARKET_TWO -> MARKET_ALL 전환 후에도 --market kosdaq이 mrkt_tp="101"로 계속 동작해야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "after-close", "--market", "kosdaq"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mrkt_tp"] == "101"

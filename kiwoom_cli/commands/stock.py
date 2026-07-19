@@ -21,7 +21,7 @@ from ..formatters import (
 )
 from ..output import console
 from ._constants import (
-    AMT_QTY_TP_STD,
+    AMT_QTY_TP_1_2,
     EXCHANGE_ALL,
     HumanChoice,
     MARKET_ALL,
@@ -1175,7 +1175,7 @@ def intraday(
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=HumanChoice(AMT_QTY_TP_STD),
+    type=HumanChoice(AMT_QTY_TP_1_2),
     default="amount",
     help="금액수량구분 (amount=금액, quantity=수량)",
 )

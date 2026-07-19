@@ -67,6 +67,13 @@ GOLD_ORDER_TYPES = {"limit": "00", "ioc": "10", "fok": "20"}
 TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 
 # amt_qty_tp(금액수량구분)도 API마다 극성이 다르다(표준 1:금액,2:수량 vs
-# ka10051/ka10131의 0:금액,1:수량). 이 상수는 표준 계열(13곳, ka10066 포함)
-# 전용이며 값이 다른 sector 계열과 절대 혼용 금지.
-AMT_QTY_TP_STD = {"amount": "1", "quantity": "2"}
+# ka10051/ka10131의 0:금액,1:수량) — 그런데 두 코드북의 키 집합(amount/
+# quantity)이 완전히 같아서, trde_tp와 달리 이름만 봐서는 극성을 구분할
+# 수 없다. 그래서 이름 자체에 코드 값을 새긴다: 이 상수는 1:금액,2:수량
+# 전용(13곳, ka10066 포함)이며, 0:금액,1:수량 짝은 별도로
+# `AMT_QTY_TP_0_1`이라는 이름을 예약해 둔다(ka10051/ka10131 이관 시 이
+# 이름으로 추가할 것 — 절대 이 상수를 재사용하지 말 것). 두 코드북 및
+# 다른 amt_qty_tp 변형 전체 목록은
+# docs/superpowers/plans/2026-07-18-humanreadable-inventory.md의 "절대
+# 합치면 안 되는" 절(C4) 참고.
+AMT_QTY_TP_1_2 = {"amount": "1", "quantity": "2"}

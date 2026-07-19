@@ -3,7 +3,8 @@
 ## [Unreleased]
 
 `stock investor after-close`(ka10066)의 `--trade` 값이 스펙과 반대였고, 정정과
-함께 두 옵션을 raw 숫자코드에서 human-readable 이름으로 바꿨습니다.
+함께 두 옵션에 raw 숫자코드와 함께 쓸 수 있는 human-readable 이름을
+추가했습니다(하위호환).
 
 **Fixed**
 
@@ -13,22 +14,29 @@
   `1=순매도, 2=순매수`라고 적어 실제 동작과 정반대로 안내했습니다. 진짜
   순매수 코드인 `0`은 Choice 목록에 없어 애초에 지정할 수 없었습니다.
 
-**Breaking**
+**Non-breaking (사람이 읽는 이름 추가, 하위호환)**
 
-- **`--trade`가 이제 `net-buy`/`buy`/`sell` 세 이름만 받습니다(숫자 `1`/`2`는
-  더 이상 유효한 값이 아닙니다).** 매핑은 `net-buy`→`trde_tp=0`,
-  `buy`→`trde_tp=1`, `sell`→`trde_tp=2`입니다. 기본값도 `순매도(2)`에서
-  `순매수(net-buy, trde_tp=0)`로 바뀌었습니다 — "장마감후투자자별매매"
-  조회의 기본 의도가 순매수 상위 종목이라고 판단했기 때문입니다. 이전에
-  `--trade 2`(순매도 취지, 실제로는 매도 데이터)를 쓰던 스크립트는
-  `--trade sell`로, 순매수를 원했다면 `--trade net-buy`로 바꿔야 합니다.
-- **`--amount-qty`가 이제 `amount`/`quantity` 이름만 받습니다(숫자 `1`/`2`는
-  더 이상 유효한 값이 아닙니다).** 전송값은 바뀌지 않았습니다 —
-  `amount`→`amt_qty_tp=1`, `quantity`→`amt_qty_tp=2`로 이전과 동일합니다.
-  숫자를 직접 넘기던 스크립트만 이름으로 바꾸면 됩니다.
+- **`--trade`/`--amount-qty`가 이제 `net-buy`/`buy`/`sell`, `amount`/`quantity`
+  같은 사람이 읽는 이름도 받습니다.** 기존에 숫자 코드(`1`/`2`/`0`)를 직접
+  넘기던 스크립트는 **그대로 동작합니다** — `HumanChoice`가 raw API 코드를
+  하위호환으로 계속 허용하기 때문입니다(`kiwoom_cli/commands/_constants.py`
+  `HumanChoice.convert`). 전송값도 이름 추가 전과 동일합니다:
+  `net-buy`→`trde_tp=0`, `buy`→`trde_tp=1`, `sell`→`trde_tp=2`;
+  `amount`→`amt_qty_tp=1`, `quantity`→`amt_qty_tp=2`. 이름으로 바꿀 필요
+  없이 기존 호출을 그대로 둬도 됩니다.
 - **`--market`이 이제 `all`도 받습니다.** 스펙에 `000:전체`가 있었는데
   기존 코드는 `kospi`/`kosdaq` 두 값만 허용했습니다. 순수 추가라 기존
   호출은 영향 없습니다(기본값 `kospi` 그대로).
+
+**Breaking**
+
+- **`--trade`의 기본값이 `trde_tp=2`(매도)에서 `trde_tp=0`(순매수)로
+  바뀌었습니다.** 이건 이름 체계와 무관한 별개의 변경입니다 — raw 코드를
+  직접 지정하는 호출(`--trade 2`, `--trade sell` 등)은 위와 같이 계속
+  똑같은 데이터를 반환하지만, **`--trade`를 아예 지정하지 않고 기본값에
+  의존하던 호출**은 이제 다른 데이터(순매수 상위 종목)를 받습니다. 이전에
+  기본값으로 매도 데이터를 받던 스크립트는 명시적으로 `--trade sell`을
+  추가해야 이전과 같은 데이터를 계속 받습니다.
 
 ## [2.10.1] - 2026-07-19
 
