@@ -520,3 +520,86 @@ VOLUME_SURGE_PRICE_TYPE = {
     "all": "0", "over-50k": "2", "over-10k": "5", "over-5k": "6",
     "over-1k": "8", "over-100k": "9",
 }
+
+
+# ── Task 31a-fix: trde_qty_tp(--vol-type) 8개 코드북 ────────────────
+# 8개 전부 Required=Y라 키 자체를 생략할 수 없다(ka10038 dt처럼 omit 불가).
+# 그리고 8개의 wire 값 폭이 전부 다르다 — 5자리 zero-pad / 4자리 zero-pad /
+# 무패딩 정수. 키 집합(all/10k/50k/...)만 보면 똑같아 보이지만 실제 전송
+# 바이트가 달라, 이름에 자릿수를 박아 둔다. 절대 합치지 말 것.
+#
+# ka10016/17/18/19 공용처럼 보이지만 API별로 나눠 둔다(값이 같아도 스펙이
+# 각각 독립이라 한쪽이 바뀌면 나머지가 조용히 오염된다).
+
+# ka10016(rank new-highlow) 전용 — trde_qty_tp(거래량구분, 5자리 zero-pad).
+# 짝: LIMIT_MOVE_QTY_TYPE_5DIGIT / NEAR_HIGHLOW_QTY_TYPE_5DIGIT /
+# SURGE_QTY_TYPE_5DIGIT (값 동일하지만 절대 합치지 말 것). 1곳: ka10016.
+NEW_HIGH_LOW_QTY_TYPE_5DIGIT = {
+    "all": "00000", "10k": "00010", "50k": "00050", "100k": "00100",
+    "150k": "00150", "200k": "00200", "300k": "00300", "500k": "00500",
+    "1000k": "01000",
+}
+
+# ka10017(rank limit) 전용 — trde_qty_tp(거래량구분, 5자리 zero-pad).
+# 짝: NEW_HIGH_LOW_QTY_TYPE_5DIGIT / NEAR_HIGHLOW_QTY_TYPE_5DIGIT /
+# SURGE_QTY_TYPE_5DIGIT. 1곳: ka10017. 절대 합치지 말 것.
+LIMIT_MOVE_QTY_TYPE_5DIGIT = {
+    "all": "00000", "10k": "00010", "50k": "00050", "100k": "00100",
+    "150k": "00150", "200k": "00200", "300k": "00300", "500k": "00500",
+    "1000k": "01000",
+}
+
+# ka10018(rank near-highlow) 전용 — trde_qty_tp(거래량구분, 5자리 zero-pad).
+# 짝: NEW_HIGH_LOW_QTY_TYPE_5DIGIT / LIMIT_MOVE_QTY_TYPE_5DIGIT /
+# SURGE_QTY_TYPE_5DIGIT. 1곳: ka10018. 절대 합치지 말 것.
+NEAR_HIGHLOW_QTY_TYPE_5DIGIT = {
+    "all": "00000", "10k": "00010", "50k": "00050", "100k": "00100",
+    "150k": "00150", "200k": "00200", "300k": "00300", "500k": "00500",
+    "1000k": "01000",
+}
+
+# ka10019(rank surge) 전용 — trde_qty_tp(거래량구분, 5자리 zero-pad).
+# 스펙 Length 칸은 4로 적혀 있으나 값 목록은 전부 5자리다(스펙 오타로 판단,
+# kwcli도 5자리를 보낸다). 짝: NEW_HIGH_LOW_QTY_TYPE_5DIGIT /
+# LIMIT_MOVE_QTY_TYPE_5DIGIT / NEAR_HIGHLOW_QTY_TYPE_5DIGIT. 1곳: ka10019.
+# 절대 합치지 말 것.
+SURGE_QTY_TYPE_5DIGIT = {
+    "all": "00000", "10k": "00010", "50k": "00050", "100k": "00100",
+    "150k": "00150", "200k": "00200", "300k": "00300", "500k": "00500",
+    "1000k": "01000",
+}
+
+# ka10020(rank orderbook-top) 전용 — trde_qty_tp(거래량구분, 4자리 zero-pad
+# 인데 마지막 100k만 5자리 "00100"이다 — 스펙·kwcli 양쪽이 동일하게 이렇게
+# 적혀 있어 그대로 따른다). "전체" 개념이 없고 최하단이 0000(장시작전,
+# 0주이상)이라 사실상 무필터 자리다. 위 5자리 4형제와 자릿수가 달라 절대
+# 합치지 말 것. 1곳: ka10020.
+ORDERBOOK_TOP_QTY_TYPE_4DIGIT = {
+    "preopen": "0000", "10k": "0010", "50k": "0050", "100k": "00100",
+}
+
+# ka10021(rank orderbook-surge) 전용 — trde_qty_tp(거래량구분, 무패딩 정수).
+# "전체" 개념이 없다 — 최하단이 1(천주이상)이다. 짝:
+# BALANCE_RATE_QTY_TYPE_BARE / VOLUME_SURGE_QTY_TYPE_BARE (여기만 1k가 있다).
+# 1곳: ka10021. 절대 합치지 말 것.
+ORDERBOOK_SURGE_QTY_TYPE_BARE = {
+    "1k": "1", "5k": "5", "10k": "10", "50k": "50", "100k": "100",
+}
+
+# ka10022(rank balance-rate-surge) 전용 — trde_qty_tp(거래량구분, 무패딩
+# 정수). "전체" 개념이 없다 — 최하단이 5(5천주이상)이다. 짝:
+# ORDERBOOK_SURGE_QTY_TYPE_BARE(1k 있음) / VOLUME_SURGE_QTY_TYPE_BARE(200k
+# 이상까지 있음). 1곳: ka10022. 절대 합치지 말 것.
+BALANCE_RATE_QTY_TYPE_BARE = {
+    "5k": "5", "10k": "10", "50k": "50", "100k": "100",
+}
+
+# ka10023(rank volume-surge) 전용 — trde_qty_tp(거래량구분, 무패딩 정수).
+# "전체" 개념이 없다 — 최하단이 5(5천주이상)이다. ka10030의
+# VOLUME_RANK_QTY_TYPE은 여기에 "all":"0"이 더 붙은 9개 값이라 겉보기엔
+# 상위집합이지만, ka10023에는 "0"이 스펙에 없다 — 절대 합치지 말 것.
+# 짝: ORDERBOOK_SURGE_QTY_TYPE_BARE / BALANCE_RATE_QTY_TYPE_BARE. 1곳: ka10023.
+VOLUME_SURGE_QTY_TYPE_BARE = {
+    "5k": "5", "10k": "10", "50k": "50", "100k": "100",
+    "200k": "200", "300k": "300", "500k": "500", "1000k": "1000",
+}

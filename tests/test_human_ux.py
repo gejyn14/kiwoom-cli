@@ -292,6 +292,12 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "BALANCE_RATE_TYPE", "BALANCE_RATE_STK_CND",
     "VOLUME_SURGE_SORT", "VOLUME_SURGE_TIME_UNIT", "VOLUME_SURGE_STK_CND",
     "VOLUME_SURGE_PRICE_TYPE",
+    # Task 31a-fix — trde_qty_tp(--vol-type) 8개 코드북. 자릿수가 서로 달라
+    # (5자리/4자리/무패딩) 이름에 형식을 박아 뒀다. 절대 합치지 말 것.
+    "NEW_HIGH_LOW_QTY_TYPE_5DIGIT", "LIMIT_MOVE_QTY_TYPE_5DIGIT",
+    "NEAR_HIGHLOW_QTY_TYPE_5DIGIT", "SURGE_QTY_TYPE_5DIGIT",
+    "ORDERBOOK_TOP_QTY_TYPE_4DIGIT", "ORDERBOOK_SURGE_QTY_TYPE_BARE",
+    "BALANCE_RATE_QTY_TYPE_BARE", "VOLUME_SURGE_QTY_TYPE_BARE",
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -326,18 +332,25 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
         for path, p in _iter_options(root_cli)
         if isinstance(p.type, _constants.HumanChoice)
     ]
-    # 86 = account/market/stock를 훑던 시절의 53 + order 그룹의 2
+    # 94 = account/market/stock를 훑던 시절의 53 + order 그룹의 2
     # (order gold buy --order-type, order gold sell --order-type — 둘 다
     # GOLD_ORDER_TYPES) + Task 31a(market rank ka10016~ka10023)의 31
-    # (trde_qty_tp/--vol-type은 8개 커맨드 전부 미전환 — 기본값 "0"이
-    # 스펙 enum에 없는 사전 결함이라 이번 태스크 범위 밖으로 남김,
-    # task-31a-report.md 참고). order는 이 테스트가 한 번도 훑은 적이 없어
-    # 주문 경로인데도 고정되지 않고 있었다.
-    assert len(converted) == 86
+    # + Task 31a-fix의 8(같은 8개 커맨드의 --vol-type/trde_qty_tp — 종전
+    # 기본값 raw "0"이 어느 API 스펙에도 없던 결함이라 값 교정과 함께
+    # 전환했다, task-31a-fix-report.md 참고). order는 이 테스트가 한 번도
+    # 훑은 적이 없어 주문 경로인데도 고정되지 않고 있었다.
+    # 이 수는 트리 순회로 재도출한 값이지 델타 추정이 아니다.
+    assert len(converted) == 94
     # 금현물 주문 두 건은 이름으로도 못 박아 둔다. 개수만 맞추면 다른 곳이
     # 늘고 여기가 빠져도 통과하기 때문이다.
     assert ("cli order gold buy", "order_type") in converted
     assert ("cli order gold sell", "order_type") in converted
+    # 8개 rank 커맨드의 --vol-type이 전부 실제로 물려 있는지 이름으로도
+    # 못 박는다 — 개수만 맞추면 여기가 빠져도 통과하기 때문이다.
+    for command in ("new-highlow", "limit", "near-highlow", "surge",
+                    "orderbook-top", "orderbook-surge", "balance-rate-surge",
+                    "volume-surge"):
+        assert (f"cli market rank {command}", "trde_qty_tp") in converted
 
 
 # ── Task 8: both-fail envelope (fail_api) ────────────────

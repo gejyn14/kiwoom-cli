@@ -105,10 +105,13 @@ def test_rank_orderbook_top_market_two_enum(
 # ============================================================
 #  Rankings (순위정보) — ka10016~ka10023 HumanChoice 전환 (Task 31a)
 #
-#  각 커맨드마다 "기본 호출이 종전과 같은 body를 보낸다"를 먼저 고정한다.
-#  trde_qty_tp(--vol-type)는 8개 커맨드 모두 이번 태스크에서 미전환
-#  (task-31a-report.md 참고 — 기본값 "0"이 스펙 enum에 없어 HumanChoice로
-#  감싸면 기본 호출 자체가 깨진다).
+#  각 커맨드마다 기본 호출 body를 통째로 고정한다.
+#
+#  trde_qty_tp(--vol-type)는 Task 31a-fix에서 뒤늦게 전환했다. 종전 기본값
+#  raw "0"은 8개 API 어디에도 스펙 값으로 존재하지 않는 사전 결함이었고,
+#  이번에 API별 스펙 최하단 값(= 필터를 가장 적게 거는 값)으로 교정했다.
+#  8개 코드북의 자릿수가 전부 달라(5자리/4자리/무패딩) 여기 기대값도
+#  커맨드마다 다르다 — 복붙 금지. task-31a-fix-report.md 참고.
 # ============================================================
 
 
@@ -117,7 +120,7 @@ def test_rank_new_highlow_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10016", {
         "mrkt_tp": "000", "ntl_tp": "1", "high_low_close_tp": "1",
-        "stk_cnd": "0", "trde_qty_tp": "0", "crd_cnd": "0",
+        "stk_cnd": "0", "trde_qty_tp": "00000", "crd_cnd": "0",
         "updown_incls": "0", "dt": "5", "stex_tp": "1",
     })
 
@@ -141,7 +144,7 @@ def test_rank_limit_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10017", {
         "mrkt_tp": "000", "updown_tp": "1", "sort_tp": "2",
-        "stk_cnd": "0", "trde_qty_tp": "0", "crd_cnd": "0",
+        "stk_cnd": "0", "trde_qty_tp": "00000", "crd_cnd": "0",
         "trde_gold_tp": "0", "stex_tp": "1",
     })
 
@@ -166,7 +169,7 @@ def test_rank_near_highlow_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10018", {
         "high_low_tp": "1", "alacc_rt": "05", "mrkt_tp": "000",
-        "trde_qty_tp": "0", "stk_cnd": "0", "crd_cnd": "0", "stex_tp": "1",
+        "trde_qty_tp": "00000", "stk_cnd": "0", "crd_cnd": "0", "stex_tp": "1",
     })
 
 
@@ -187,7 +190,7 @@ def test_rank_surge_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10019", {
         "mrkt_tp": "000", "flu_tp": "1", "tm_tp": "1", "tm": "5",
-        "trde_qty_tp": "0", "stk_cnd": "0", "crd_cnd": "0",
+        "trde_qty_tp": "00000", "stk_cnd": "0", "crd_cnd": "0",
         "pric_cnd": "0", "updown_incls": "0", "stex_tp": "1",
     })
 
@@ -212,7 +215,7 @@ def test_rank_orderbook_top_default_body_unchanged(runner, fake_client):
     result = runner.invoke(cli, ["market", "rank", "orderbook-top"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10020", {
-        "mrkt_tp": "001", "sort_tp": "1", "trde_qty_tp": "0",
+        "mrkt_tp": "001", "sort_tp": "1", "trde_qty_tp": "0000",
         "stk_cnd": "0", "crd_cnd": "0", "stex_tp": "1",
     })
 
@@ -234,7 +237,7 @@ def test_rank_orderbook_surge_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10021", {
         "mrkt_tp": "001", "trde_tp": "1", "sort_tp": "1", "tm_tp": "5",
-        "trde_qty_tp": "0", "stk_cnd": "0", "stex_tp": "1",
+        "trde_qty_tp": "1", "stk_cnd": "0", "stex_tp": "1",
     })
 
 
@@ -255,7 +258,7 @@ def test_rank_balance_rate_surge_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10022", {
         "mrkt_tp": "001", "rt_tp": "1", "tm_tp": "5",
-        "trde_qty_tp": "0", "stk_cnd": "0", "stex_tp": "1",
+        "trde_qty_tp": "5", "stk_cnd": "0", "stex_tp": "1",
     })
 
 
@@ -274,7 +277,7 @@ def test_rank_volume_surge_default_body_unchanged(runner, fake_client):
     result = runner.invoke(cli, ["market", "rank", "volume-surge"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10023", {
-        "mrkt_tp": "000", "sort_tp": "1", "tm_tp": "1", "trde_qty_tp": "0",
+        "mrkt_tp": "000", "sort_tp": "1", "tm_tp": "1", "trde_qty_tp": "5",
         "tm": "", "stk_cnd": "0", "pric_tp": "0", "stex_tp": "1",
     })
 
@@ -658,3 +661,90 @@ def test_elw_broker_top_exclude_expired_human_name(runner, fake_client):
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["trde_end_elwskip"] == "0"
+
+
+# ── Task 31a-fix: --vol-type(trde_qty_tp) 8개 코드북 ───────────────
+#
+#  8개 API의 trde_qty_tp 값 집합은 자릿수까지 서로 다르다. 아래 테스트는
+#  "human 이름 → 그 API의 wire 코드"를 API별로 각각 못 박는다. 한 곳의
+#  기대값을 다른 곳에 복사하면 조용히 틀린다.
+
+
+@pytest.mark.parametrize("command,api_id,human,wire", [
+    # ka10016~ka10019: 5자리 zero-pad, "all"=00000이 존재한다.
+    ("new-highlow", "ka10016", "all", "00000"),
+    ("new-highlow", "ka10016", "10k", "00010"),
+    ("new-highlow", "ka10016", "1000k", "01000"),
+    ("limit", "ka10017", "all", "00000"),
+    ("limit", "ka10017", "150k", "00150"),
+    ("near-highlow", "ka10018", "all", "00000"),
+    ("near-highlow", "ka10018", "500k", "00500"),
+    ("surge", "ka10019", "all", "00000"),
+    ("surge", "ka10019", "300k", "00300"),
+    # ka10020: 4자리 zero-pad. "전체"가 없고 최하단이 preopen(장시작전).
+    # 100k만 5자리 "00100"인 것은 스펙·kwcli가 모두 그렇게 적고 있다.
+    ("orderbook-top", "ka10020", "preopen", "0000"),
+    ("orderbook-top", "ka10020", "10k", "0010"),
+    ("orderbook-top", "ka10020", "50k", "0050"),
+    ("orderbook-top", "ka10020", "100k", "00100"),
+    # ka10021~ka10023: 무패딩 정수. "전체" 개념이 아예 없다.
+    ("orderbook-surge", "ka10021", "1k", "1"),
+    ("orderbook-surge", "ka10021", "100k", "100"),
+    ("balance-rate-surge", "ka10022", "5k", "5"),
+    ("balance-rate-surge", "ka10022", "100k", "100"),
+    ("volume-surge", "ka10023", "5k", "5"),
+    ("volume-surge", "ka10023", "1000k", "1000"),
+])
+def test_rank_vol_type_human_name_maps_per_api(
+    runner, fake_client, command, api_id, human, wire
+):
+    result = runner.invoke(cli, ["market", "rank", command, "--vol-type", human])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][0] == api_id
+    assert fake_client.calls[0][1]["trde_qty_tp"] == wire
+
+
+@pytest.mark.parametrize("command,absent", [
+    # 각 API에 "없는" human 이름은 거부돼야 한다 — 코드북이 합쳐지면
+    # 이 테스트가 먼저 깨진다.
+    ("orderbook-top", "all"),        # ka10020에는 전체가 없다
+    ("orderbook-surge", "all"),      # ka10021에도 없다
+    ("balance-rate-surge", "1k"),    # ka10022 최하단은 5k다
+    ("volume-surge", "1k"),          # ka10023 최하단도 5k다
+    ("new-highlow", "1k"),           # ka10016 사다리에 1k는 없다
+])
+def test_rank_vol_type_rejects_name_absent_from_that_api(
+    runner, fake_client, command, absent
+):
+    result = runner.invoke(cli, ["market", "rank", command, "--vol-type", absent])
+
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("command,wire", [
+    ("new-highlow", "00050"),
+    ("orderbook-top", "0050"),
+    ("volume-surge", "50"),
+])
+def test_rank_vol_type_raw_wire_code_still_accepted(
+    runner, fake_client, command, wire
+):
+    """HumanChoice는 원시 코드도 하위호환으로 통과시킨다."""
+    result = runner.invoke(cli, ["market", "rank", command, "--vol-type", wire])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_qty_tp"] == wire
+
+
+@pytest.mark.parametrize("command", [
+    "new-highlow", "limit", "near-highlow", "surge",
+    "orderbook-top", "orderbook-surge", "balance-rate-surge", "volume-surge",
+])
+def test_rank_vol_type_no_longer_sends_bare_zero(runner, fake_client, command):
+    """종전 기본값 raw "0"은 8개 API 어디에도 스펙 값이 아니다 — 회귀 방지."""
+    result = runner.invoke(cli, ["market", "rank", command])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_qty_tp"] != "0"

@@ -8,6 +8,7 @@ from ..client import KiwoomClient
 from ..formatters import fail_input, print_api_response
 from ._constants import (
     AMT_QTY_TP_1_2,
+    BALANCE_RATE_QTY_TYPE_BARE,
     BALANCE_RATE_STK_CND,
     BALANCE_RATE_TYPE,
     BROKER_BY_STOCK_SIDE,
@@ -21,6 +22,7 @@ from ._constants import (
     LIMIT_MOVE_CREDIT_CND,
     LIMIT_MOVE_DIRECTION,
     LIMIT_MOVE_PRICE_CND,
+    LIMIT_MOVE_QTY_TYPE_5DIGIT,
     LIMIT_MOVE_SORT,
     LIMIT_MOVE_STK_CND,
     MANAGED_STOCK_INCLUDE,
@@ -30,16 +32,20 @@ from ._constants import (
     MIN_TIC_TP,
     NEAR_HIGHLOW_CREDIT_CND,
     NEAR_HIGHLOW_KIND,
+    NEAR_HIGHLOW_QTY_TYPE_5DIGIT,
     NEAR_HIGHLOW_STK_CND,
     NEW_HIGH_LOW_BASIS,
     NEW_HIGH_LOW_CREDIT_CND,
     NEW_HIGH_LOW_INCLUDE_LIMIT,
     NEW_HIGH_LOW_KIND,
+    NEW_HIGH_LOW_QTY_TYPE_5DIGIT,
     NEW_HIGH_LOW_STK_CND,
+    ORDERBOOK_SURGE_QTY_TYPE_BARE,
     ORDERBOOK_SURGE_SIDE,
     ORDERBOOK_SURGE_SORT,
     ORDERBOOK_SURGE_STK_CND,
     ORDERBOOK_TOP_CREDIT_CND,
+    ORDERBOOK_TOP_QTY_TYPE_4DIGIT,
     ORDERBOOK_TOP_SORT,
     ORDERBOOK_TOP_STK_CND,
     PERIOD_DAYS_OFF_BY_ONE,
@@ -49,6 +55,7 @@ from ._constants import (
     SURGE_DIRECTION,
     SURGE_INCLUDE_LIMIT,
     SURGE_PRICE_CND,
+    SURGE_QTY_TYPE_5DIGIT,
     SURGE_STK_CND,
     SURGE_TIME_UNIT,
     VOLUME_RANK_AMOUNT_TYPE,
@@ -58,6 +65,7 @@ from ._constants import (
     VOLUME_RANK_SESSION,
     VOLUME_RANK_SORT,
     VOLUME_SURGE_PRICE_TYPE,
+    VOLUME_SURGE_QTY_TYPE_BARE,
     VOLUME_SURGE_SORT,
     VOLUME_SURGE_STK_CND,
     VOLUME_SURGE_TIME_UNIT,
@@ -100,7 +108,8 @@ def rank():
 @click.option("--stk-cnd", type=HumanChoice(NEW_HIGH_LOW_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-margin-100,"
                    "only-margin-100,only-margin-40,only-margin-30)")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(NEW_HIGH_LOW_QTY_TYPE_5DIGIT), default="all",
+              help="거래량구분 (all,10k,50k,100k,150k,200k,300k,500k,1000k)")
 @click.option("--credit", "crd_cnd", type=HumanChoice(NEW_HIGH_LOW_CREDIT_CND), default="all",
               help="신용조건 (all,a,b,c,d,e,all-financing)")
 @click.option("--include-limit", "updown_incls", type=HumanChoice(NEW_HIGH_LOW_INCLUDE_LIMIT), default="no",
@@ -132,7 +141,8 @@ def rank_new_highlow(mrkt_tp, ntl_tp, high_low_close_tp, dt, stk_cnd, trde_qty_t
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-managed-preferred,"
                    "exclude-margin-100,only-margin-100,only-margin-40,only-margin-30,"
                    "only-margin-20,exclude-managed-preferred-alert)")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(LIMIT_MOVE_QTY_TYPE_5DIGIT), default="all",
+              help="거래량구분 (all,10k,50k,100k,150k,200k,300k,500k,1000k)")
 @click.option("--credit", "crd_cnd", type=HumanChoice(LIMIT_MOVE_CREDIT_CND), default="all",
               help="신용조건 (all,a,b,c,d,e,all-financing)")
 @click.option("--trade-gold", "trde_gold_tp", type=HumanChoice(LIMIT_MOVE_PRICE_CND), default="all",
@@ -158,7 +168,8 @@ def rank_limit(mrkt_tp, updown_tp, sort_tp, stk_cnd, trde_qty_tp, crd_cnd, trde_
               help="구분 (high=고가, low=저가)")
 @click.option("--rate", "alacc_rt", default="05", help="근접율 (05,10,15,20,25,30)")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(NEAR_HIGHLOW_QTY_TYPE_5DIGIT), default="all",
+              help="거래량구분 (all,10k,50k,100k,150k,200k,300k,500k,1000k)")
 @click.option("--stk-cnd", type=HumanChoice(NEAR_HIGHLOW_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-margin-100,"
                    "only-margin-100,only-margin-40,only-margin-30)")
@@ -187,7 +198,8 @@ def rank_near_highlow(high_low_tp, alacc_rt, mrkt_tp, trde_qty_tp, stk_cnd, crd_
 @click.option("--time-type", "tm_tp", type=HumanChoice(SURGE_TIME_UNIT), default="minute",
               help="시간구분 (minute=분전, day=일전)")
 @click.option("--time", "tm", default="5", help="시간")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(SURGE_QTY_TYPE_5DIGIT), default="all",
+              help="거래량구분 (all,10k,50k,100k,150k,200k,300k,500k,1000k)")
 @click.option("--stk-cnd", type=HumanChoice(SURGE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-margin-100,"
                    "only-margin-100,only-margin-40,only-margin-30)")
@@ -217,7 +229,8 @@ def rank_surge(mrkt_tp, flu_tp, tm_tp, tm, trde_qty_tp, stk_cnd, crd_cnd, pric_c
 @click.option("--market", "mrkt_tp", default="kospi", type=click.Choice(["kospi", "kosdaq"]), help="시장구분")
 @click.option("--sort", "sort_tp", type=HumanChoice(ORDERBOOK_TOP_SORT), default="net-buy-balance",
               help="정렬 (net-buy-balance,net-sell-balance,buy-ratio,sell-ratio)")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(ORDERBOOK_TOP_QTY_TYPE_4DIGIT), default="preopen",
+              help="거래량구분 (preopen=장시작전(0주이상),10k,50k,100k)")
 @click.option("--stk-cnd", type=HumanChoice(ORDERBOOK_TOP_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
                    "only-margin-40,only-margin-30,only-margin-20)")
@@ -246,7 +259,8 @@ def rank_orderbook_top(mrkt_tp, sort_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp)
 @click.option("--sort", "sort_tp", type=HumanChoice(ORDERBOOK_SURGE_SORT), default="spike-quantity",
               help="정렬 (spike-quantity=급증량, spike-rate=급증률)")
 @click.option("--minutes", "tm_tp", default="5", help="분 입력")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(ORDERBOOK_SURGE_QTY_TYPE_BARE), default="1k",
+              help="거래량구분 (1k,5k,10k,50k,100k — 전체 없음)")
 @click.option("--stk-cnd", type=HumanChoice(ORDERBOOK_SURGE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
                    "only-margin-40,only-margin-30,only-margin-20)")
@@ -271,7 +285,8 @@ def rank_orderbook_surge(mrkt_tp, trde_tp, sort_tp, tm_tp, trde_qty_tp, stk_cnd,
 @click.option("--type", "rt_tp", type=HumanChoice(BALANCE_RATE_TYPE), default="buy-to-sell",
               help="비율구분 (buy-to-sell=매수/매도비율, sell-to-buy=매도/매수비율)")
 @click.option("--minutes", "tm_tp", default="5", help="분 입력")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(BALANCE_RATE_QTY_TYPE_BARE), default="5k",
+              help="거래량구분 (5k,10k,50k,100k — 전체 없음)")
 @click.option("--stk-cnd", type=HumanChoice(BALANCE_RATE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
                    "only-margin-40,only-margin-30,only-margin-20)")
@@ -296,7 +311,8 @@ def rank_balance_rate_surge(mrkt_tp, rt_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp
               help="정렬 (spike-quantity,spike-rate,drop-quantity,drop-rate)")
 @click.option("--time-type", "tm_tp", type=HumanChoice(VOLUME_SURGE_TIME_UNIT), default="minute",
               help="구분 (minute=분, previous-day=전일)")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(VOLUME_SURGE_QTY_TYPE_BARE), default="5k",
+              help="거래량구분 (5k,10k,50k,100k,200k,300k,500k,1000k — 전체 없음)")
 @click.option("--time", "tm", default="", help="시간 (선택)")
 @click.option("--stk-cnd", type=HumanChoice(VOLUME_SURGE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-preferred,exclude-liquidation,"
