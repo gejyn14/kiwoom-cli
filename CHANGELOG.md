@@ -13,6 +13,21 @@
 받으므로, 스펙에 없는 값을 보내던 호출은 이제 로컬에서 거부됩니다. 받아들이는
 값의 집합이 줄어든 것이라 Breaking으로 분류합니다.
 
+`stock`의 `daily-price`/`today-exec`/`today-volume`/`analysis price-cluster`/
+`analysis open-change`/`analysis instant-volume`/`analysis vi-trigger`/
+`analysis warrant`/`investor daily-trade`/`investor stock-institution`/
+`investor daily-by-investor`/`investor by-stock`/`investor by-stock-total`
+13개 커맨드의 옵션 31개에서도 같은 방식으로 숫자코드를 human-readable
+이름으로 전환했습니다(`--display quantity`, `--when today`, `--session
+after-hours`, `--stock-cond exclude-managed` 등). `stock investor
+intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
+(`--date-type`/`--pot`/`--sort`), `stock credit available`는 이번 작업 전에
+이미 human-readable였습니다(선행 fix 커밋들, 손대지 않았습니다). 이 중 8개는
+전환 전에 자유 텍스트였고(`open-change`의 `--stock-cond`/`--credit-cond`/
+`--amount-cond`, `instant-volume`의 `--price-type`, `vi-trigger`의
+`--volume-type`/`--amount-type`, `daily-by-investor`의 `--investor-type`),
+위 115개와 같은 이유로 Breaking입니다.
+
 **Fixed**
 
 - **`market rank` 8개 커맨드의 `--vol-type` 기본 전송값이 스펙 값이
@@ -26,6 +41,11 @@
   아니었습니다.** `"0"` → `"0000"`으로 고쳤습니다. 이 API의 거래량조건은
   4자리 zero-pad(`0000`~`1000`)만 받는데 `"0"`은 그 목록에 없었습니다. 스펙의
   전체조회 값이라 종전 의도인 "거래량 필터 없음"이 그대로 유지됩니다.
+- **`stock analysis open-change`(ka10028)의 `--volume-cond` 기본 전송값이
+  스펙 값이 아니었습니다.** `"0"` → `"0000"`으로 고쳤습니다. `market rank
+  change`(ka10027)와 완전히 같은 결함 패턴입니다 — 이 API의 거래량조건도
+  4자리 zero-pad만 받는데 `"0"`이 목록에 없었습니다. 스펙의 전체조회 값이라
+  종전 의도인 "거래량 필터 없음"이 그대로 유지됩니다.
 
 **Breaking**
 
@@ -52,6 +72,32 @@
   서버가 종전 `"0"`을 관대하게 무필터로 처리하고 있었다면 `--vol-type` 없이
   부르던 호출의 결과 집합이 줄어듭니다. 종전 폭을 원하면 명시적으로 값을
   지정해야 합니다.
+- **`stock analysis open-change`(ka10028)의 `--stock-cond`/`--credit-cond`/
+  `--amount-cond`, `stock analysis instant-volume`(ka10052)의
+  `--price-type`, `stock analysis vi-trigger`(ka10054)의
+  `--volume-type`/`--amount-type`, `stock investor
+  daily-by-investor`(ka10058)의 `--investor-type`이 스펙 밖의 값을
+  거부합니다(exit 1).** 전환 전에는 타입 제약이 없는 자유 텍스트였습니다 —
+  위 115개 옵션과 같은 이유로 Breaking입니다. `--price-type`/
+  `--volume-type`/`--amount-type`/`--investor-type`은 스펙에 정의된 값이
+  전부 라벨을 갖고 있어 전체를 옮겼지만, `instant-volume`의
+  `--volume-type`(`qty_tp`)은 스펙 코드 `3`/`5`의 라벨이 워크북·kwcli
+  양쪽 모두 비어 있어 이번에는 전환하지 않고 자유 텍스트로 남겼습니다
+  (전환하면 두 코드가 거부됩니다).
+- **`stock analysis trader-analysis`(ka10043)의 `--days`가 `"5d"` 같은
+  human 이름을 더 이상 받지 않습니다.** 이 옵션은 v2.11.0에서 실수로
+  `HumanChoice`가 됐습니다 — 값과 라벨이 단위접미사(`d`)만 다른 자기서술적
+  수량 프리셋(`market rank net-buyer`의 동일 필드 `--period`와 완전히 같은
+  패턴)이라 애초에 human-readable 전환 대상이 아니었습니다(I2 규칙). 이번에
+  raw 텍스트로 되돌렸습니다 — `--days 5`처럼 스펙 숫자 코드를 쓰던 호출은
+  영향이 없고, `--days 5d`처럼 human 이름을 쓰던 호출만 `dt="5d"`가 그대로
+  전송되어 서버에서 거부됩니다.
+- **`stock investor by-stock-total`(ka10061)의 `--trade`가 `1`/`2`를 더
+  이상 받지 않습니다.** 스펙의 `trde_tp`는 `0`(순매수) 단일값뿐인데 기존
+  코드는 `click.Choice(["0","1","2"])`로 스펙에 없는 `1`/`2`까지 받고
+  있었습니다. `HumanChoice({"net-buy":"0"})`로 좁히며 그 두 값이 거부되게
+  됐습니다 — 이미 `click.Choice`였던 자리가 값 집합이 줄어드는 경우라
+  Breaking입니다(제약 8 마지막 문단 참고).
 
 **Non-breaking (사람이 읽는 이름 추가, 하위호환)**
 
@@ -143,6 +189,60 @@
   `3:통합`을 직접 확인했습니다. 기존 `KRX`/`NXT` 호출과 기본값(`KRX`)은
   그대로 동작하는 순수 확대(widening)입니다 — `rank amount`(ka10032)가
   v2.11.0에서 먼저 넓혀진 것과 같은 모양으로 맞췄습니다.
+- `stock daily-price`(ka10086)의 `--display`가 human-readable 이름을
+  받습니다(`quantity`/`amount`). 기존 `AMT_QTY_TP_0_1`(0:금액,1:수량)과
+  키 집합은 같지만 극성이 정반대(0:수량,1:금액)라 별도 상수
+  (`DAILY_PRICE_DISPLAY`)를 뒀습니다.
+- `stock today-exec`(ka10084)/`stock today-volume`(ka10055)의 `--when`이
+  human-readable 이름을 받습니다(`today`/`previous`). 두 API 모두 워크북에서
+  값이 character-for-character 동일함을 확인해 하나의 코드북
+  (`TODAY_PREV_1_2`)으로 수렴시켰습니다. 다른 today/previous 계열 상수
+  (`today`:0,`previous`:1)와는 극성이 반대라 절대 합치지 않았습니다.
+  `today-exec`의 `--mode`(`tic_min`)도 human-readable 이름을 받습니다
+  (`tick`/`minute`).
+- `stock analysis price-cluster`(ka10025)의 `--include-current`가
+  human-readable 이름을 받습니다(`yes`/`no`).
+- `stock analysis open-change`(ka10028)의 `--sort`/`--volume-cond`/
+  `--include-limit`/`--stock-cond`/`--credit-cond`/`--amount-cond`/
+  `--direction` 7개 옵션이 human-readable 이름을 받습니다
+  (`--sort open`, `--stock-cond exclude-managed` 등). `--amount-cond`
+  (`trde_prica_cnd`)는 `market rank change`(ka10027)의
+  `--amount-cond`(`trde_prica_cnd`)와 값이 완전히 동일하지만(구분 불가),
+  `market rank volume`(ka10030)의 `trde_prica_tp`와는 키 집합이
+  겹치면서도 `50m` 값이 다른 극성 해저드라 절대 합치지 않았고 리터럴로
+  핀 고정했습니다.
+- `stock analysis instant-volume`(ka10052)의 `--market`/`--price-type`이
+  human-readable 이름을 받습니다(`--market kospi`, `--price-type
+  under-1k` 등). `--market`(`mrkt_tp`)은 이 코드베이스에서 4번째로 확인된
+  서로 다른 `mrkt_tp` 코드북입니다(전체=0,코스피=1,코스닥=2,종목=3 — 표준
+  `MARKET_ALL`(000/001/101)과도, sector 계열의 0/1/2와도 순서가 다릅니다).
+- `stock analysis vi-trigger`(ka10054)의 `--session`/`--trigger-type`/
+  `--volume-type`/`--amount-type`/`--direction` 5개 옵션이 human-readable
+  이름을 받습니다. `--session`(`bf_mkrt_tp`)은 `market rank volume`
+  (ka10030)의 `mrkt_open_tp`와 `all`/`regular`는 값이 같지만
+  `after-hours`만 다른(2 대 3) 극성 해저드라 리터럴로 핀 고정했습니다.
+- `stock analysis warrant`(ka10011)의 `--type`이 human-readable 이름을
+  받습니다(`all`/`warrant-security`/`warrant-certificate`).
+- `stock investor daily-trade`(ka10044)의 `--trade`가 human-readable
+  이름을 받습니다(`net-sell`/`net-buy`). `market rank broker-top`
+  (ka10039)의 `--type`(`net-buy`:1,`net-sell`:2)과 극성이 정반대인 클러스터
+  (`net-sell`:1,`net-buy`:2)라 리터럴로 핀 고정했고, 별도 이름
+  (`INVESTOR_DAILY_TRADE_SIDE`)을 새로 뒀습니다.
+- `stock investor stock-institution`(ka10045)의 `--inst-price`/
+  `--foreign-price`가 human-readable 이름을 받습니다(`buy`/`sell`, 두
+  옵션이 코드북을 공유합니다).
+- `stock investor daily-by-investor`(ka10058)의 `--trade`/`--investor-type`
+  이 human-readable 이름을 받습니다. `--trade`는 `daily-trade`(ka10044)와
+  같은 극성 해저드가 있어 별도 이름(`DAILY_BY_INVESTOR_TRADE_SIDE`)으로
+  분리했습니다.
+- `stock investor by-stock`(ka10059)의 `--amount-qty`/`--trade`/`--unit`이
+  human-readable 이름을 받습니다. `--amount-qty`/`--trade`는 기존
+  `AMT_QTY_TP_1_2`/`TRDE_TP_NET_BUY_BUY_SELL`을 그대로 공유합니다(두
+  상수 모두 이 API를 미래 확장 대상으로 이미 예약해 두고 있었습니다).
+  `--unit`은 `stock investor by-stock-total`(ka10061)과 코드북을 공유하는
+  새 상수(`INVESTOR_BY_STOCK_UNIT`)를 씁니다.
+- `stock investor by-stock-total`(ka10061)의 `--amount-qty`/`--unit`이
+  human-readable 이름을 받습니다(위와 동일한 상수 공유).
 
 
 ## [2.11.0] - 2026-07-19
