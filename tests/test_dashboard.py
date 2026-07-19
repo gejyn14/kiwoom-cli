@@ -124,7 +124,48 @@ def test_dashboard_both_fail_table_mode_exits_2_on_stderr(runner, fake_client):
 
     assert result.exit_code == 2
     assert "모두 실패" in result.stderr
-    assert result.stdout == "" or "계좌 요약" not in result.stdout
+    assert result.stdout == ""
+
+
+def test_dashboard_table_mode_success_renders_both_panels(runner, fake_client):
+    """table 모드에서 양쪽 다 성공하면 exit 0 + 계좌 요약/거래량 상위 패널이 모두 렌더링된다."""
+    fake_client.set_response("kt00004", ACCOUNT_RESPONSE)
+    fake_client.set_response("ka10030", MOVERS_RESPONSE)
+
+    result = runner.invoke(cli, ["dashboard"])
+
+    assert result.exit_code == 0
+    assert "계좌 요약" in result.stdout
+    assert "당일 거래량 상위" in result.stdout
+    assert "삼성전자" in result.stdout
+
+
+def test_dashboard_table_mode_account_only_fails_degrades_gracefully(runner, fake_client):
+    """table 모드에서 계좌만 실패하면 exit 0(2 아님) + stderr 경고 + 거래량 쪽은 정상 렌더링된다."""
+    fake_client.set_response("ka10030", MOVERS_RESPONSE)
+    _make_selectively_failing(fake_client, fail_account=True, fail_movers=False)
+
+    result = runner.invoke(cli, ["dashboard"])
+
+    assert result.exit_code == 0
+    assert "계좌 조회 실패" in result.stderr
+    assert "당일 거래량 상위" in result.stdout
+    assert "삼성전자" in result.stdout
+
+
+def test_dashboard_movers_only_fails_reports_explicit_null(runner, fake_client):
+    """거래량 상위만 실패하면 data['top_volume']는 None이지만 키 자체는 존재해야 한다 (계좌 실패의 대칭 케이스)."""
+    fake_client.set_response("kt00004", ACCOUNT_RESPONSE)
+    _make_selectively_failing(fake_client, fail_account=False, fail_movers=True)
+
+    result = runner.invoke(cli, ["-f", "json", "dashboard"])
+
+    assert result.exit_code == 0
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is True
+    assert doc["data"]["account"]["acnt_nm"] == "테스트"
+    assert "top_volume" in doc["data"]
+    assert doc["data"]["top_volume"] is None
 
 
 def test_dashboard_success_json_shape_unchanged(runner, fake_client):
