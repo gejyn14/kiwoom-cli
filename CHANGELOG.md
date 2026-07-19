@@ -8,7 +8,7 @@
 전환한 자리는 raw 숫자코드도 그대로 받으므로 스펙 값을 쓰던 호출은 종전과
 똑같이 동작하고, 기본값도 아래 Fixed 두 건을 빼면 전부 그대로입니다.
 
-다만 이 116개 자리는 전환 전에 타입 제약이 없는 자유 텍스트였습니다 — 아무
+다만 이 116개 자리는 전환 전에 타입 제약이 없는 자유 텍스트였습니다. 아무
 문자열이나 받아 그대로 서버로 넘겼습니다. 지금은 스펙에 문서화된 값만
 받으므로, 스펙에 없는 값을 보내던 호출은 이제 로컬에서 거부됩니다. 받아들이는
 값의 집합이 줄어든 것이라 Breaking으로 분류합니다.
@@ -47,7 +47,7 @@ intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
   전체조회 값이라 종전 의도인 "거래량 필터 없음"이 그대로 유지됩니다.
 - **`stock analysis open-change`(ka10028)의 `--volume-cond` 기본 전송값이
   스펙 값이 아니었습니다.** `"0"` → `"0000"`으로 고쳤습니다. `market rank
-  change`(ka10027)와 완전히 같은 결함 패턴입니다 — 이 API의 거래량조건도
+  change`(ka10027)와 완전히 같은 결함 패턴입니다. 이 API의 거래량조건도
   4자리 zero-pad만 받는데 `"0"`이 목록에 없었습니다. 스펙의 전체조회 값이라
   종전 의도인 "거래량 필터 없음"이 그대로 유지됩니다.
 
@@ -57,8 +57,8 @@ intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
   문자열이든 그대로 전송하고 서버 판단에 맡겼지만, 이제 전송 전에 로컬에서
   `INVALID_INPUT`으로 막습니다. 스펙에 문서화된 raw 코드와 새 human-readable
   이름은 양쪽 다 통과하므로 정상적인 호출은 영향이 없고, 스펙에 없는 값을
-  보내던 호출만 깨집니다. 값 목록이 형제 API끼리 다른 자리가 특히 위험합니다
-  — 예를 들어 다섯 개 elw 커맨드를 3자리 권리구분 표 하나로 돌리던
+  보내던 호출만 깨집니다. 값 목록이 형제 API끼리 다른 자리가 특히 위험합니다.
+  예를 들어 다섯 개 elw 커맨드를 3자리 권리구분 표 하나로 돌리던
   스크립트는 `change-rank`/`balance-rank`에서 깨집니다. 두 API는 스펙에
   `005`(EX) 코드 자체가 없어 `--right-type 005`가 종전에는 그대로 전송됐지만
   이제 거부됩니다(`surge`/`disparity`에서는 그대로 통과합니다). 같은 이유로
@@ -81,7 +81,7 @@ intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
   `--price-type`, `stock analysis vi-trigger`(ka10054)의
   `--volume-type`/`--amount-type`, `stock investor
   daily-by-investor`(ka10058)의 `--investor-type`이 스펙 밖의 값을
-  거부합니다(exit 1).** 전환 전에는 타입 제약이 없는 자유 텍스트였습니다 —
+  거부합니다(exit 1).** 전환 전에는 타입 제약이 없는 자유 텍스트였습니다.
   위 116개 옵션과 같은 이유로 Breaking입니다. `--price-type`/
   `--volume-type`/`--amount-type`/`--investor-type`은 스펙에 정의된 값이
   전부 라벨을 갖고 있어 전체를 옮겼지만, `instant-volume`의
@@ -95,19 +95,19 @@ intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
   그대로 전송되고 있었습니다. 이번에 두 필드가 같은 값 목록
   (5/10/20/40/60/120, 워크북으로 character-for-character 동일함을 확인)을
   쓰는 걸 근거로 `--period`도 `HumanChoice`로 끌어올려 둘을
-  `TRADER_ANALYSIS_PERIOD_5_120` 하나로 통일했습니다 — 스펙 숫자 코드와
+  `TRADER_ANALYSIS_PERIOD_5_120` 하나로 통일했습니다. 스펙 숫자 코드와
   `5d`/`10d`/`20d`/`40d`/`60d`/`120d` human 이름은 그대로 통과하고, 목록
   밖의 값만 이제 로컬에서 거부됩니다.
 - **`stock investor by-stock-total`(ka10061)의 `--trade`가 `1`/`2`를 더
   이상 받지 않습니다.** 스펙의 `trde_tp`는 `0`(순매수) 단일값뿐인데 기존
   코드는 `click.Choice(["0","1","2"])`로 스펙에 없는 `1`/`2`까지 받고
   있었습니다. `HumanChoice({"net-buy":"0"})`로 좁히며 그 두 값이 거부되게
-  됐습니다 — 이미 `click.Choice`였던 자리가 값 집합이 줄어드는 경우라
+  됐습니다. 이미 `click.Choice`였던 자리가 값 집합이 줄어드는 경우라
   Breaking입니다(이미 `click.Choice`였더라도 값 집합이 줄면 Breaking입니다).
 
 이번 릴리스에서 human-readable 이름을 받게 된 옵션을 명령 그룹별로 정리하면
 다음과 같습니다. **스펙에 있는 raw 숫자코드는 두 구분 모두에서 계속
-통과합니다** — "Breaking"은 스펙 밖의 값만 이제 로컬에서 거부된다는 뜻입니다.
+통과합니다**. "Breaking"은 스펙 밖의 값만 이제 로컬에서 거부된다는 뜻입니다.
 다만 스펙 밖에는 종전 기본값이던 `--vol-type 0`/`--vol-cnd 0`, `elw
 change-rank`/`balance-rank`의 `--right-type 005`, `by-stock-total`의
 `--trade 1`/`2`처럼 실제로 쓰이던 숫자 코드도 들어갑니다. 쓰던 값이 여기
@@ -132,7 +132,7 @@ change-rank`/`balance-rank`의 `--right-type 005`, `by-stock-total`의
 | **합계** | **147** | **Breaking 125 / Non-breaking 22** |
 
 `market`의 116개는 전부 자유 텍스트에서 전환된 자리라 예외 없이 Breaking이고,
-`stock`의 31개만 두 구분이 섞여 있습니다 — 어느 쪽이었는지는 위 Breaking
+`stock`의 31개만 두 구분이 섞여 있습니다. 어느 쪽이었는지는 위 Breaking
 섹션(자유 텍스트 8개와 값 집합이 줄어든 `by-stock-total`의 `--trade`를 목록으로
 명시)과 아래 Non-breaking 섹션(나머지 22개) 본문에서 커맨드·옵션 단위로
 확인할 수 있습니다. 이 표에 넣지 않은 항목:
@@ -178,7 +178,7 @@ human 이름으로 바꾼 게 아니라 별도로 아래에 적었고, `--vol-ty
 - `sector codes`(ka10101)의 `--market`이 human-readable 이름 5개
   (`kospi`/`kosdaq`/`kospi200`/`kospi100`/`krx100`)를 받습니다. 위
   `SECTOR_PRICE_MARKET`의 진짜 상위집합이라 별도 이름(`SECTOR_CODES_MARKET`)
-  으로 분리했습니다 — `sector current`/`stocks`/`daily`에서 `kospi100`/
+  으로 분리했습니다. `sector current`/`stocks`/`daily`에서 `kospi100`/
   `krx100`을 주면 거부됩니다(그 3개 API 스펙엔 없는 값입니다).
 - `theme groups`(ka90001)의 `--type`(`qry_tp`)/`--sort`(`flu_pl_amt_tp`)가
   human-readable 이름을 받습니다(`--type stock`, `--sort change-top` 등).
@@ -210,7 +210,7 @@ human 이름으로 바꾼 게 아니라 별도로 아래에 적었고, `--vol-ty
   - `--right-type`(권리구분)은 자릿수/EX 포함 여부가 API마다 달라 3개
     상수로 분리했습니다: `elw surge`/`elw disparity`(3자리 zero-pad, EX
     포함), `elw search`(무패딩, EX 포함), `elw change-rank`/
-    `elw balance-rank`(3자리 zero-pad, EX 없음 — 두 API 스펙 모두 `005`
+    `elw balance-rank`(3자리 zero-pad, EX 없음. 두 API 스펙 모두 `005`
     코드 자체가 없습니다. `ex`를 주면 거부됩니다).
 - `gold chart-tick`(ka50079)/`chart-day`(ka50081)/`chart-week`(ka50082)/
   `chart-month`(ka50083)의 `--price-type`(`upd_stkpc_tp`)이 human-readable
@@ -230,7 +230,7 @@ human 이름으로 바꾼 게 아니라 별도로 아래에 적었고, `--vol-ty
   (ka90006)/`market program cumulative`(ka90007)/`market etf all`(ka40004)의
   `--exchange`가 `all`(통합, `stex_tp`=3)을 받습니다. 네 API 모두 워크북에서
   `3:통합`을 직접 확인했습니다. 기존 `KRX`/`NXT` 호출과 기본값(`KRX`)은
-  그대로 동작하는 순수 확대(widening)입니다 — `rank amount`(ka10032)가
+  그대로 동작하는 순수 확대(widening)입니다. `rank amount`(ka10032)가
   v2.11.0에서 먼저 넓혀진 것과 같은 모양으로 맞췄습니다.
 - `stock daily-price`(ka10086)의 `--display`가 human-readable 이름을
   받습니다(`quantity`/`amount`). 기존 `AMT_QTY_TP_0_1`(0:금액,1:수량)과
@@ -257,7 +257,7 @@ human 이름으로 바꾼 게 아니라 별도로 아래에 적었고, `--vol-ty
 - `stock analysis instant-volume`(ka10052)의 `--market`/`--price-type`이
   human-readable 이름을 받습니다(`--market kospi`, `--price-type
   under-1k` 등). `--market`(`mrkt_tp`)은 이 코드베이스에서 4번째로 확인된
-  서로 다른 `mrkt_tp` 코드북입니다(전체=0,코스피=1,코스닥=2,종목=3 — 표준
+  서로 다른 `mrkt_tp` 코드북입니다(전체=0,코스피=1,코스닥=2,종목=3. 표준
   `MARKET_ALL`(000/001/101)과도, sector 계열의 0/1/2와도 순서가 다릅니다).
 - `stock analysis vi-trigger`(ka10054)의 `--session`/`--trigger-type`/
   `--volume-type`/`--amount-type`/`--direction` 5개 옵션이 human-readable
@@ -315,23 +315,23 @@ human 이름으로 바꾼 게 아니라 별도로 아래에 적었고, `--vol-ty
   `mrkt_tp`=`000`)을 받습니다. 스펙 값은 `000:전체, 001:코스피, 101:코스닥`
   셋인데 기존 `click.Choice(["kospi","kosdaq"])`는 `전체`에 아예 도달할 방법이
   없었습니다(이번 전환 전부터 있던 결함입니다). 기존 `kospi`/`kosdaq` 호출과
-  기본값(`kospi`)은 그대로 `001`을 보내는 순수 확대(widening)입니다 —
+  기본값(`kospi`)은 그대로 `001`을 보내는 순수 확대(widening)입니다.
   `market rank volume` 등의 `--exchange` 스윕과 같은 종류의 수정입니다.
 - `stock lending trend`(ka10068)/`lending by-stock`(ka20068)의 `--all`은
   전환하지 않았습니다. 두 API 모두 스펙에 값이 하나만 문서화돼 있어
   (각각 `1:전체표시`, `0:종목코드 입력종목만 표시`) 반대쪽 코드를 확인할
-  수 없습니다 — raw 텍스트로 남겼습니다(자유 텍스트 그대로라 breaking
+  수 없습니다. raw 텍스트로 남겼습니다(자유 텍스트 그대로라 breaking
   아닙니다).
 - `market`의 API 약어 옵션 5개(`--stk-cnd`/`--vol-cnd`/`--price-cnd`/
   `--amount-cnd`/`--inds-cd`)에 human 이름 별칭을 추가했습니다
   (`--stock-cond`/`--volume-cond`/`--price-cond`/`--amount-cond`/
   `--sector-code`). `--help`에는 새 이름이 대표로 뜨지만 구 이름도 계속
-  통합니다 — 전송값은 그대로입니다.
+  통합니다. 전송값은 그대로입니다.
 - `account orders detail`(kt00007)/`orders status`(kt00009)/`history
   transactions`(kt00015)의 `--exchange`가 `all`(전체, `dmst_stex_tp`=`%`)을
   받습니다. 기존 `%`/`KRX`/`NXT`/`SOR`(kt00015는 `SOR` 제외) 호출과
   기본값은 그대로 동작하는 순수 확대(widening)입니다. kt00007/kt00009는
-  `SOR`을 받지만 kt00015는 스펙에 없어 계속 거부됩니다 — 두 자리를
+  `SOR`을 받지만 kt00015는 스펙에 없어 계속 거부됩니다. 두 자리를
   하나의 상수로 합치지 않고 `ACCOUNT_EXCHANGE_WITH_SOR`/
   `ACCOUNT_EXCHANGE_NO_SOR`로 분리했습니다.
 
