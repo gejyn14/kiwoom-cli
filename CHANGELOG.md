@@ -368,11 +368,6 @@ human-readable 이름을 추가했습니다(하위호환).
   전송했고 — Required=Y 필드에 빈 값이므로 서버가 거부했을 값입니다 — 이제
   생략하면 `Error: Missing option '--broker'.`로 `exit 1`이고 요청 자체가
   나가지 않습니다(CLI로 직접 실행해 확인).
-- **자유 텍스트였던 `--date-type`/`--pot`/`--sort`/`--days`가 enum(`HumanChoice`)
-  으로 좁혀졌습니다.** 매핑에 없는 값(스펙 밖 raw 문자열)을 넘기던 호출만
-  이제 `exit 1`로 거부됩니다. `HumanChoice` 전환 자체는 breaking이 아닙니다 —
-  기존에 쓰던 raw 숫자 코드(`"0"`/`"1"`/`"5"`.../`"120"` 등)는 계속 그대로
-  받습니다.
 
 **Non-breaking (사람이 읽는 이름 추가, 하위호환)**
 
