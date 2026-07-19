@@ -542,11 +542,15 @@ def print_account_eval(data: dict[str, Any]) -> None:
         _output_json(data)
         return
     if fmt == "csv":
+        # print_generic_table의 csv 분기(스칼라 요약 먼저, 리스트는 그 다음)와 순서를 맞춘다.
         holdings = data.get("stk_acnt_evlt_prst", [])
+        flat = _flat_dict(data)
+        if flat:
+            _output_csv(flat)
         if holdings:
+            if flat:
+                print()  # 두 CSV 블록을 빈 줄로 구분
             _output_csv(holdings)
-        else:
-            _output_csv(_flat_dict(data))
         return
     summary = Table(title="💰 계좌평가현황", show_header=False, border_style="dim")
     summary.add_column("항목", style="cyan", width=20)

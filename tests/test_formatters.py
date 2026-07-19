@@ -507,3 +507,52 @@ class TestGenericTableCsvScalarSummary:
         assert out != "", "스칼라 요약이 전혀 없어 0바이트 출력됨"
         assert "홍길동" in out
         assert "1000000" in out
+
+
+class TestAccountEvalCsvScalarSummary:
+    """print_account_eval의 csv 분기 — 보유종목(리스트)이 있어도 계좌 요약(스칼라)이
+    사라지면 안 된다 (감사 브리프의 원래 예시: account balance의 예수금/총매입금액)."""
+
+    def test_holdings_present_emits_both_summary_and_holdings(self, capsys):
+        """보유종목이 있는(가장 흔한) 케이스에서도 예수금/총매입금액 요약이 함께 나와야 한다."""
+        from kiwoom_cli.formatters import print_account_eval
+        data = {
+            "acnt_nm": "홍길동",
+            "entr": "1000000",
+            "tot_pur_amt": "7000000",
+            "stk_acnt_evlt_prst": [
+                {"stk_cd": "005930", "stk_nm": "삼성전자"},
+            ],
+        }
+        with _make_ctx("csv"):
+            print_account_eval(data)
+        out = capsys.readouterr().out
+        assert "홍길동" in out, "보유종목이 있으면 계좌 요약(계좌명)이 통째로 사라짐"
+        assert "1000000" in out, "보유종목이 있으면 예수금 요약이 통째로 사라짐"
+        assert "7000000" in out, "보유종목이 있으면 총매입금액 요약이 통째로 사라짐"
+        assert "005930" in out
+        assert "삼성전자" in out
+
+    def test_summary_comes_before_holdings(self, capsys):
+        """print_generic_table csv 분기와 동일한 순서(스칼라 요약 -> 리스트)를 따른다."""
+        from kiwoom_cli.formatters import print_account_eval
+        data = {
+            "acnt_nm": "홍길동",
+            "stk_acnt_evlt_prst": [{"stk_cd": "005930"}],
+        }
+        with _make_ctx("csv"):
+            print_account_eval(data)
+        out = capsys.readouterr().out
+        lines = [line.rstrip("\r") for line in out.strip("\n").split("\n")]
+        assert lines[0] == "acnt_nm"
+        assert lines[1] == "홍길동"
+
+    def test_no_holdings_still_emits_summary(self, capsys):
+        """보유종목이 없는 경우는 dd136aa 이전에도 정상 동작했다 — 회귀가 아님을 확인."""
+        from kiwoom_cli.formatters import print_account_eval
+        data = {"acnt_nm": "홍길동", "entr": "1000000", "stk_acnt_evlt_prst": []}
+        with _make_ctx("csv"):
+            print_account_eval(data)
+        out = capsys.readouterr().out
+        assert "홍길동" in out
+        assert "1000000" in out
