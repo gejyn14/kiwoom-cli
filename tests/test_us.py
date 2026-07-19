@@ -602,6 +602,22 @@ def test_us_stock_search_filters_keyword(runner, us_stock_fake):
     assert "NVDA" not in result.output
 
 
+def test_us_stock_search_empty_result_emits_json_envelope(runner, us_stock_fake):
+    """검색 결과가 없을 때도 -f json은 파싱 가능한 envelope을 출력해야 한다.
+
+    기존에는 err_console.print + return으로 끝나 stdout이 완전히 비었다
+    (exit 0인데 파싱할 게 없는, 계약 위반 중 가장 나쁜 케이스).
+    """
+    result = runner.invoke(
+        cli, ["-f", "json", "stock", "search", "존재하지않는티커", "--market", "us"]
+    )
+
+    assert result.exit_code == 0
+    doc = json.loads(result.output)
+    assert doc["ok"] is True
+    assert doc["data"]["items"] == []
+
+
 # ============================================================
 #  Task 8: US charts
 # ============================================================

@@ -13,6 +13,7 @@ from ..formatters import (
     _output_json,
     _sign_color,
     fail_input,
+    human,
     print_chart_data,
     print_generic_table,
     print_orderbook,
@@ -263,10 +264,16 @@ def _sync_stocks() -> list[dict]:
 @stock.command("sync")
 def sync():
     """전 시장 종목 리스트를 다운받아 캐시에 저장. (ka10099)"""
+    from .. import envelope
+    from ..config import CACHE_DIR
     from ..output import err_console
     with err_console.status("[dim]종목 리스트 동기화 중...[/]", spinner="dots"):
         items = _sync_stocks()
-    click.echo(f"동기화 완료: {len(items)}개 종목 저장 (~/.kiwoom/cache/stocks.json)")
+    cache_path = str(CACHE_DIR / "stocks.json")
+    if _get_format() != "table":
+        envelope.emit(data={"synced": len(items), "cache": cache_path})
+    else:
+        human(f"동기화 완료: {len(items)}개 종목 저장 (~/.kiwoom/cache/stocks.json)")
 
 
 @stock.command("search")
@@ -310,7 +317,7 @@ def search(keyword: str | None, mrkt_tp: str, exchange: str):
     if items:
         print_generic_table(items, title=f"종목 리스트 ({len(items)}개)")
     else:
-        click.echo("검색 결과가 없습니다.")
+        print_generic_table([], title="종목 리스트")
 
 
 

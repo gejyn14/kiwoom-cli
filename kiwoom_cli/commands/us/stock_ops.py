@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from ...client import KiwoomClient
 from ...formatters import _find_list, fail_input, print_chart_data, print_generic_table
-from ...output import err_console
 from ._constants import US_EXCHANGE_ALL
 from .detect import UsExchangeError, resolve_us_exchange
 
@@ -54,9 +53,6 @@ def search(keyword: str | None, exchange: str | None) -> None:
                 or kw in i.get("stk_nm", "").lower()
                 or kw in i.get("stk_enm", "").lower()
             ]
-        if not items:
-            err_console.print("[yellow]검색 결과가 없습니다.[/]")
-            return
         print_generic_table(items, title=f"미국주식 검색: {keyword or '전체'}")
 
 
