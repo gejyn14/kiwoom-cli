@@ -2,6 +2,57 @@
 
 ## [Unreleased]
 
+`market program time-trend`(ka90005)/`market program daily-trend`(ka90010)의
+`--market`이 스펙에 정의되지 않은 코드를 보내고 있었고, 정정과 함께
+`--unit`/`--tick-type`에 human-readable 이름을 추가했습니다(하위호환).
+
+**Fixed**
+
+- **`--market`(`mrkt_tp`)이 스펙에 없는 코드를 보내고 있었습니다.** ka90005/
+  ka90010 스펙(Request Body, `docs/미국 REST API 문서.xlsx`)의 `mrkt_tp`는
+  길이 10의 P-코드이고 값이 `stex_tp`(거래소구분)와 **연동**됩니다(코스피
+  -1:`P00101`, -2:`P001_NX01`, -3:`P001_AL01`; 코스닥-1:`P10102`,
+  -2:`P101_NX02`, -3:`P101_AL02`). 기존 코드는 `--market`이 자유 텍스트였고
+  기본값 `"0"`을 그대로 전송했는데, 이는 형제 API인 ka90007
+  (`0:코스피,1:코스닥`)의 코드북에서 복붙된 값으로 이 두 엔드포인트에는
+  애초에 정의되어 있지 않았습니다.
+- ka90010 스펙 시트는 코스닥+거래소구분값3을 `P001_AL02`로 적어 ka90005의
+  `P101_AL02`와 모순됩니다. 이 모순은 워크북뿐 아니라 키움 공식 GitHub
+  저장소(`kiwoom_docs/시세.md`, Postman 컬렉션, examples 스크립트,
+  `kiwoom_api_spec.json`) 전체에서 동일하게 나타나, 키움 자체 소스로는
+  어느 쪽이 오타인지 판정할 수 없었습니다. 코스닥 코드가 전부 `P101_`
+  접두사라는 점에 근거해 두 엔드포인트 모두 `P101_AL02`로 통일했습니다 —
+  이건 검증된 사실이 아니라 판단이며, 근거는
+  `kiwoom_cli/commands/_constants.py`의 `PROGRAM_MARKET_BY_EXCHANGE` 주석에
+  남겨 두었습니다.
+
+**Breaking**
+
+- **`--market` 전송값이 `"0"`/`"1"`에서 P-코드로 바뀝니다.** 이전 기본값
+  `"0"`은 스펙에 없는 값이었으므로 이건 고쳐진 것이지 기능이 바뀐 게
+  아닙니다. 다만 `--market`은 이전에 자유 텍스트(`type=` 없음)였다가 이제
+  `click.Choice(["kospi","kosdaq"])`로 좁아져, 임의 문자열(예: raw P-코드를
+  직접 넘기던 호출)을 그대로 전달하던 동작은 더 이상 동작하지 않습니다 —
+  `--unit`/`--tick-type`과 달리 `--market`은 `HumanChoice`가 아니라 순수
+  `click.Choice`라 raw 코드 하위호환이 없습니다(값이 `stex_tp`와 함께 2단
+  조회에 쓰이기 때문입니다).
+- **`--exchange`가 이제 `all`(통합, `stex_tp=3`)도 받습니다.** 스펙에
+  `3:통합`이 있었는데 기존 코드는 `KRX`/`NXT` 두 값만 허용했습니다. 순수
+  추가라 기존 호출은 영향 없습니다(기본값 `KRX` 그대로, 실제로 CLI를
+  실행해 기본값 호출의 전송 body가 변경 전후 동일함을 확인했습니다).
+
+**Non-breaking (사람이 읽는 이름 추가, 하위호환)**
+
+- **`--unit`/`--tick-type`이 이제 `amount`/`quantity`, `tick`/`minute` 같은
+  사람이 읽는 이름도 받습니다.** 기존에 숫자 코드(`1`/`2`, `0`/`1`)를 직접
+  넘기던 스크립트는 **그대로 동작합니다** — `HumanChoice`가 raw API 코드를
+  하위호환으로 계속 허용하기 때문입니다. 전송값도 이름 추가 전과 동일합니다:
+  `amount`→`amt_qty_tp=1`, `quantity`→`amt_qty_tp=2`;
+  `tick`→`min_tic_tp=0`, `minute`→`min_tic_tp=1`. 다만 두 옵션 모두 이전엔
+  자유 텍스트(`type=` 없음)였으므로, 매핑에 없는 임의 문자열을 넘기던
+  호출은 이제 거부됩니다(enum 축소 — CLI로 직접 확인: 매핑에 없는 값을
+  넘기면 exit code 1).
+
 `stock investor after-close`(ka10066)의 `--trade` 값이 스펙과 반대였고, 정정과
 함께 두 옵션에 raw 숫자코드와 함께 쓸 수 있는 human-readable 이름을
 추가했습니다(하위호환).
