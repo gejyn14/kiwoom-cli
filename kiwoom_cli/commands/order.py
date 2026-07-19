@@ -30,6 +30,7 @@ from rich.panel import Panel
 from .. import envelope
 from ..client import KiwoomAPIError, KiwoomClient
 from ..formatters import _get_format, fail_api, fail_input, human, print_generic_table
+from ._constants import GOLD_ORDER_TYPES, HumanChoice
 from ._mutation import (
     QuoteUnavailable,
     confirm_gate,
@@ -81,6 +82,31 @@ def _kr_type_or_exit(order_type: str) -> str:
     if order_type not in ORDER_TYPES:
         fail_input(f"국내주식에서 지원하지 않는 주문유형입니다: {order_type}")
     return ORDER_TYPES[order_type]
+
+
+def _resolve_gold_type(order_type: str) -> tuple[str, str]:
+    """--type 값을 금현물(kt50000/kt50001) trde_tp 코드로 정규화한다.
+
+    order_type은 두 경로로 들어온다: --type을 명시하면 HumanChoice가 이미
+    API 코드("00"/"10"/"20")로 변환해 넘긴다(gold_buy/gold_sell의 --type
+    옵션이 HumanChoice(GOLD_ORDER_TYPES)라서 그 외 값은 Click 파싱 단계에서
+    이미 거부된다). --type을 생략하면 _resolve_order_type의 기본값 로직이
+    Click을 거치지 않고 사람이 읽는 이름("limit" 또는 "market")을 그대로
+    반환한다 — 금현물은 전부 보통(지정가) 계열이라 시장가가 없으므로,
+    가격도 --type도 생략한 경우의 기본값 "market"은 여기서 거부해야 한다.
+
+    반환값은 (wire 코드, 사람이 읽는 이름) — 후자는 미리보기 표시용이다.
+    """
+    if order_type in GOLD_ORDER_TYPES:
+        return GOLD_ORDER_TYPES[order_type], order_type
+    if order_type in GOLD_ORDER_TYPES.values():
+        label = next(k for k, v in GOLD_ORDER_TYPES.items() if v == order_type)
+        return order_type, label
+    fail_input(
+        "금현물은 limit/ioc/fok 세 가지 주문유형만 지원합니다"
+        f" (입력값: {order_type!r}). --type limit/ioc/fok 중 하나와 --price를 지정하세요.",
+        code="INVALID_INPUT",
+    )
 
 
 # 시장가 계열 — ord_uv(주문단가)를 시스템이 결정하므로 사용자가 넘긴 --price는
@@ -154,9 +180,6 @@ def _quote_price_kr(client, code: str) -> int:
     가격 파싱은 (검증 등 다른 용도에 쓰이는) `_strip_signed_int`가 아니라
     `parse_quote_price`를 거친다 — 파싱 실패를 조용히 0으로 넘기지 않고
     QuoteUnavailable로 호출자(_dry_run_kr)에 전파한다.
-
-    ka10001은 국내주식 종목코드 전용이다 — 금현물 코드(M04020000 등)는
-    `_quote_price_gold`로 별도 라우팅한다.
     """
     data, _ = client.request("ka10001", {"stk_cd": code}, internal=True)
     cur_prc = data.get("cur_prc")
@@ -169,49 +192,18 @@ def _quote_price_kr(client, code: str) -> int:
     return price
 
 
-def _quote_price_gold(client, code: str) -> int:
-    """금현물 현재가 조회 (ka50010, 금현물체결추이). 시장가 금현물 주문의
-    예상비용 계산용.
-
-    ka10001(주식기본정보요청)은 금현물 코드를 받지 않는다 — 스펙(docs/미국
-    REST API 문서.xlsx 'ka10001' 시트) request의 stk_cd 설명이 "거래소별
-    종목코드(KRX:039490,NXT:039490_NX,SOR:039490_AL)"로 한정되고, 메뉴 위치도
-    "국내주식 > 종목정보"다. 금현물 코드는 "국내주식 > 시세 > 금현물..." 계열
-    전용 API(ka50010/ka50012/ka50079/ka50087/ka50100/ka50101 등, stk_cd에
-    M04020000/M04020100 명시)로만 조회 가능하다.
-
-    ka50010은 stk_cd만 필요해 가장 단순하고(다른 금현물 시세 API는 base_dt/
-    tic_scope 등 추가 필수 파라미터가 있음) `market gold executions`에서 이미
-    쓰이고 있어 검증된 응답 형태다. gold_cntr 리스트의 첫 원소(최신 체결)의
-    cntr_pric(체결가)을 현재가로 쓴다 — 순서가 최신(newest-first)임은 한 예시가
-    아니라 구조적으로 확정된다: 스펙 Response Example에서 0번 행이 1번 행보다
-    tm이 늦을 뿐 아니라(090106 vs 090100) trde_qty(1385 vs 1375)와
-    acc_trde_prica도 더 크다 — 이 둘은 누적값이라 시간이 지나며 감소할 수 없으므로,
-    리스트가 oldest-first라면 누적 합계가 뒤로 갈수록 줄어드는 모순이 된다.
-    주식 시세 분석의 동일 계열 API인 ka10003(체결정보)도 같은 newest-first
-    관례를 보인다.
-    """
-    data, _ = client.request("ka50010", {"stk_cd": code}, internal=True)
-    rows = data.get("gold_cntr") or []
-    if not rows:
-        raise QuoteUnavailable(f"금현물 체결 데이터가 없습니다: {code!r}")
-    cntr_pric = rows[0].get("cntr_pric")
-    price = int(parse_quote_price(cntr_pric))
-    if price <= 0:
-        # _quote_price_kr과 동일한 재검사 — parse_quote_price는 f > 0만 보장하므로
-        # (0, 1) 구간의 소수는 여기서 int() 절삭으로 0이 될 수 있다.
-        raise QuoteUnavailable(f"시세 값이 정수로 절삭되며 0이 되었습니다: {cntr_pric!r}")
-    return price
-
-
 def _dry_run_kr(api_id: str, side: str, code: str, qty: int, kr_price: int,
                 order_type: str | None, dmst_stex_tp: str | None,
                 body: dict[str, Any], show_preview) -> None:
-    """국내 주문 dry-run. 시장가면 현재가를 조회해 예상비용을 계산한다.
+    """국내 주문 dry-run. 시장가면 현재가(ka10001/_quote_price_kr)를 조회해
+    예상비용을 계산한다.
 
-    금현물 주문(kt50000/kt50001)은 ka10001이 이해하지 못하는 금현물 코드를
-    쓰므로 시세 조회를 ka50010(_quote_price_gold)으로 라우팅한다 — 그 외
-    (주식/신용, kt10000/1/kt10006/7)는 ka10001(_quote_price_kr) 그대로.
+    금현물(kt50000/kt50001)은 전체 유형이 지정가 계열이라 --price가 항상
+    필수이므로(gold_buy/gold_sell이 호출 전에 강제) 여기 도달하는 시점엔
+    kr_price가 이미 0이 아니다 — 이 시장가-조회 분기 자체가 금현물에는 열리지
+    않는다. (과거엔 ka50010 기반 `_quote_price_gold`로 별도 라우팅했으나, 금현물
+    시장가 주문이라는 존재하지 않는 기능을 지원하기 위한 죽은 코드였으므로
+    제거했다 — Task 7b.)
 
     현재가 파싱이 실패하면(빈 값/숫자 아님/NaN/Inf/0 이하) price=0인 미리보기를
     price_source="market_quote"와 함께 보여주지 않고 QUOTE_UNAVAILABLE로
@@ -219,10 +211,9 @@ def _dry_run_kr(api_id: str, side: str, code: str, qty: int, kr_price: int,
     """
     price, src = kr_price, None
     if not kr_price and side in ("buy", "sell"):
-        quote_fn = _quote_price_gold if api_id.startswith("kt50") else _quote_price_kr
         with KiwoomClient() as c:
             try:
-                price, src = quote_fn(c, code), "market_quote"
+                price, src = _quote_price_kr(c, code), "market_quote"
             except QuoteUnavailable as e:
                 fail_api(
                     f"현재가 조회 결과를 해석할 수 없어 예상비용을 계산할 수 없습니다: {e}",
@@ -745,29 +736,35 @@ def gold():
 @gold.command("buy")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략)")
-@click.option("--type", "order_type", default=None, type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
+@click.option("--price", type=float, default=0, help="주문가격 (금현물은 전체 유형이 지정가 계열이라 필수)")
+@click.option("--type", "order_type", default=None, type=HumanChoice(GOLD_ORDER_TYPES), help="주문유형 (limit=보통, ioc=보통(IOC), fok=보통(FOK); 시장가 없음, 기본 limit)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 @click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
 @click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
 def gold_buy(code: str, qty: int, price: float, order_type: str | None, confirm: bool, dry_run: bool, client_order_id: str | None):
-    """금현물 매수주문 (kt50000).
+    """금현물 매수주문 (kt50000). 지정가 계열만 지원 (limit/ioc/fok) — 시장가 없음.
 
     예: kiwoom order gold buy M04020000 10 --type limit --price 90000 --confirm
     """
     order_type = _resolve_order_type(order_type, price)
+    trde_tp, order_type_label = _resolve_gold_type(order_type)
     kr_price = _kr_price_or_exit(price)
+    if not kr_price:
+        fail_input(
+            "금현물 주문은 가격이 필수입니다 (전체 유형이 보통/지정가 계열이며 시장가가 없습니다). --price를 지정하세요.",
+            code="INVALID_INPUT",
+        )
     body = {
         "stk_cd": code,
         "ord_qty": str(qty),
-        "ord_uv": str(kr_price) if kr_price else "",
-        "trde_tp": ORDER_TYPES[order_type],
+        "ord_uv": str(kr_price),
+        "trde_tp": trde_tp,
     }
     if dry_run:
-        _dry_run_kr("kt50000", "buy", code, qty, kr_price, order_type, None, body,
-                    lambda: _show_order_preview("금현물 매수", code, qty, kr_price, order_type))
+        _dry_run_kr("kt50000", "buy", code, qty, kr_price, order_type_label, None, body,
+                    lambda: _show_order_preview("금현물 매수", code, qty, kr_price, order_type_label))
         return
-    _show_order_preview("금현물 매수", code, qty, kr_price, order_type)
+    _show_order_preview("금현물 매수", code, qty, kr_price, order_type_label)
     confirm_gate(confirm)
     send_order("kt50000", body, "금현물 매수", client_order_id, client_cls=KiwoomClient)
 
@@ -775,29 +772,35 @@ def gold_buy(code: str, qty: int, price: float, order_type: str | None, confirm:
 @gold.command("sell")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략)")
-@click.option("--type", "order_type", default=None, type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
+@click.option("--price", type=float, default=0, help="주문가격 (금현물은 전체 유형이 지정가 계열이라 필수)")
+@click.option("--type", "order_type", default=None, type=HumanChoice(GOLD_ORDER_TYPES), help="주문유형 (limit=보통, ioc=보통(IOC), fok=보통(FOK); 시장가 없음, 기본 limit)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 @click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
 @click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
 def gold_sell(code: str, qty: int, price: float, order_type: str | None, confirm: bool, dry_run: bool, client_order_id: str | None):
-    """금현물 매도주문 (kt50001).
+    """금현물 매도주문 (kt50001). 지정가 계열만 지원 (limit/ioc/fok) — 시장가 없음.
 
-    예: kiwoom order gold sell M04020000 10 --type market --confirm
+    예: kiwoom order gold sell M04020000 10 --type limit --price 90000 --confirm
     """
     order_type = _resolve_order_type(order_type, price)
+    trde_tp, order_type_label = _resolve_gold_type(order_type)
     kr_price = _kr_price_or_exit(price)
+    if not kr_price:
+        fail_input(
+            "금현물 주문은 가격이 필수입니다 (전체 유형이 보통/지정가 계열이며 시장가가 없습니다). --price를 지정하세요.",
+            code="INVALID_INPUT",
+        )
     body = {
         "stk_cd": code,
         "ord_qty": str(qty),
-        "ord_uv": str(kr_price) if kr_price else "",
-        "trde_tp": ORDER_TYPES[order_type],
+        "ord_uv": str(kr_price),
+        "trde_tp": trde_tp,
     }
     if dry_run:
-        _dry_run_kr("kt50001", "sell", code, qty, kr_price, order_type, None, body,
-                    lambda: _show_order_preview("금현물 매도", code, qty, kr_price, order_type))
+        _dry_run_kr("kt50001", "sell", code, qty, kr_price, order_type_label, None, body,
+                    lambda: _show_order_preview("금현물 매도", code, qty, kr_price, order_type_label))
         return
-    _show_order_preview("금현물 매도", code, qty, kr_price, order_type)
+    _show_order_preview("금현물 매도", code, qty, kr_price, order_type_label)
     confirm_gate(confirm)
     send_order("kt50001", body, "금현물 매도", client_order_id, client_cls=KiwoomClient)
 

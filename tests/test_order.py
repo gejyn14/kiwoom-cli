@@ -341,7 +341,7 @@ def test_gold_buy_sends_to_kt50000_without_cond_uv(runner, fake_client):
                 "stk_cd": "M04020000",
                 "ord_qty": "1",
                 "ord_uv": "90000",
-                "trde_tp": "0",
+                "trde_tp": "00",
             },
         )
     ]
@@ -352,7 +352,7 @@ def test_gold_sell_sends_to_kt50001(runner, fake_client):
     """Gold sell hits kt50001."""
     result = runner.invoke(
         cli,
-        ["order", "gold", "sell", "M04020000", "1", "--type", "market", "--confirm"],
+        ["order", "gold", "sell", "M04020000", "1", "--type", "limit", "--price", "90000", "--confirm"],
     )
 
     assert result.exit_code == 0
@@ -382,88 +382,160 @@ def test_gold_cancel_sends_to_kt50003(runner, fake_client):
 
 
 # ============================================================
-#  Gold dry-run (kt50000/kt50001) — v2.9 audit fix 3 (merge blocker):
-#  금현물은 ka10001이 아니라 전용 시세 API(ka50010)로 현재가를 조회해야 한다.
-#  ka10001은 금현물 코드를 받지 않는다(스펙 stk_cd 설명이 KRX/NXT/SOR 국내주식
-#  코드로 한정됨) — ka10001로 조회하면 종목없음 오류거나 무의미한 응답이 되어
-#  이전에는 "동작하지만 오도하는" 상태에서 하드 실패로 퇴행했을 것이다.
+#  Gold dry-run market-quote-resolution tests removed (Task 7b fix round 1):
+#  gold has no market order (kt50000/kt50001 trde_tp accepts only 00/10/20,
+#  all limit-style) so the price-from-ka50010-quote dry-run path they
+#  exercised is a capability that must not exist. No-price safety is now
+#  covered instead by test_gold_buy_missing_price_fails_cleanly and
+#  test_gold_sell_no_type_no_price_fails_cleanly below.
 # ============================================================
 
 
-def test_gold_buy_dry_run_market_resolves_price_from_gold_quote_api(runner, fake_client):
-    """금현물 매수 시장가 dry-run: ka50010(금현물체결추이)의 gold_cntr[0].cntr_pric로
-    예상비용을 계산해야 한다 — ka10001이 아니다."""
-    fake_client.set_response(
-        "ka50010",
-        {
-            "gold_cntr": [
-                {"cntr_pric": "+152300", "tm": "090106"},
-                {"cntr_pric": "+152400", "tm": "090100"},
-            ],
-            "return_code": 0,
-        },
-    )
+# ============================================================
+#  Gold order-type restriction (Task 7b hotfix) — kt50000/kt50001's trde_tp
+#  accepts exactly 3 values (00=보통, 10=보통IOC, 20=보통FOK), not the full
+#  18-name domestic ORDER_TYPES. The pre-fix code sent ORDER_TYPES[order_type]
+#  verbatim, so "limit" (the --price default) sent trde_tp="0" — a one-digit
+#  code the gold API spec does not define at all.
+# ============================================================
+
+
+def test_gold_buy_limit_sends_trde_tp_00_not_0(runner, fake_client):
+    """금현물 매수 limit은 trde_tp="00"을 보내야 한다 — 이전 버그는 "0"(한 자리,
+    스펙에 없는 값)을 보냈다."""
     result = runner.invoke(
         cli,
-        ["-f", "json", "order", "gold", "buy", "M04020000", "1", "--dry-run"],
+        ["order", "gold", "buy", "M04020000", "1", "--price", "90000", "--type", "limit", "--confirm"],
     )
 
     assert result.exit_code == 0
-    assert [c[0] for c in fake_client.calls] == ["ka50010"]  # ka10001은 호출되지 않는다
-    payload = _doc(result)["data"]
-    assert payload["api_id"] == "kt50000"
-    assert payload["price"] == 152300
-    assert payload["price_source"] == "market_quote"
-    assert payload["est_cost"] == 152300
+    assert fake_client.calls == [
+        (
+            "kt50000",
+            {
+                "stk_cd": "M04020000",
+                "ord_qty": "1",
+                "ord_uv": "90000",
+                "trde_tp": "00",
+            },
+        )
+    ]
 
 
-def test_gold_sell_dry_run_unavailable_gold_quote_fails_loudly(runner, fake_client):
-    """금현물 매도 dry-run: ka50010이 체결 데이터를 주지 못하면(빈 리스트)
-    QUOTE_UNAVAILABLE(exit 2)이어야 한다 — 조용히 price=0을 보여주지 않는다."""
-    fake_client.set_response("ka50010", {"gold_cntr": [], "return_code": 0})
+def test_gold_buy_ioc_sends_trde_tp_10(runner, fake_client):
     result = runner.invoke(
         cli,
-        ["-f", "json", "order", "gold", "sell", "M04020000", "1", "--dry-run"],
+        ["order", "gold", "buy", "M04020000", "1", "--price", "90000", "--type", "ioc", "--confirm"],
     )
 
-    assert result.exit_code == 2
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == "10"
+
+
+def test_gold_buy_fok_sends_trde_tp_20(runner, fake_client):
+    result = runner.invoke(
+        cli,
+        ["order", "gold", "buy", "M04020000", "1", "--price", "90000", "--type", "fok", "--confirm"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == "20"
+
+
+def test_gold_sell_limit_sends_trde_tp_00_not_0(runner, fake_client):
+    """금현물 매도 limit도 매수와 동일하게 trde_tp="00"이어야 한다."""
+    result = runner.invoke(
+        cli,
+        ["order", "gold", "sell", "M04020000", "1", "--price", "90000", "--type", "limit", "--confirm"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "kt50001",
+            {
+                "stk_cd": "M04020000",
+                "ord_qty": "1",
+                "ord_uv": "90000",
+                "trde_tp": "00",
+            },
+        )
+    ]
+
+
+def test_gold_sell_ioc_sends_trde_tp_10(runner, fake_client):
+    result = runner.invoke(
+        cli,
+        ["order", "gold", "sell", "M04020000", "1", "--price", "90000", "--type", "ioc", "--confirm"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == "10"
+
+
+def test_gold_sell_fok_sends_trde_tp_20(runner, fake_client):
+    result = runner.invoke(
+        cli,
+        ["order", "gold", "sell", "M04020000", "1", "--price", "90000", "--type", "fok", "--confirm"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == "20"
+
+
+def test_gold_buy_rejects_market_type(runner, fake_client):
+    """금현물은 시장가가 없다 — 국내주식에서는 유효한 "market"도 금현물에서는
+    거부돼야 한다 (INVALID_INPUT, exit 1, 전송 없음)."""
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "gold", "buy", "M04020000", "1", "--type", "market", "--confirm"],
+    )
+
+    assert result.exit_code == 1
     doc = _doc(result)
-    assert doc["error"]["code"] == "QUOTE_UNAVAILABLE"
-    assert [c[0] for c in fake_client.calls] == ["ka50010"]
+    assert doc["error"]["code"] == "INVALID_INPUT"
+    for allowed in ("limit", "ioc", "fok"):
+        assert allowed in doc["error"]["message"]
+    assert fake_client.calls == []
 
 
-def test_gold_buy_dry_run_unparseable_cntr_pric_fails_loudly(runner, fake_client):
-    """gold_cntr는 있지만 cntr_pric이 파싱 불가능하면 QUOTE_UNAVAILABLE이어야 한다."""
-    fake_client.set_response(
-        "ka50010", {"gold_cntr": [{"cntr_pric": "N/A", "tm": "090106"}], "return_code": 0}
-    )
+def test_gold_sell_rejects_conditional_type(runner, fake_client):
+    """국내주식 18종 중 "conditional"(조건부지정가)도 금현물에서는 거부돼야 한다."""
     result = runner.invoke(
         cli,
-        ["-f", "json", "order", "gold", "buy", "M04020000", "1", "--dry-run"],
+        ["-f", "json", "order", "gold", "sell", "M04020000", "1", "--price", "90000", "--type", "conditional", "--confirm"],
     )
 
-    assert result.exit_code == 2
-    assert _doc(result)["error"]["code"] == "QUOTE_UNAVAILABLE"
-    # ka10001로 잘못 라우팅되면(금현물 코드 미지원) 우연히 같은 exit code가 나올
-    # 수 있으므로, 실제로 금현물 전용 API가 호출됐는지 명시적으로 확인한다.
-    assert [c[0] for c in fake_client.calls] == ["ka50010"]
+    assert result.exit_code == 1
+    doc = _doc(result)
+    assert doc["error"]["code"] == "INVALID_INPUT"
+    assert fake_client.calls == []
 
 
-def test_gold_buy_dry_run_cntr_pric_truncating_to_zero_fails_loudly(runner, fake_client):
-    """cntr_pric이 (0, 1) 구간의 소수(예: "0.5")면 parse_quote_price는 통과하지만
-    _quote_price_gold의 int() 절삭으로 price=0이 된다 — QUOTE_UNAVAILABLE이어야
-    한다 (v2.9 audit finding 3, KR과 동일한 절삭 재개방 취약점의 금현물 경로)."""
-    fake_client.set_response(
-        "ka50010", {"gold_cntr": [{"cntr_pric": "0.5", "tm": "090106"}], "return_code": 0}
-    )
+def test_gold_buy_missing_price_fails_cleanly(runner, fake_client):
+    """--type limit인데 --price를 생략하면 ord_uv=""로 조용히 전송하지 않고
+    INVALID_INPUT으로 거부해야 한다 — 금현물은 전부 지정가 계열."""
     result = runner.invoke(
         cli,
-        ["-f", "json", "order", "gold", "buy", "M04020000", "1", "--dry-run"],
+        ["-f", "json", "order", "gold", "buy", "M04020000", "1", "--type", "limit", "--confirm"],
     )
 
-    assert result.exit_code == 2
-    assert _doc(result)["error"]["code"] == "QUOTE_UNAVAILABLE"
-    assert [c[0] for c in fake_client.calls] == ["ka50010"]
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+    assert fake_client.calls == []
+
+
+def test_gold_sell_no_type_no_price_fails_cleanly(runner, fake_client):
+    """--type과 --price를 둘 다 생략하면 공유 기본값 로직이 "market"으로
+    해석하는데, 금현물엔 시장가가 없으므로 INVALID_INPUT이어야 한다."""
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "gold", "sell", "M04020000", "1", "--confirm"],
+    )
+
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+    assert fake_client.calls == []
 
 
 # ============================================================
@@ -734,7 +806,7 @@ def test_json_without_confirm_subgroups_also_gated(runner, fake_client):
     """credit/gold 하위그룹도 동일한 확인 계약을 따른다."""
     for args in (
         ["order", "credit", "buy", "005930", "10", "--type", "market"],
-        ["order", "gold", "buy", "M04020000", "1", "--type", "market"],
+        ["order", "gold", "buy", "M04020000", "1", "--type", "limit", "--price", "90000"],
         ["order", "cancel", "0000140", "005930"],
     ):
         result = runner.invoke(cli, ["-f", "json", *args])
