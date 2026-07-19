@@ -2,6 +2,64 @@
 
 ## [Unreleased]
 
+`market etf`/`market elw`/`market gold`/`market program`의 21개 커맨드
+(ka40001/ka40004/ka30001/ka30004/ka30005/ka30009/ka30010/ka50079/ka50081/
+ka50082/ka50083/ka90006/ka90007/ka90008)에서 숫자코드 옵션을 human-readable
+이름으로 전환했습니다. 이번 청크도 순수 표기 전환입니다 — 전환된 옵션 전부
+기본 호출이 종전과 완전히 동일한 body를 전송합니다(wire-value fix 없음,
+워크북·kwcli arguments.csv 이중 확인). `market rank volume`(ka10030)/
+`market program arbitrage-balance`(ka90006)/`market program cumulative`
+(ka90007)의 `--exchange`도 이번에 `all`(통합)을 받도록 넓혔습니다 — v2.11.0에서
+`rank amount`(ka10032)만 먼저 넓히고 미룬 항목입니다.
+
+**Non-breaking (사람이 읽는 이름 추가, 하위호환)**
+
+- `etf returns`(ka40001)의 `--period`(`dt`), `etf all`(ka40004)의
+  `--tax-type`/`--nav`/`--taxable`이 human-readable 이름을 받습니다
+  (`--period six-months`, `--tax-type foreign` 등). `etf all`의
+  `--company`(`mngmcomp`)/`--index`(`trace_idex`)는 스펙에 예시 몇 개+
+  "기타운용사"만 있는 개방형 코드북이라 이번 전환 대상이 아닙니다(raw 텍스트
+  유지, kwcli도 동일하게 자유 코드로 둡니다).
+- `elw surge`(ka30001)의 `--type`/`--time-type`/`--vol-type`/`--right-type`/
+  `--exclude-expired`, `elw disparity`(ka30004)의 `--right-type`/
+  `--exclude-expired`, `elw search`(ka30005)의 `--right-type`/`--sort`,
+  `elw change-rank`(ka30009)와 `elw balance-rank`(ka30010)의 `--sort`/
+  `--right-type`/`--exclude-expired`가 human-readable 이름을 받습니다.
+  `--issuer`(`isscomp_cd`)/`--underlying`(`bsis_aset_cd`)/`--lp`(`lpcd`)는
+  예시 5~6개 발행사/지수만 있고 전체 코드표가 없는 개방형 필드라 전환하지
+  않았습니다(raw 텍스트 유지).
+  - `--exclude-expired`(거래종료ELW제외)는 `elw surge`/`elw broker-top`/
+    `elw disparity`/`elw change-rank`/`elw balance-rank` 5개 커맨드가 워크북
+    확인 결과 값이 완전히 동일해(`include`=0, `exclude`=1) 하나의 상수
+    (`EXCLUDE_ENDED_ELW`)로 수렴시켰습니다. `elw broker-top`(ka30002)은
+    Tranche B에서 이미 HumanChoice였는데, 이번에 상수 이름만
+    `EXCLUDE_ENDED_ELW`로 바뀌었습니다(전송값은 그대로 `include`=0/
+    `exclude`=1이라 사용자에게 보이는 동작 변화는 없습니다).
+  - `--right-type`(권리구분)은 자릿수/EX 포함 여부가 API마다 달라 4개
+    상수로 분리했습니다: `elw surge`/`elw disparity`(3자리 zero-pad, EX
+    포함), `elw search`(무패딩, EX 포함), `elw change-rank`/
+    `elw balance-rank`(3자리 zero-pad, EX 없음 — 두 API 스펙 모두 `005`
+    코드 자체가 없습니다. `ex`를 주면 거부됩니다).
+- `gold chart-tick`(ka50079)/`chart-day`(ka50081)/`chart-week`(ka50082)/
+  `chart-month`(ka50083)의 `--price-type`(`upd_stkpc_tp`)이 human-readable
+  이름을 받습니다(`raw`/`adjusted`). `gold chart-minute`(ka50080)의
+  `--price-type`은 스펙상 Required=N이고 기존 기본값이 빈 문자열이라(다른
+  4개는 Required=Y, 기본값 `0`) 이번 전환에서 제외했습니다 — 빈 문자열을
+  억지로 `0`/`1`로 바꾸면 전송 바이트가 바뀌는 fix가 되어 이번 청크의
+  "표기만 바꾼다" 원칙을 벗어납니다.
+- `program cumulative`(ka90007)/`program stock-time`(ka90008)의
+  `--unit`(`amt_qty_tp`)이 human-readable 이름을 받습니다(`amount`/
+  `quantity`). `program time-trend`/`program daily-trend`(ka90005/ka90010)는
+  Tranche B에서 이미 전환돼 있어 이번 청크가 손대지 않았습니다.
+  `program stock-daily`(ka90013)의 `--unit`도 `gold chart-minute`과 같은
+  이유(Required=N + 기존 기본값 빈 문자열)로 raw 텍스트를 유지합니다.
+- `market rank volume`(ka10030)/`market program arbitrage-balance`
+  (ka90006)/`market program cumulative`(ka90007)의 `--exchange`가 `all`
+  (통합, `stex_tp`=3)을 받습니다. 세 API 모두 워크북에서 `3:통합`을 직접
+  확인했습니다. 기존 `KRX`/`NXT` 호출과 기본값(`KRX`)은 그대로 동작하는
+  순수 확대(widening)입니다 — `rank amount`(ka10032)가 v2.11.0에서 먼저
+  넓혀진 것과 같은 모양으로 맞췄습니다.
+
 `market rank`의 신고저가~거래량급증 8개 커맨드(ka10016~ka10023)에서
 `--vol-type`(`trde_qty_tp`) 기본값이 원시 `"0"`이었습니다. `"0"`은 이 8개 API
 어느 스펙 값 목록에도 없는 값입니다. 여덟 API의 값 폭이 5자리 zero-pad /
