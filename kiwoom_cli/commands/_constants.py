@@ -25,7 +25,12 @@ MARKET_ALL = {"all": "000", "kospi": "001", "kosdaq": "101"}
 MARKET_TWO = {"kospi": "001", "kosdaq": "101"}
 MARKET_KOSPI_KOSDAQ = {"kospi": "0", "kosdaq": "1"}
 MARKET_PROGRAM = {"kospi": "P00101", "kosdaq": "P10102"}
-MARKET_SEARCH = {"kospi": "0", "kosdaq": "10", "k-otc": "30", "konex": "50", "etf": "8", "elw": "3"}
+# MARKET_SEARCH({kospi:0, kosdaq:10, k-otc:30, konex:50, etf:8, elw:3})는
+# 어디에서도 참조되지 않는 죽은 상수라 제거했다. 배선된 적이 없어 값을
+# 고정할 테스트를 붙일 수도 없으면서, MARKET_KOSPI_KOSDAQ 등 살아 있는
+# mrkt_tp 코드북들과 키만 겹쳐(kosdaq이 "1"이 아니라 "10") 잘못 재사용될
+# 표면만 넓히고 있었다. 다시 필요해지면 그때 해당 api_id 스펙을 워크북에서
+# 직접 확인하고 그 api_id 이름으로 새로 만들 것.
 EXCHANGE_TWO = {"KRX": "1", "NXT": "2"}
 EXCHANGE_ALL = {"KRX": "1", "NXT": "2", "all": "3"}
 # stex_tp with "all"=0 (used by ka10075/ka10076/ka10085); distinct from EXCHANGE_ALL where "all"=3.
@@ -148,7 +153,7 @@ INTRADAY_INVESTOR = {
 # amt_qty_tp의 세 번째 코드북. 여기서 "1"은 금액과 수량을 동시에 주는 단일
 # 허용값이고, AMT_QTY_TP_1_2의 "1"(=금액, 수량은 2)과 의미가 다르다.
 # 키 집합이 달라 재사용하면 즉시 KeyError가 나지만, 그래도 절대 합치지 말 것.
-# 짝: AMT_QTY_TP_1_2(13곳), AMT_QTY_TP_0_1(ka10051/ka10131). 이 상수는 1곳: ka10063.
+# 짝: AMT_QTY_TP_1_2(12곳), AMT_QTY_TP_0_1(ka10051/ka10131). 이 상수는 1곳: ka10063.
 AMT_QTY_TP_COMBINED = {"combined": "1"}
 
 # ka10063(stock.py) 전용, 2곳 — frgn_all(외국계전체)/smtm_netprps_tp(동시순매수구분)
@@ -338,15 +343,17 @@ TRADER_ANALYSIS_POSITION = {"today": "0", "previous": "1"}
 # ka10042)가 공유한다.** 분리 원칙은 TRADER_ANALYSIS_DATE_MODE와 동일.
 TRADER_ANALYSIS_SORT = {"close": "1", "date": "2"}
 
-# dt(기간, 5/10/20/40/60/120). Task 34a에서 한 차례 I2 규칙(값→라벨이
-# 단위접미사 부착만으로 유도되는 폐쇄집합은 수량 유지)을 적용해 raw
-# 텍스트로 되돌렸으나, v2.11.0에 이미 HumanChoice로 배포되어 있던 걸
-# 되돌린 셈이었다(제약 위반 자체보다 "배포된 검증을 걷어내 exit 0으로
-# 조용히 통과시키는" 쪽이 더 나쁘다는 판단으로 재검토 후 복원). 34a
-# 리뷰에서 다시 HumanChoice로 되돌리며 market.py의 ka10042(rank
-# net-buyer)도 워크북 값이 character-for-character 동일함을 확인해
-# 함께 전환했다 — **이 상수는 지금 2개 api_id(ka10043 stock.py, ka10042
-# market.py)가 공유한다.** 나중에 한쪽 스펙만 바뀌면 이 상수를 제자리에서
+# dt(기간, 5/10/20/40/60/120). 값→라벨이 단위접미사 부착만으로 유도되는
+# 폐쇄집합이라 I2 규칙("수량은 raw 유지")을 적용해 raw 텍스트로 되돌릴
+# 후보처럼 보이지만, 이 자리는 v2.11.0에 이미 HumanChoice로 배포됐다 —
+# 되돌리면 배포된 검증을 걷어내 잘못된 값이 exit 0으로 조용히 통과하게
+# 된다. **I2 규칙보다 이 예외가 우선한다. raw로 되돌리지 말 것.**
+#
+# ka10042(market.py rank net-buyer)와 ka10043(stock.py trader-analysis)의
+# 워크북 Description이 character-for-character 동일함을 확인하고 공유한다
+# (둘 다 "5:5일, 10:10일, 20:20일, 40:40일, 60:60일, 120:120일").
+#
+# *** 이 상수는 api_id 2개가 공유한다. 한쪽 스펙만 바뀌면 이 상수를 제자리에서
 # 고치지 말고 분리할 것 — 제자리 수정은 나머지 하나를 조용히 함께
 # 오염시킨다(TRADER_ANALYSIS_DATE_MODE와 동일한 분리 원칙).
 TRADER_ANALYSIS_PERIOD_5_120 = {
@@ -357,8 +364,14 @@ TRADER_ANALYSIS_PERIOD_5_120 = {
 # trde_end_elwskip)/elw_broker_top(ka30002, trde_end_elwskip)/elw_disparity
 # (ka30004, trde_end_elwskip)/elw_change_rank(ka30009, trde_end_skip)/
 # elw_balance_rank(ka30010, trde_end_skip) 5개 api_id가 공유한다 — 필드명은
-# trde_end_elwskip/trde_end_skip 두 가지지만 5개 시트 전부 값이
-# character-for-character 동일함(0=포함,1=제외)을 워크북으로 확인했다.
+# trde_end_elwskip/trde_end_skip 두 가지고, 스펙 Description 문구도 세
+# 가지로 갈린다. 같은 것은 **값 대응**뿐이다(5개 시트 전부 0=포함, 1=제외):
+#   ka30001/ka30002  "0:포함, 1:제외"
+#   ka30004          "1:거래종료ELW제외, 0:거래종료ELW포함"
+#   ka30009/ka30010  "1:거래종료제외, 0:거래종료포함"
+# (종전 이 자리에는 5개 시트가 "character-for-character 동일"하다고 적혀
+# 있었으나 사실이 아니다 — 워크북 재확인 결과 위 세 형태다. 공유 자체는
+# 값 대응이 같으므로 여전히 정당하다.)
 # 이전 판(ELW_BROKER_END_SKIP)은 "1곳: ka30002, 나머지 4곳은 검증/적용 안
 # 됨"이라고 예약해 뒀는데 이번 태스크(Task 33)가 그 별도 작업이라 5곳
 # 전부로 넓혔다.
@@ -1111,8 +1124,11 @@ ELW_SURGE_QTY_TYPE = {
 }
 
 # ka30001/ka30004(ELW가격급등락/ELW괴리율) 공용 — rght_tp(권리구분, 3자리
-# zero-pad, EX 포함 8개 값). 워크북에서 두 시트가 character-for-character
-# 동일함을 확인했다. ka30009/ka30010의 ELW_RANK_RIGHT_TYPE_3DIGIT(EX가
+# zero-pad, EX 포함 8개 값). 두 시트의 **값 대응**이 동일함을 워크북에서
+# 확인했다. 문구까지 같지는 않다 — ka30001은 "000:전체, 001:콜, ...",
+# ka30004는 콜론 뒤에 공백이 붙은 "000: 전체, 001: 콜, ..."이다(종전 이
+# 자리에는 두 시트가 "character-for-character 동일"하다고 적혀 있었으나
+# 사실이 아니다. 값 대응이 같으므로 공유 자체는 여전히 정당하다). ka30009/ka30010의 ELW_RANK_RIGHT_TYPE_3DIGIT(EX가
 # 없는 7개 값)의 진짜 상위집합이므로 절대 그쪽과 합치지 말 것 — "ex" 이름은
 # ka30009/ka30010에서 거부돼야 한다. ka30005의 ELW_RIGHT_TYPE_1DIGIT(무패딩)
 # 와도 자릿수가 달라 절대 합치지 말 것.
@@ -1199,11 +1215,11 @@ GOLD_PRICE_TYPE = {"raw": "0", "adjusted": "1"}
 #
 # ka10063(intraday)/ka10066(after-close)/ka10131(consecutive)/ka10043
 # (trader-analysis)/kt20016(credit-available)은 이번 태스크 이전에 이미
-# 전환돼 있었다(선행 fix 커밋들) — 손대지 않는다. 단 ka10043의 --days(dt)는
-# I2 규칙(값→라벨이 단위접미사 부착만으로 유도되는 폐쇄집합은 수량 유지)
-# 재적용 대상이라 HumanChoice를 걷어내고 market.py(ka10042, 같은
-# 필드·같은 패턴)와 동일하게 raw 텍스트로 되돌린다 — 이 자리에서 쓰던
-# TRADER_ANALYSIS_PERIOD_5_120은 이제 사용처가 없어 이 파일에서 제거한다.
+# 전환돼 있었다(선행 fix 커밋들) — 손대지 않는다. ka10043의 --days(dt)는
+# 한 차례 raw 텍스트로 되돌렸다가 리뷰에서 HumanChoice로 원복했고,
+# market.py의 ka10042(net-buyer --period)도 같은 상수를 공유하도록 함께
+# 전환했다 — TRADER_ANALYSIS_PERIOD_5_120은 **제거되지 않았고 지금 두 곳이
+# 쓰고 있다**(정의부 주석 참고).
 
 # ka10086(일별주가) 전용 — indc_tp(표시구분, 0:수량,1:금액). AMT_QTY_TP_0_1
 # (0:금액,1:수량)과 키 집합(quantity/amount)은 같지만 극성이 정확히
@@ -1425,14 +1441,21 @@ PROGRAM_TOP_SIDE = {"net-sell": "1", "net-buy": "2"}
 
 # ka10079(틱차트)/ka10080(분봉차트)/ka10081(일봉차트)/ka10082(주봉차트)/
 # ka10083(월봉차트)/ka10094(년봉차트) 공용 — upd_stkpc_tp(수정주가구분,
-# 0 or 1). 여섯 시트 모두 워크북 Description이 "0 or 1"로 동일하고,
-# ka10081 시트의 개요 문단이 "1"=수정주가적용, 미기재(0)=미적용임을
-# 명시적으로 설명한다(예시: 삼성전자 액면분할 사례). 여섯 시트가 전부
-# character-for-character 동일한 2-값 코드북이라 하나로 공유한다(31b가
-# ka10034/36/37의 dt를 공유했던 것과 같은 패턴).
+# 0 or 1). 여섯 시트의 **값 대응**이 동일한 2-값 코드북이라 하나로
+# 공유한다(31b가 ka10034/36/37의 dt를 공유했던 것과 같은 패턴). Description
+# 문구까지 같지는 않다 — 다섯 시트는 "0 or 1" 여섯 글자뿐이지만 ka10081만
+# 같은 칸에 수정주가 적용 방법을 설명하는 문단이 이어져 370자다(삼성전자
+# 액면분할 예시로 "1"=수정주가적용, 미기재(0)=미적용임을 설명한다). 종전
+# 이 자리에는 여섯 시트가 "character-for-character 동일"하다고 적혀 있었으나
+# 사실이 아니다. 값 대응이 같으므로 공유 자체는 여전히 정당하다.
 #
-# *** 이 상수는 api_id 6개가 공유한다. 한쪽 스펙만 바뀌면 이 상수를 제자리
-# 에서 고치지 말고 분리할 것 — 제자리 수정은 나머지 다섯을 조용히 함께
+# *** 이 상수는 국내 api_id 6개가 공유하고, 거기에 더해 미국주식 차트
+# usa06010~usa06015에도 도달한다. `stock chart day --exchange amex`처럼
+# 미국으로 라우팅되면 이 매핑을 거친 upd_stkpc_tp가 usa06012로 전송된다
+# (us/stock_ops.chart 참고). 미국 스펙에서도 0/1이 합법이라 현재 전송
+# 바이트에는 문제가 없지만, 이 상수를 고칠 때 확인해야 할 사이트는
+# 6개가 아니라 6개 + usa06010~15다. 한쪽 스펙만 바뀌면 이 상수를 제자리
+# 에서 고치지 말고 분리할 것 — 제자리 수정은 나머지 전부를 조용히 함께
 # 오염시킨다. ***
 #
 # GOLD_PRICE_TYPE(market.py gold 틱·일·주·월봉차트, ka50079/81/82/83)과
