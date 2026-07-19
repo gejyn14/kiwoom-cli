@@ -298,6 +298,20 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "NEAR_HIGHLOW_QTY_TYPE_5DIGIT", "SURGE_QTY_TYPE_5DIGIT",
     "ORDERBOOK_TOP_QTY_TYPE_4DIGIT", "ORDERBOOK_SURGE_QTY_TYPE_BARE",
     "BALANCE_RATE_QTY_TYPE_BARE", "VOLUME_SURGE_QTY_TYPE_BARE",
+    # Task 31b — market rank ka10027~ka10039 HumanChoice 전환. ka10030/32/38
+    # 은 Tranche B에서 이미 전환돼 이 목록에 없다(위 STOCK_CONDITION 등 참고).
+    "RANK_CHANGE_SORT", "RANK_CHANGE_QTY_CND", "RANK_CHANGE_STK_CND",
+    "RANK_CHANGE_CREDIT_CND", "RANK_CHANGE_INCLUDE_LIMIT", "RANK_CHANGE_PRICE_CND",
+    "RANK_CHANGE_AMOUNT_CND",
+    "EXPECTED_CHANGE_SORT", "EXPECTED_CHANGE_QTY_CND", "EXPECTED_CHANGE_STK_CND",
+    "EXPECTED_CHANGE_CREDIT_CND", "EXPECTED_CHANGE_PRICE_CND",
+    "PREV_VOLUME_KIND",
+    "CREDIT_RATIO_QTY_TYPE", "CREDIT_RATIO_STK_CND",
+    "CREDIT_RATIO_INCLUDE_LIMIT", "CREDIT_RATIO_CREDIT_CND",
+    "PERIOD_TODAY_PREV_5_60", "FOREIGN_PERIOD_SIDE",
+    "FOREIGN_CONSECUTIVE_SIDE", "FOREIGN_CONSECUTIVE_BASE_DATE",
+    "FOREIGN_BROKER_SIDE", "FOREIGN_BROKER_SORT",
+    "BROKER_TOP_QTY_TYPE", "BROKER_TOP_SIDE", "BROKER_TOP_PERIOD",
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -332,15 +346,17 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
         for path, p in _iter_options(root_cli)
         if isinstance(p.type, _constants.HumanChoice)
     ]
-    # 94 = account/market/stock를 훑던 시절의 53 + order 그룹의 2
-    # (order gold buy --order-type, order gold sell --order-type — 둘 다
-    # GOLD_ORDER_TYPES) + Task 31a(market rank ka10016~ka10023)의 31
-    # + Task 31a-fix의 8(같은 8개 커맨드의 --vol-type/trde_qty_tp — 종전
-    # 기본값 raw "0"이 어느 API 스펙에도 없던 결함이라 값 교정과 함께
-    # 전환했다, task-31a-fix-report.md 참고). order는 이 테스트가 한 번도
-    # 훑은 적이 없어 주문 경로인데도 고정되지 않고 있었다.
+    # 122 = 94(account/market/stock를 훑던 시절의 53 + order 그룹의 2
+    # [order gold buy/sell --order-type, GOLD_ORDER_TYPES] + Task 31a(market
+    # rank ka10016~ka10023)의 31 + Task 31a-fix의 8[같은 8개 커맨드의
+    # --vol-type/trde_qty_tp — 종전 기본값 raw "0"이 어느 API 스펙에도
+    # 없던 결함이라 값 교정과 함께 전환했다, task-31a-fix-report.md 참고])
+    # + Task 31b(market rank ka10027~ka10039)의 28. ka10030/ka10032/ka10038
+    # 은 Tranche B에서 이미 전환돼 있어 31b가 새로 늘린 옵션이 아니다 —
+    # 28 = ka10027 7 + ka10029 5 + ka10031 1 + ka10033 4 + ka10034 2 +
+    # ka10035 2 + ka10036 1 + ka10037 3 + ka10039 3.
     # 이 수는 트리 순회로 재도출한 값이지 델타 추정이 아니다.
-    assert len(converted) == 94
+    assert len(converted) == 122
     # 금현물 주문 두 건은 이름으로도 못 박아 둔다. 개수만 맞추면 다른 곳이
     # 늘고 여기가 빠져도 통과하기 때문이다.
     assert ("cli order gold buy", "order_type") in converted
@@ -351,6 +367,11 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
                     "orderbook-top", "orderbook-surge", "balance-rate-surge",
                     "volume-surge"):
         assert (f"cli market rank {command}", "trde_qty_tp") in converted
+    # Task 31b: ka10027 --vol-cnd(trde_qty_cnd)는 값 교정까지 겸한 자리라
+    # 이름으로 못 박는다. ka10039 broker-top --type(trde_tp)도 형제 API와
+    # 값 집합이 달라(buy/sell 단독값 없음) 이름으로 못 박아 둔다.
+    assert ("cli market rank change", "trde_qty_cnd") in converted
+    assert ("cli market rank broker-top", "trde_tp") in converted
 
 
 # ── Task 8: both-fail envelope (fail_api) ────────────────

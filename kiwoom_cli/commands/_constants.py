@@ -603,3 +603,213 @@ VOLUME_SURGE_QTY_TYPE_BARE = {
     "5k": "5", "10k": "10", "50k": "50", "100k": "100",
     "200k": "200", "300k": "300", "500k": "500", "1000k": "1000",
 }
+
+# ── ka10027~ka10039(market rank 등락률상위~증권사별매매상위) HumanChoice
+# 전환 (Task 31b) ─────────────────────────────────────────────────────
+#
+# ka10030/ka10032/ka10038은 Tranche B에서 이미 전환됐다(VOLUME_RANK_*,
+# MANAGED_STOCK_INCLUDE, STOCK_CONDITION, BROKER_BY_STOCK_SIDE,
+# PERIOD_DAYS_OFF_BY_ONE — 위 섹션 참고) — 이 태스크는 손대지 않는다.
+#
+# 이번 청크에서도 31a와 동일한 패턴이 계속 나타난다: 값 집합이 같아 보이는
+# stk_cnd/crd_cnd/pric_cnd/updown_incls 자리를 API별로 전부 분리했다.
+# 그 중 일부(RANK_CHANGE_STK_CND/EXPECTED_CHANGE_STK_CND,
+# RANK_CHANGE_PRICE_CND/EXPECTED_CHANGE_PRICE_CND,
+# RANK_CHANGE_CREDIT_CND/CREDIT_RATIO_CREDIT_CND,
+# RANK_CHANGE_INCLUDE_LIMIT/CREDIT_RATIO_INCLUDE_LIMIT)는 값이 정말로
+# 100% 동일해서 어떤 테스트로도 서로 바꿔치기를 잡아낼 수 없다 — 이름
+# 규약과 이 주석이 유일한 방어선이다(task-31b-report.md "구분 불가" 참고).
+
+# ka10027(전일대비등락률상위) 전용 — sort_tp(정렬구분, 5개 값). ka10029의
+# EXPECTED_CHANGE_SORT와 rise-rate/rise-price/fall-rate 3개 키가 겹치지만
+# fall-rate의 값이 다르다(ka10027=3, ka10029=4) — 절대 합치지 말 것.
+# 1곳: ka10027.
+RANK_CHANGE_SORT = {
+    "rise-rate": "1", "rise-price": "2", "fall-rate": "3",
+    "fall-price": "4", "flat": "5",
+}
+
+# ka10027(전일대비등락률상위) 전용 — trde_qty_cnd(거래량조건, 4자리
+# zero-pad, 9개 값). **와이어 값 결함 수정**: 기존 기본값 raw "0"은 4자리
+# 스펙 어디에도 없는 값이었다("0000"이 전체조회). HumanChoice 전환과 함께
+# 기본값을 "0000"으로 교정했다 — 이 자리는 표기 전환이 아니라 전송 바이트가
+# 바뀌는 fix다(CHANGELOG 기재 대상, task-31b-report.md 참고). 1곳: ka10027.
+RANK_CHANGE_QTY_CND = {
+    "all": "0000", "10k": "0010", "50k": "0050", "100k": "0100",
+    "150k": "0150", "200k": "0200", "300k": "0300", "500k": "0500",
+    "1000k": "1000",
+}
+
+# ka10027(전일대비등락률상위) 전용 — stk_cnd(종목조건, 15개 값). ka10029의
+# EXPECTED_CHANGE_STK_CND와 값이 완전히 동일하다(워크북으로 이중 확인) —
+# 구분 불가 쌍이니 절대 자동으로 합치지 말 것. 1곳: ka10027.
+RANK_CHANGE_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-preferred": "3",
+    "exclude-managed-preferred": "4", "exclude-margin-100": "5",
+    "only-margin-100": "6", "only-margin-40": "7", "only-margin-30": "8",
+    "only-margin-20": "9", "exclude-liquidation": "11", "only-margin-50": "12",
+    "only-margin-60": "13", "exclude-etf": "14", "exclude-spac": "15",
+    "exclude-etf-etn": "16",
+}
+
+# ka10027(전일대비등락률상위) 전용 — crd_cnd(신용조건, 7개 값). ka10033의
+# CREDIT_RATIO_CREDIT_CND와 값이 완전히 동일하다 — 구분 불가 쌍. ka10029의
+# EXPECTED_CHANGE_CREDIT_CND(9개 값, exclude-overlimit/short 추가)는 상위집합
+# 이므로 절대 합치지 말 것. 1곳: ka10027.
+RANK_CHANGE_CREDIT_CND = {
+    "all": "0", "a": "1", "b": "2", "c": "3", "d": "4", "e": "7", "all-financing": "9",
+}
+
+# ka10027(전일대비등락률상위) 전용 — updown_incls(상하한포함). CREDIT_RATIO_INCLUDE_LIMIT
+# 와 값이 완전히 동일하다(둘 다 yes:1,no:0) — 구분 불가 쌍. 1곳: ka10027.
+RANK_CHANGE_INCLUDE_LIMIT = {"yes": "1", "no": "0"}
+
+# ka10027(전일대비등락률상위) 전용 — pric_cnd(가격조건, 8개 값). ka10029의
+# EXPECTED_CHANGE_PRICE_CND와 값이 완전히 동일하다 — 구분 불가 쌍. 1곳: ka10027.
+RANK_CHANGE_PRICE_CND = {
+    "all": "0", "under-1k": "1", "1k-2k": "2", "2k-5k": "3", "5k-10k": "4",
+    "over-10k": "5", "over-1k": "8", "under-10k": "10",
+}
+
+# ka10027(전일대비등락률상위) 전용 — trde_prica_cnd(거래대금조건, 12개 값).
+# 필드명 자체가 다른 커맨드의 pric_cnd/trde_qty_cnd와 겹치지 않으니 혼동
+# 위험은 낮지만, 그래도 API별 분리 원칙을 그대로 따른다. 1곳: ka10027.
+RANK_CHANGE_AMOUNT_CND = {
+    "all": "0", "30m": "3", "50m": "5", "100m": "10", "300m": "30",
+    "500m": "50", "1b": "100", "3b": "300", "5b": "500", "10b": "1000",
+    "30b": "3000", "50b": "5000",
+}
+
+# ka10029(예상체결등락률상위) 전용 — sort_tp(정렬구분, 8개 값). RANK_CHANGE_SORT
+# 참고(짝 — fall-rate 값이 다름, 절대 합치지 말 것). 1곳: ka10029.
+EXPECTED_CHANGE_SORT = {
+    "rise-rate": "1", "rise-price": "2", "flat": "3", "fall-rate": "4",
+    "fall-price": "5", "volume": "6", "upper-limit": "7", "lower-limit": "8",
+}
+
+# ka10029(예상체결등락률상위) 전용 — trde_qty_cnd(거래량조건, 7개 값,
+# 무패딩). 스펙 원문이 "1;천주이상"(세미콜론 오타, ka10034류와 동일 패턴)
+# 이라 "1"=1천주이상을 빠뜨리기 쉽다 — 워크북으로 직접 확인해 포함시켰다.
+# RANK_CHANGE_QTY_CND(ka10027, 4자리 zero-pad)와 자릿수부터 다르니 절대
+# 합치지 말 것. 1곳: ka10029.
+EXPECTED_CHANGE_QTY_CND = {
+    "all": "0", "1k": "1", "3k": "3", "5k": "5", "10k": "10",
+    "50k": "50", "100k": "100",
+}
+
+# ka10029(예상체결등락률상위) 전용 — stk_cnd(종목조건, 15개 값). RANK_CHANGE_STK_CND
+# 참고(짝 — 값 완전 동일, 구분 불가). 1곳: ka10029.
+EXPECTED_CHANGE_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-preferred": "3",
+    "exclude-managed-preferred": "4", "exclude-margin-100": "5",
+    "only-margin-100": "6", "only-margin-40": "7", "only-margin-30": "8",
+    "only-margin-20": "9", "exclude-liquidation": "11", "only-margin-50": "12",
+    "only-margin-60": "13", "exclude-etf": "14", "exclude-spac": "15",
+    "exclude-etf-etn": "16",
+}
+
+# ka10029(예상체결등락률상위) 전용 — crd_cnd(신용조건, 9개 값: RANK_CHANGE_CREDIT_CND
+# 의 7개에 exclude-overlimit(5)/short(8)가 추가된 상위집합). 절대 합치지
+# 말 것. 1곳: ka10029.
+EXPECTED_CHANGE_CREDIT_CND = {
+    "all": "0", "a": "1", "b": "2", "c": "3", "d": "4",
+    "exclude-overlimit": "5", "e": "7", "short": "8", "all-financing": "9",
+}
+
+# ka10029(예상체결등락률상위) 전용 — pric_cnd(가격조건, 8개 값). RANK_CHANGE_PRICE_CND
+# 참고(짝 — 값 완전 동일, 구분 불가). 1곳: ka10029.
+EXPECTED_CHANGE_PRICE_CND = {
+    "all": "0", "under-1k": "1", "1k-2k": "2", "2k-5k": "3", "5k-10k": "4",
+    "over-10k": "5", "over-1k": "8", "under-10k": "10",
+}
+
+# ka10031(전일거래량상위) 전용 — qry_tp(조회구분, 1:전일거래량,2:전일거래대금).
+# 1곳: ka10031. rank_strt/rank_end(순위시작/끝)는 자유입력 수량이라 미전환.
+PREV_VOLUME_KIND = {"volume": "1", "amount": "2"}
+
+# ka10033(신용비율상위) 전용 — trde_qty_tp(거래량구분, 8개 값, 무패딩).
+# ka10039의 BROKER_TOP_QTY_TYPE(all,5k,10k,50k,100k,500k,1000k, 200k/300k
+# 없음)과 ka10030의 VOLUME_RANK_QTY_TYPE(9개 값)과 값 집합이 달라 절대
+# 합치지 말 것. 1곳: ka10033.
+CREDIT_RATIO_QTY_TYPE = {
+    "all": "0", "10k": "10", "50k": "50", "100k": "100", "200k": "200",
+    "300k": "300", "500k": "500", "1000k": "1000",
+}
+
+# ka10033(신용비율상위) 전용 — stk_cnd(종목조건, 7개 값 — RANK_CHANGE_STK_CND
+# 의 15개 값 중 all/exclude-managed/exclude-margin-100/only-margin-100/
+# only-margin-40/only-margin-30/only-margin-20 7개만 남긴 부분집합). 절대
+# 합치지 말 것. 1곳: ka10033.
+CREDIT_RATIO_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-margin-100": "5",
+    "only-margin-100": "6", "only-margin-40": "7", "only-margin-30": "8",
+    "only-margin-20": "9",
+}
+
+# ka10033(신용비율상위) 전용 — updown_incls(상하한포함). RANK_CHANGE_INCLUDE_LIMIT
+# 참고(짝 — 값 완전 동일, 구분 불가). 1곳: ka10033.
+CREDIT_RATIO_INCLUDE_LIMIT = {"yes": "1", "no": "0"}
+
+# ka10033(신용비율상위) 전용 — crd_cnd(신용조건, 7개 값). RANK_CHANGE_CREDIT_CND
+# 참고(짝 — 값 완전 동일, 구분 불가). 1곳: ka10033.
+CREDIT_RATIO_CREDIT_CND = {
+    "all": "0", "a": "1", "b": "2", "c": "3", "d": "4", "e": "7", "all-financing": "9",
+}
+
+# ka10034/ka10036/ka10037(외인기간별매매상위/외인한도소진율증가상위/
+# 외국계창구매매상위) 3곳 공용 — dt(기간, 0:당일,1:전일,5:5일,10:10일,
+# 20:20일,60:60일). 스펙 원문은 "10;10일"(세미콜론 오타)로 세 시트 전부
+# 동일하게 적혀 있다(docs/미국 REST API 문서.xlsx로 확인) — `,`/`:` 파싱
+# 시 "10"이 누락되기 쉬우니 주의. 세 API가 값이 100% 동일해 이번 태스크
+# 안에서 하나로 수렴시켰다(이전 판이 예약해 둔 이름을 그대로 사용,
+# _constants.py 상단 AMT_QTY_TP_0_1 주석 옆 참고). ka10038의
+# PERIOD_DAYS_OFF_BY_ONE(off-by-one)이나 ka10039의 BROKER_TOP_PERIOD
+# (20d 없음)와는 값 집합이 달라 그쪽과는 절대 합치지 말 것.
+PERIOD_TODAY_PREV_5_60 = {
+    "today": "0", "previous": "1", "5d": "5", "10d": "10", "20d": "20", "60d": "60",
+}
+
+# ka10034(외인기간별매매상위) 전용 — trde_tp(매매구분, 1:순매도,2:순매수,
+# 3:순매매). ka10035의 FOREIGN_CONSECUTIVE_SIDE(net-sell:1,net-buy:2)는
+# net-trade가 없는 부분집합 — 절대 합치지 말 것. 1곳: ka10034.
+FOREIGN_PERIOD_SIDE = {"net-sell": "1", "net-buy": "2", "net-trade": "3"}
+
+# ka10035(외인연속순매매상위) 전용 — trde_tp(구분, 1:연속순매도,2:연속순매수).
+# FOREIGN_PERIOD_SIDE(ka10034)의 부분집합처럼 보이나 라벨 의미가 다르고
+# (단발 순매도/순매수 vs 연속), ka10034에는 있는 net-trade(3)가 이쪽엔
+# 없다 — 절대 합치지 말 것. 1곳: ka10035.
+FOREIGN_CONSECUTIVE_SIDE = {"net-sell": "1", "net-buy": "2"}
+
+# ka10035(외인연속순매매상위) 전용 — base_dt_tp(기준일구분, 0:당일기준,
+# 1:전일기준). 1곳: ka10035.
+FOREIGN_CONSECUTIVE_BASE_DATE = {"today": "0", "previous": "1"}
+
+# ka10037(외국계창구매매상위) 전용 — trde_tp(매매구분, 1:순매수,2:순매도,
+# 3:매수,4:매도). ka10039의 BROKER_TOP_SIDE(net-buy:1,net-sell:2)는 buy/
+# sell 단독값이 없는 부분집합 — 절대 합치지 말 것. 1곳: ka10037.
+FOREIGN_BROKER_SIDE = {"net-buy": "1", "net-sell": "2", "buy": "3", "sell": "4"}
+
+# ka10037(외국계창구매매상위) 전용 — sort_tp(정렬구분, 1:금액,2:수량). 1곳: ka10037.
+FOREIGN_BROKER_SORT = {"amount": "1", "quantity": "2"}
+
+# ka10039(증권사별매매상위) 전용 — trde_qty_tp(거래량구분, 7개 값, 무패딩).
+# ka30002의 ELW_BROKER_QTY_TYPE과 값이 완전히 동일하다(구분 불가 쌍) —
+# api_id가 달라 이름은 반드시 분리 유지. CREDIT_RATIO_QTY_TYPE(ka10033,
+# 200k/300k 있음)과는 값 집합이 달라 그쪽과는 절대 합치지 말 것. 1곳: ka10039.
+BROKER_TOP_QTY_TYPE = {
+    "all": "0", "5k": "5", "10k": "10", "50k": "50", "100k": "100",
+    "500k": "500", "1000k": "1000",
+}
+
+# ka10039(증권사별매매상위) 전용 — trde_tp(매매구분, 1:순매수,2:순매도).
+# ka30002의 ELW_BROKER_SIDE와 값이 완전히 동일하다(구분 불가 쌍). FOREIGN_BROKER_SIDE
+# (ka10037)의 부분집합이기도 하니 그쪽과도 절대 합치지 말 것. 1곳: ka10039.
+BROKER_TOP_SIDE = {"net-buy": "1", "net-sell": "2"}
+
+# ka10039(증권사별매매상위) 전용 — dt(기간, 0:당일,1:전일,5:5일,10:10일,
+# 60:60일 — 20일이 없다). PERIOD_TODAY_PREV_5_60(ka10034/36/37)의 부분집합
+# 처럼 보이지만 20d가 빠져 있어 값 집합이 다르다 — 절대 합치지 말 것.
+# 1곳: ka10039.
+BROKER_TOP_PERIOD = {
+    "today": "0", "previous": "1", "5d": "5", "10d": "10", "60d": "60",
+}

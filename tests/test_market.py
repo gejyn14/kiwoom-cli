@@ -840,3 +840,310 @@ def test_rank_price_cnd_rejects_name_absent_from_that_api(
 
     assert result.exit_code != 0
     assert fake_client.calls == []
+
+
+# ============================================================
+#  Task 31b — market rank ka10027~ka10039 HumanChoice 전환
+#
+#  ka10030(rank volume)/ka10032(rank amount)/ka10038(broker-by-stock)는
+#  Tranche B에서 이미 전환돼 있어 이 태스크는 건드리지 않았다(위
+#  "task-14: ka10030/ka10032"와 "ka10038" 섹션의 기존 테스트 참고).
+#
+#  각 커맨드마다 기본 호출 body를 통째로 고정한 뒤 옵션을 전환한다
+#  (브리프 요구사항). ka10027의 --vol-cnd(trde_qty_cnd)는 유일한 예외 —
+#  종전 기본값 raw "0"이 4자리 스펙 어디에도 없던 결함이라 "0000"으로
+#  전송 바이트 자체가 바뀌었다(CHANGELOG breaking 항목).
+# ============================================================
+
+
+def test_rank_change_default_body_wire_value_fixed(runner, fake_client):
+    """ka10027 기본 호출: trde_qty_cnd가 "0"이 아니라 "0000"으로 나가야 한다.
+
+    이건 표기 전환이 아니라 전송 바이트가 바뀌는 fix다 — 종전 raw "0"은
+    4자리 zero-pad 스펙(0000~1000) 어디에도 없는 값이었다.
+    """
+    result = runner.invoke(cli, ["market", "rank", "change"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10027", {
+        "mrkt_tp": "000", "sort_tp": "1", "trde_qty_cnd": "0000",
+        "stk_cnd": "0", "crd_cnd": "0", "updown_incls": "0",
+        "pric_cnd": "0", "trde_prica_cnd": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_change_vol_cnd_raw_zero_no_longer_accepted(runner, fake_client):
+    """Breaking: 종전에 통하던 raw "0"은 4자리 스펙에 없는 값이라 이제 거부된다."""
+    result = runner.invoke(cli, ["market", "rank", "change", "--vol-cnd", "0"])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+def test_rank_change_vol_cnd_raw_4digit_code_still_accepted(runner, fake_client):
+    """HumanChoice 하위호환: 올바른 4자리 raw 코드는 그대로 통과한다."""
+    result = runner.invoke(cli, ["market", "rank", "change", "--vol-cnd", "0150"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_qty_cnd"] == "0150"
+
+
+def test_rank_change_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "change", "--sort", "fall-price",
+        "--vol-cnd", "500k", "--stk-cnd", "exclude-etf", "--credit", "e",
+        "--include-limit", "yes", "--price-cnd", "under-10k",
+        "--amount-cnd", "10b",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["sort_tp"] == "4"
+    assert body["trde_qty_cnd"] == "0500"
+    assert body["stk_cnd"] == "14"
+    assert body["crd_cnd"] == "7"
+    assert body["updown_incls"] == "1"
+    assert body["pric_cnd"] == "10"
+    assert body["trde_prica_cnd"] == "1000"
+
+
+def test_rank_expected_change_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "expected-change"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10029", {
+        "mrkt_tp": "000", "sort_tp": "1", "trde_qty_cnd": "0",
+        "stk_cnd": "0", "crd_cnd": "0", "pric_cnd": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_expected_change_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "expected-change", "--sort", "volume",
+        "--vol-cnd", "1k", "--stk-cnd", "exclude-liquidation",
+        "--credit", "exclude-overlimit", "--price-cnd", "over-1k",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["sort_tp"] == "6"
+    assert body["trde_qty_cnd"] == "1"
+    assert body["stk_cnd"] == "11"
+    assert body["crd_cnd"] == "5"
+    assert body["pric_cnd"] == "8"
+
+
+def test_rank_prev_volume_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "prev-volume"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10031", {
+        "mrkt_tp": "000", "qry_tp": "1",
+        "rank_strt": "1", "rank_end": "50", "stex_tp": "1",
+    })
+
+
+def test_rank_prev_volume_type_human_name(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "prev-volume", "--type", "amount"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["qry_tp"] == "2"
+
+
+def test_rank_credit_ratio_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "credit-ratio"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10033", {
+        "mrkt_tp": "000", "trde_qty_tp": "0", "stk_cnd": "0",
+        "updown_incls": "0", "crd_cnd": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_credit_ratio_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "credit-ratio", "--vol-type", "200k",
+        "--stk-cnd", "only-margin-20", "--include-limit", "yes",
+        "--credit", "d",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["trde_qty_tp"] == "200"
+    assert body["stk_cnd"] == "9"
+    assert body["updown_incls"] == "1"
+    assert body["crd_cnd"] == "4"
+
+
+def test_rank_foreign_period_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "foreign-period"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10034", {
+        "mrkt_tp": "000", "trde_tp": "2", "dt": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_foreign_period_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "foreign-period", "--type", "net-trade", "--period", "20d",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["trde_tp"] == "3"
+    assert body["dt"] == "20"
+
+
+def test_rank_foreign_consecutive_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "foreign-consecutive"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10035", {
+        "mrkt_tp": "000", "trde_tp": "2", "base_dt_tp": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_foreign_consecutive_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "foreign-consecutive", "--type", "net-sell",
+        "--base-date", "previous",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["trde_tp"] == "1"
+    assert body["base_dt_tp"] == "1"
+
+
+def test_rank_foreign_exhaust_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "foreign-exhaust"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10036", {
+        "mrkt_tp": "000", "dt": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_foreign_exhaust_period_human_name(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "foreign-exhaust", "--period", "60d"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == "60"
+
+
+def test_rank_foreign_broker_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "foreign-broker"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10037", {
+        "mrkt_tp": "000", "dt": "0", "trde_tp": "1", "sort_tp": "1", "stex_tp": "1",
+    })
+
+
+def test_rank_foreign_broker_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "foreign-broker", "--period", "10d",
+        "--type", "sell", "--sort", "quantity",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["dt"] == "10"
+    assert body["trde_tp"] == "4"
+    assert body["sort_tp"] == "2"
+
+
+def test_rank_broker_top_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "broker-top", "001"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10039", {
+        "mmcm_cd": "001", "trde_qty_tp": "0",
+        "trde_tp": "1", "dt": "1", "stex_tp": "1",
+    })
+
+
+def test_rank_broker_top_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "broker-top", "001", "--vol-type", "500k",
+        "--type", "net-sell", "--period", "today",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["trde_qty_tp"] == "500"
+    assert body["trde_tp"] == "2"
+    assert body["dt"] == "0"
+
+
+def test_rank_credit_ratio_legacy_numeric_code_still_accepted(runner, fake_client):
+    """HumanChoice의 하위호환: raw API 코드도 그대로 통과해야 한다."""
+    result = runner.invoke(cli, ["market", "rank", "credit-ratio", "--stk-cnd", "5"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stk_cnd"] == "5"
+
+
+# ── Task 31b: 형제 API 이름 거부(상위집합 오염 방지) ────────────────
+#
+#  형제 상수로 바꿔치기해도 기본 호출/정상 human 옵션 테스트는 전부 통과
+#  한다 — 값 집합이 실제로 다른 상수 쌍만, 상대 API에는 있고 이 API에는
+#  없는 이름을 거부하는지로 구분할 수 있다. 값이 100%로 동일한 쌍(예:
+#  RANK_CHANGE_STK_CND/EXPECTED_CHANGE_STK_CND)은 어떤 테스트로도 구분이
+#  안 돼 여기 없다 — task-31b-report.md "구분 불가" 절 참고.
+
+
+def test_rank_credit_ratio_stk_cnd_rejects_name_absent_from_ka10033(runner, fake_client):
+    """exclude-preferred(3)는 ka10027 RANK_CHANGE_STK_CND엔 있지만 ka10033엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "credit-ratio", "--stk-cnd", "exclude-preferred"])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("absent", ["150k", "200k", "300k", "500k", "1000k"])
+def test_rank_expected_change_vol_cnd_rejects_name_absent_from_ka10029(runner, fake_client, absent):
+    """ka10027 RANK_CHANGE_QTY_CND에만 있는 큰 임계값은 ka10029엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "expected-change", "--vol-cnd", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("absent", ["1k", "3k"])
+def test_rank_change_vol_cnd_rejects_name_absent_from_ka10027(runner, fake_client, absent):
+    """ka10029 EXPECTED_CHANGE_QTY_CND에만 있는 무패딩 소형 임계값은 ka10027엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "change", "--vol-cnd", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+def test_rank_foreign_consecutive_type_rejects_net_trade(runner, fake_client):
+    """net-trade(3)는 ka10034 FOREIGN_PERIOD_SIDE엔 있지만 ka10035엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "foreign-consecutive", "--type", "net-trade"])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("absent", ["buy", "sell"])
+def test_rank_broker_top_type_rejects_name_absent_from_ka10039(runner, fake_client, absent):
+    """buy/sell 단독값은 ka10037 FOREIGN_BROKER_SIDE엔 있지만 ka10039엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "broker-top", "001", "--type", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+def test_rank_broker_top_period_rejects_20d(runner, fake_client):
+    """20d는 ka10034/36/37의 PERIOD_TODAY_PREV_5_60엔 있지만 ka10039엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "broker-top", "001", "--period", "20d"])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("absent", ["exclude-overlimit", "short"])
+def test_rank_change_credit_rejects_name_absent_from_ka10027(runner, fake_client, absent):
+    """exclude-overlimit/short는 ka10029 EXPECTED_CHANGE_CREDIT_CND엔 있지만 ka10027엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "change", "--credit", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+def test_rank_credit_ratio_vol_type_rejects_5k(runner, fake_client):
+    """5k는 ka10039 BROKER_TOP_QTY_TYPE엔 있지만 ka10033 CREDIT_RATIO_QTY_TYPE엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "credit-ratio", "--vol-type", "5k"])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("absent", ["200k", "300k"])
+def test_rank_broker_top_vol_type_rejects_name_absent_from_ka10039(runner, fake_client, absent):
+    """200k/300k는 ka10033 CREDIT_RATIO_QTY_TYPE엔 있지만 ka10039 BROKER_TOP_QTY_TYPE엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "broker-top", "001", "--vol-type", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("absent", ["volume", "upper-limit", "lower-limit"])
+def test_rank_change_sort_rejects_name_absent_from_ka10027(runner, fake_client, absent):
+    """volume/upper-limit/lower-limit은 ka10029 EXPECTED_CHANGE_SORT엔 있지만 ka10027엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "change", "--sort", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []

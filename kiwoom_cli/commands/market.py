@@ -12,12 +12,29 @@ from ._constants import (
     BALANCE_RATE_STK_CND,
     BALANCE_RATE_TYPE,
     BROKER_BY_STOCK_SIDE,
+    BROKER_TOP_PERIOD,
+    BROKER_TOP_QTY_TYPE,
+    BROKER_TOP_SIDE,
+    CREDIT_RATIO_CREDIT_CND,
+    CREDIT_RATIO_INCLUDE_LIMIT,
+    CREDIT_RATIO_QTY_TYPE,
+    CREDIT_RATIO_STK_CND,
     ELW_BROKER_END_SKIP,
     ELW_BROKER_PERIOD,
     ELW_BROKER_QTY_TYPE,
     ELW_BROKER_SIDE,
     EXCHANGE_ALL,
     EXCHANGE_TWO,
+    EXPECTED_CHANGE_CREDIT_CND,
+    EXPECTED_CHANGE_PRICE_CND,
+    EXPECTED_CHANGE_QTY_CND,
+    EXPECTED_CHANGE_SORT,
+    EXPECTED_CHANGE_STK_CND,
+    FOREIGN_BROKER_SIDE,
+    FOREIGN_BROKER_SORT,
+    FOREIGN_CONSECUTIVE_BASE_DATE,
+    FOREIGN_CONSECUTIVE_SIDE,
+    FOREIGN_PERIOD_SIDE,
     HOT_PERIOD,
     LIMIT_MOVE_CREDIT_CND,
     LIMIT_MOVE_DIRECTION,
@@ -49,7 +66,16 @@ from ._constants import (
     ORDERBOOK_TOP_SORT,
     ORDERBOOK_TOP_STK_CND,
     PERIOD_DAYS_OFF_BY_ONE,
+    PERIOD_TODAY_PREV_5_60,
+    PREV_VOLUME_KIND,
     PROGRAM_MARKET_BY_EXCHANGE,
+    RANK_CHANGE_AMOUNT_CND,
+    RANK_CHANGE_CREDIT_CND,
+    RANK_CHANGE_INCLUDE_LIMIT,
+    RANK_CHANGE_PRICE_CND,
+    RANK_CHANGE_QTY_CND,
+    RANK_CHANGE_SORT,
+    RANK_CHANGE_STK_CND,
     STOCK_CONDITION,
     SURGE_CREDIT_CND,
     SURGE_DIRECTION,
@@ -340,13 +366,23 @@ def rank_volume_surge(mrkt_tp, sort_tp, tm_tp, trde_qty_tp, tm, stk_cnd, pric_tp
 
 @rank.command("change")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--sort", "sort_tp", default="1", help="정렬 (1=상승률,2=상승폭,3=하락률,4=하락폭,5=보합)")
-@click.option("--vol-cnd", "trde_qty_cnd", default="0", help="거래량조건")
-@click.option("--stk-cnd", default="0", help="종목조건")
-@click.option("--credit", "crd_cnd", default="0", help="신용조건")
-@click.option("--include-limit", "updown_incls", default="0", help="상하한포함 (0=미포함, 1=포함)")
-@click.option("--price-cnd", "pric_cnd", default="0", help="가격조건")
-@click.option("--amount-cnd", "trde_prica_cnd", default="0", help="거래대금조건")
+@click.option("--sort", "sort_tp", type=HumanChoice(RANK_CHANGE_SORT), default="rise-rate",
+              help="정렬 (rise-rate,rise-price,fall-rate,fall-price,flat)")
+@click.option("--vol-cnd", "trde_qty_cnd", type=HumanChoice(RANK_CHANGE_QTY_CND), default="all",
+              help="거래량조건 (all,10k,50k,100k,150k,200k,300k,500k,1000k)")
+@click.option("--stk-cnd", type=HumanChoice(RANK_CHANGE_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-preferred,exclude-managed-preferred,"
+                   "exclude-margin-100,only-margin-100,only-margin-40,only-margin-30,"
+                   "only-margin-20,exclude-liquidation,only-margin-50,only-margin-60,"
+                   "exclude-etf,exclude-spac,exclude-etf-etn)")
+@click.option("--credit", "crd_cnd", type=HumanChoice(RANK_CHANGE_CREDIT_CND), default="all",
+              help="신용조건 (all,a,b,c,d,e,all-financing)")
+@click.option("--include-limit", "updown_incls", type=HumanChoice(RANK_CHANGE_INCLUDE_LIMIT), default="no",
+              help="상하한포함 (yes,no)")
+@click.option("--price-cnd", "pric_cnd", type=HumanChoice(RANK_CHANGE_PRICE_CND), default="all",
+              help="가격조건 (all,under-1k,1k-2k,2k-5k,5k-10k,over-10k,over-1k,under-10k)")
+@click.option("--amount-cnd", "trde_prica_cnd", type=HumanChoice(RANK_CHANGE_AMOUNT_CND), default="all",
+              help="거래대금조건 (all,30m,50m,100m,300m,500m,1b,3b,5b,10b,30b,50b = 이상)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, updown_incls, pric_cnd, trde_prica_cnd, stex_tp):
     """전일대비 등락률 상위. (ka10027)"""
@@ -367,11 +403,19 @@ def rank_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, updown_incls, 
 
 @rank.command("expected-change")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--sort", "sort_tp", default="1", help="정렬 (1=상승률,2=상승폭,3=보합,4=하락률,5=하락폭,6=체결량,7=상한,8=하한)")
-@click.option("--vol-cnd", "trde_qty_cnd", default="0", help="거래량조건")
-@click.option("--stk-cnd", default="0", help="종목조건")
-@click.option("--credit", "crd_cnd", default="0", help="신용조건")
-@click.option("--price-cnd", "pric_cnd", default="0", help="가격조건")
+@click.option("--sort", "sort_tp", type=HumanChoice(EXPECTED_CHANGE_SORT), default="rise-rate",
+              help="정렬 (rise-rate,rise-price,flat,fall-rate,fall-price,volume,upper-limit,lower-limit)")
+@click.option("--vol-cnd", "trde_qty_cnd", type=HumanChoice(EXPECTED_CHANGE_QTY_CND), default="all",
+              help="거래량조건 (all,1k,3k,5k,10k,50k,100k)")
+@click.option("--stk-cnd", type=HumanChoice(EXPECTED_CHANGE_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-preferred,exclude-managed-preferred,"
+                   "exclude-margin-100,only-margin-100,only-margin-40,only-margin-30,"
+                   "only-margin-20,exclude-liquidation,only-margin-50,only-margin-60,"
+                   "exclude-etf,exclude-spac,exclude-etf-etn)")
+@click.option("--credit", "crd_cnd", type=HumanChoice(EXPECTED_CHANGE_CREDIT_CND), default="all",
+              help="신용조건 (all,a,b,c,d,exclude-overlimit,e,short,all-financing)")
+@click.option("--price-cnd", "pric_cnd", type=HumanChoice(EXPECTED_CHANGE_PRICE_CND), default="all",
+              help="가격조건 (all,under-1k,1k-2k,2k-5k,5k-10k,over-10k,over-1k,under-10k)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_expected_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, pric_cnd, stex_tp):
     """예상체결 등락률 상위. (ka10029)"""
@@ -430,7 +474,8 @@ def rank_volume(mrkt_tp, sort_tp, mang_stk_incls, crd_tp, trde_qty_tp, pric_tp, 
 
 @rank.command("prev-volume")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--type", "qry_tp", default="1", help="조회구분 (1=전일거래량, 2=전일거래대금)")
+@click.option("--type", "qry_tp", type=HumanChoice(PREV_VOLUME_KIND), default="volume",
+              help="조회구분 (volume=전일거래량, amount=전일거래대금)")
 @click.option("--rank-start", "rank_strt", default="1", help="순위시작")
 @click.option("--rank-end", "rank_end", default="50", help="순위끝")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
@@ -470,10 +515,15 @@ def rank_amount(mrkt_tp, mang_stk_incls, stex_tp):
 
 @rank.command("credit-ratio")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--stk-cnd", default="0", help="종목조건")
-@click.option("--include-limit", "updown_incls", default="0", help="상하한포함")
-@click.option("--credit", "crd_cnd", default="0", help="신용조건")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(CREDIT_RATIO_QTY_TYPE), default="all",
+              help="거래량구분 (all,10k,50k,100k,200k,300k,500k,1000k)")
+@click.option("--stk-cnd", type=HumanChoice(CREDIT_RATIO_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
+                   "only-margin-40,only-margin-30,only-margin-20)")
+@click.option("--include-limit", "updown_incls", type=HumanChoice(CREDIT_RATIO_INCLUDE_LIMIT), default="no",
+              help="상하한포함 (yes,no)")
+@click.option("--credit", "crd_cnd", type=HumanChoice(CREDIT_RATIO_CREDIT_CND), default="all",
+              help="신용조건 (all,a,b,c,d,e,all-financing)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_credit_ratio(mrkt_tp, trde_qty_tp, stk_cnd, updown_incls, crd_cnd, stex_tp):
     """신용비율 상위. (ka10033)"""
@@ -492,8 +542,10 @@ def rank_credit_ratio(mrkt_tp, trde_qty_tp, stk_cnd, updown_incls, crd_cnd, stex
 
 @rank.command("foreign-period")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--type", "trde_tp", default="2", help="매매구분 (1=순매도, 2=순매수, 3=순매매)")
-@click.option("--period", "dt", default="0", help="기간 (0=당일,1=전일,5=5일,10,20,60)")
+@click.option("--type", "trde_tp", type=HumanChoice(FOREIGN_PERIOD_SIDE), default="net-buy",
+              help="매매구분 (net-sell=순매도, net-buy=순매수, net-trade=순매매)")
+@click.option("--period", "dt", type=HumanChoice(PERIOD_TODAY_PREV_5_60), default="today",
+              help="기간 (today,previous,5d,10d,20d,60d)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_foreign_period(mrkt_tp, trde_tp, dt, stex_tp):
     """외인 기간별 매매 상위. (ka10034)"""
@@ -511,8 +563,10 @@ def rank_foreign_period(mrkt_tp, trde_tp, dt, stex_tp):
 
 @rank.command("foreign-consecutive")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--type", "trde_tp", default="2", help="구분 (1=연속순매도, 2=연속순매수)")
-@click.option("--base-date", "base_dt_tp", default="0", help="기준일구분 (0=당일, 1=전일)")
+@click.option("--type", "trde_tp", type=HumanChoice(FOREIGN_CONSECUTIVE_SIDE), default="net-buy",
+              help="구분 (net-sell=연속순매도, net-buy=연속순매수)")
+@click.option("--base-date", "base_dt_tp", type=HumanChoice(FOREIGN_CONSECUTIVE_BASE_DATE), default="today",
+              help="기준일구분 (today=당일, previous=전일)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_foreign_consecutive(mrkt_tp, trde_tp, base_dt_tp, stex_tp):
     """외인 연속 순매매 상위. (ka10035)"""
@@ -530,7 +584,8 @@ def rank_foreign_consecutive(mrkt_tp, trde_tp, base_dt_tp, stex_tp):
 
 @rank.command("foreign-exhaust")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--period", "dt", default="0", help="기간 (0=당일,1=전일,5=5일,10,20,60)")
+@click.option("--period", "dt", type=HumanChoice(PERIOD_TODAY_PREV_5_60), default="today",
+              help="기간 (today,previous,5d,10d,20d,60d)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_foreign_exhaust(mrkt_tp, dt, stex_tp):
     """외인 한도소진율 증가 상위. (ka10036)"""
@@ -547,9 +602,12 @@ def rank_foreign_exhaust(mrkt_tp, dt, stex_tp):
 
 @rank.command("foreign-broker")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--period", "dt", default="0", help="기간")
-@click.option("--type", "trde_tp", default="1", help="매매구분 (1=순매수,2=순매도,3=매수,4=매도)")
-@click.option("--sort", "sort_tp", default="1", help="정렬 (1=금액, 2=수량)")
+@click.option("--period", "dt", type=HumanChoice(PERIOD_TODAY_PREV_5_60), default="today",
+              help="기간 (today,previous,5d,10d,20d,60d)")
+@click.option("--type", "trde_tp", type=HumanChoice(FOREIGN_BROKER_SIDE), default="net-buy",
+              help="매매구분 (net-buy=순매수,net-sell=순매도,buy=매수,sell=매도)")
+@click.option("--sort", "sort_tp", type=HumanChoice(FOREIGN_BROKER_SORT), default="amount",
+              help="정렬 (amount=금액, quantity=수량)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_foreign_broker(mrkt_tp, dt, trde_tp, sort_tp, stex_tp):
     """외국계 창구 매매 상위. (ka10037)"""
@@ -597,9 +655,12 @@ def rank_broker_by_stock(code, qry_tp, strt_dt, end_dt, dt):
 
 @rank.command("broker-top")
 @click.argument("broker_code")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--type", "trde_tp", default="1", help="매매구분 (1=순매수, 2=순매도)")
-@click.option("--period", "dt", default="1", help="기간 (1=전일,5,10,60)")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(BROKER_TOP_QTY_TYPE), default="all",
+              help="거래량구분 (all,5k,10k,50k,100k,500k,1000k)")
+@click.option("--type", "trde_tp", type=HumanChoice(BROKER_TOP_SIDE), default="net-buy",
+              help="매매구분 (net-buy=순매수, net-sell=순매도)")
+@click.option("--period", "dt", type=HumanChoice(BROKER_TOP_PERIOD), default="previous",
+              help="기간 (today,previous,5d,10d,60d)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_broker_top(broker_code, trde_qty_tp, trde_tp, dt, stex_tp):
     """증권사별 매매 상위. (ka10039)"""
