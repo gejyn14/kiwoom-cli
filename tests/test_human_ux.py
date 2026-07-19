@@ -265,6 +265,11 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "DELIST_QRY", "TRADE_SIDE", "ALL_STOCK_QRY", "ORDER_DETAIL_QRY",
     "ASSET_TYPE", "MARKET_STATUS_KOSPI", "FILLED_QRY", "HOLDINGS_EVAL_QRY",
     "TRANSACTION_TYPE", "PRODUCT_TYPE", "ODD_LOT_QRY", "CASH_CREDIT", "HOT_PERIOD",
+    "STOCK_CONDITION", "MANAGED_STOCK_INCLUDE", "VOLUME_RANK_SORT",
+    "VOLUME_RANK_CREDIT_TYPE", "VOLUME_RANK_QTY_TYPE", "VOLUME_RANK_PRICE_TYPE",
+    "VOLUME_RANK_AMOUNT_TYPE", "VOLUME_RANK_SESSION", "BROKER_BY_STOCK_SIDE",
+    "PERIOD_DAYS_OFF_BY_ONE", "ELW_BROKER_QTY_TYPE", "ELW_BROKER_SIDE",
+    "ELW_BROKER_PERIOD", "ELW_BROKER_END_SKIP",
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -301,7 +306,14 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # 23, not 19: task-13 (ka90005/ka90010, program time-trend/daily-trend) converted
     # 4 more raw-text options to HumanChoice — --unit (AMT_QTY_TP_1_2) and --tick-type
     # (MIN_TIC_TP) on each of the two commands. 19 + 4 = 23. See task-13-report.md.
-    assert len(converted) == 23
+    # 37, not 23: task-14 (ka10030 rank volume, ka10032 rank amount, ka10038
+    # broker-by-stock, ka30002 elw broker-top) converted 14 more raw-text options
+    # to HumanChoice — rank volume's 7 (--sort, --stock-condition, --credit-type,
+    # --vol-type, --price-type, --amount-type, --session), rank amount's 1
+    # (--include-managed), broker-by-stock's 2 (--type, --period), elw broker-top's
+    # 4 (--vol-type, --type, --period, --exclude-expired). 23 + 14 = 37.
+    # See task-14-report.md.
+    assert len(converted) == 37
 
 
 # ── Task 8: both-fail envelope (fail_api) ────────────────

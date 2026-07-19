@@ -157,3 +157,118 @@ PROGRAM_MARKET_BY_EXCHANGE = {
 # ka90005/ka90010 전용 — min_tic_tp(분틱구분). 두 API 스펙 시트 모두
 # "0:틱, 1:분"으로 동일하다(docs/미국 REST API 문서.xlsx, 두 시트 확인).
 MIN_TIC_TP = {"tick": "0", "minute": "1"}
+
+# ── task-14: ka10030(rank volume)/ka10032(rank amount)/ka10038(broker-by-stock)
+# /ka30002(elw broker-top) 파라미터 교정 ─────────────────────────────────
+
+# ka10030(rank volume) mang_stk_incls — 이름은 "관리종목포함"이지만 실제로는
+# 15종 종목필터다(스펙: docs/미국 REST API 문서.xlsx ka10030 시트). 형제
+# ka10032의 mang_stk_incls는 진짜 boolean이고 극성도 반대다({0:미포함,
+# 1:포함}). 같은 필드명, 다른 코드북 — 절대 합치지 말 것.
+# 1곳: ka10030(rank volume, 옵션명 --stock-condition). 짝: MANAGED_STOCK_INCLUDE(ka10032).
+STOCK_CONDITION = {
+    "include-managed": "0", "exclude-managed": "1", "exclude-preferred": "3",
+    "exclude-liquidation": "11", "exclude-managed-preferred": "4",
+    "exclude-margin-100": "5", "only-margin-100": "6", "only-margin-60": "13",
+    "only-margin-50": "12", "only-margin-40": "7", "only-margin-30": "8",
+    "only-margin-20": "9", "exclude-etf": "14", "exclude-spac": "15",
+    "exclude-etf-etn": "16",
+}
+
+# ka10032(rank amount) mang_stk_incls — 진짜 boolean. ka10030과 극성이 반대이므로
+# STOCK_CONDITION과 절대 합치지 말 것. 1곳: ka10032(rank amount, 옵션명 --include-managed 유지).
+MANAGED_STOCK_INCLUDE = {"no": "0", "yes": "1"}
+
+# ka10030(rank volume) 전용 — sort_tp(정렬구분). market.py 안에서 sort_tp/sort는
+# 20곳 넘게 재사용되며 endpoint마다 값이 전부 다르다(예: rank_limit의
+# sort_tp는 1=종목코드순, rank_foreign_broker의 sort_tp는 1=금액). 이 상수는
+# ka10030 전용 값(1:거래량,2:거래회전율,3:거래대금)이며 다른 sort_tp/sort
+# 옵션(이번 태스크 범위 밖, 원시 텍스트 그대로 유지)과 절대 합치지 말 것.
+VOLUME_RANK_SORT = {"volume": "1", "turnover": "2", "amount": "3"}
+
+# ka10030(rank volume) 전용 — crd_tp(신용구분). kt20016의 CREDIT_GRADE(all/a..e)
+# 와 이름은 비슷해 보이나 값 집합이 다르다(여기는 all-financing/short 포함,
+# e 없음). 다른 커맨드의 crd_cnd(신용조건, market.py 여러 곳, 미확인/미변환)
+# 와도 필드명이 달라 구분되지만 혹시라도 재사용하지 말 것. 1곳: ka10030.
+VOLUME_RANK_CREDIT_TYPE = {
+    "all": "0", "all-financing": "9", "a": "1", "b": "2", "c": "3", "d": "4", "short": "8",
+}
+
+# ka10030(rank volume) 전용 — trde_qty_tp(거래량구분, 9개 값: 200/300 포함).
+# 스펙 원문은 500 코드의 설명을 "500만주이상"(5,000,000)으로 적어 1000 코드
+# "백만주이상"(1,000,000)보다 커지는 산술 역전이 있다 — 다른 항목들은 모두
+# "코드값*1000주"로 일관되므로(5→5천, 10→1만, ... 300→30만) 이 한 항목만
+# 스펙 문구가 어긋난 것으로 보이나 확정할 수 없다(코드값 "500" 자체는 워크북
+# 기준 확실함). 이름은 산술 패턴을 따라 "500k"로 붙였다 — 값(코드)은 스펙
+# 그대로이고 사람이 읽는 이름만 보수적으로 선택한 것이다. market.py의 다른
+# trde_qty_tp/--vol-type 옵션(ka10033/ka10039/ka30002 등)은 값 집합이 전부
+# 달라 절대 합치지 말 것. 1곳: ka10030.
+VOLUME_RANK_QTY_TYPE = {
+    "all": "0", "5k": "5", "10k": "10", "50k": "50", "100k": "100",
+    "200k": "200", "300k": "300", "500k": "500", "1000k": "1000",
+}
+
+# ka10030(rank volume) 전용 — pric_tp(가격구분, 11개 값). market.py의 다른
+# pric_tp/pric_cnd 옵션(ka10019/ka10023/ka10027/ka10029 등)은 값 집합이
+# 미확인이거나 달라 절대 합치지 말 것. 1곳: ka10030.
+VOLUME_RANK_PRICE_TYPE = {
+    "all": "0", "under-1k": "1", "over-1k": "2", "1k-2k": "3", "2k-5k": "4",
+    "over-5k": "5", "5k-10k": "6", "under-10k": "10", "over-10k": "7",
+    "over-50k": "8", "over-100k": "9",
+}
+
+# ka10030(rank volume) 전용 — trde_prica_tp(거래대금구분, 13개 값). 4 코드가
+# "5천만원이상"(50m)인 것은 1/3/10/30/50 계열의 "1-3-5×10^n" 패턴과 일치해
+# 오타가 아니다(다른 rank_change의 trde_prica_cnd와는 필드명이 달라 구분됨).
+# 1곳: ka10030.
+VOLUME_RANK_AMOUNT_TYPE = {
+    "all": "0", "10m": "1", "30m": "3", "50m": "4", "100m": "10",
+    "300m": "30", "500m": "50", "1b": "100", "3b": "300", "5b": "500",
+    "10b": "1000", "30b": "3000", "50b": "5000",
+}
+
+# ka10030(rank volume) 전용 — mrkt_open_tp(장운영구분). 1곳: ka10030.
+VOLUME_RANK_SESSION = {"all": "0", "regular": "1", "pre-open": "2", "after-hours": "3"}
+
+# ka10038(broker-by-stock) 전용 — qry_tp(조회구분). 여기서는 1=순매도다.
+# trde_tp/qry_tp 계열은 API마다 극성이 뒤집히는 것으로 이미 등록된 해저드
+# (TRDE_TP_NET_BUY_BUY_SELL 등 참고) — ka30002의 ELW_BROKER_SIDE(1=순매수)와
+# 정반대이므로 절대 합치지 말 것. 1곳: ka10038(옵션명 --type 유지).
+BROKER_BY_STOCK_SIDE = {"net-sell": "1", "net-buy": "2"}
+
+# ka10038(broker-by-stock) 전용 — dt(기간). off-by-one 코드북(5일=4, 10일=9,
+# 120일=119처럼 하루씩 어긋난다). 5일=5인 일반 기간 코드북(ELW_BROKER_PERIOD 등)
+# 과 절대 합치지 말 것. 1곳: ka10038. --from/--to와 동시 지정 불가(빈 값이면
+# body에서 dt 키 자체를 제외해야 한다 — 스펙: "시작일자와 종료일자로 조회를
+# 원하는 경우 기간(dt)값은 빈값으로 설정").
+PERIOD_DAYS_OFF_BY_ONE = {
+    "previous": "1", "5d": "4", "10d": "9", "20d": "19",
+    "40d": "39", "60d": "59", "120d": "119",
+}
+
+# ka30002(elw broker-top) 전용 — trde_qty_tp(거래량구분, 7개 값: 0/5/10/50/
+# 100/500/1000). ka10030의 VOLUME_RANK_QTY_TYPE(9개 값, 200/300 포함)과
+# 값 집합이 달라 절대 합치지 말 것. 1곳: ka30002.
+ELW_BROKER_QTY_TYPE = {
+    "all": "0", "5k": "5", "10k": "10", "50k": "50",
+    "100k": "100", "500k": "500", "1000k": "1000",
+}
+
+# ka30002(elw broker-top) 전용 — trde_tp(매매구분). 여기서는 1=순매수다.
+# ka10038의 BROKER_BY_STOCK_SIDE(1=순매도)와 정반대 극성이고, 기존
+# TRDE_TP_NET_BUY_BUY_SELL(0:순매수,1:매수,2:매도)과도 값 집합이 다르다 —
+# 재사용 금지, 절대 합치지 말 것. 1곳: ka30002(옵션명 --type 유지).
+ELW_BROKER_SIDE = {"net-buy": "1", "net-sell": "2"}
+
+# ka30002(elw broker-top) 전용 — dt(기간). 여기서는 5일=5(off-by-one 아님).
+# ka10038의 PERIOD_DAYS_OFF_BY_ONE(5일=4)과 값 집합이 달라 절대 합치지 말 것.
+# 1곳: ka30002.
+ELW_BROKER_PERIOD = {"previous": "1", "5d": "5", "10d": "10", "40d": "40", "60d": "60"}
+
+# ka30002(elw broker-top) 전용 — trde_end_elwskip(거래종료ELW제외).
+# 0=포함,1=제외. elw_surge(ka30001)/elw_disparity(ka30004)/elw_change_rank
+# (ka30009)/elw_balance_rank(ka30010)도 동일한 trde_end_elwskip/trde_end_skip
+# 필드를 같은 값(0=포함,1=제외)으로 쓰지만 이번 태스크 범위 밖이라 그대로
+# 원시 텍스트로 남아 있다 — 이 상수를 그쪽에 재사용해도 값은 맞겠으나 아직
+# 검증/적용하지 않았으니 별도 작업으로 남긴다. 1곳: ka30002.
+ELW_BROKER_END_SKIP = {"include": "0", "exclude": "1"}

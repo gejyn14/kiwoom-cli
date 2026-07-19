@@ -193,3 +193,225 @@ def test_program_trend_market_exchange_linked(
     assert sent_api_id == api_id
     assert body["mrkt_tp"] == mrkt_tp
     assert body["stex_tp"] == stex_tp
+
+
+# ============================================================
+#  task-14: ka10030 rank volume / ka10032 rank amount —
+#  mang_stk_incls polarity inversion + --stock-condition rename
+# ============================================================
+
+
+def test_rank_volume_default_mang_stk_incls_unchanged(runner, fake_client):
+    """Default send value for mang_stk_incls must stay '0' (unchanged behavior)."""
+    result = runner.invoke(cli, ["market", "rank", "volume"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mang_stk_incls"] == "0"
+
+
+def test_rank_volume_stock_condition_human_name(runner, fake_client):
+    result = runner.invoke(
+        cli, ["market", "rank", "volume", "--stock-condition", "exclude-etf"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mang_stk_incls"] == "14"
+
+
+def test_rank_volume_stock_condition_raw_code_backcompat(runner, fake_client):
+    """HumanChoice accepts raw API codes too — --stock-condition 14 must keep working."""
+    result = runner.invoke(
+        cli, ["market", "rank", "volume", "--stock-condition", "14"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mang_stk_incls"] == "14"
+
+
+def test_rank_volume_include_managed_removed(runner, fake_client):
+    """--include-managed no longer exists on rank volume (renamed to --stock-condition)."""
+    result = runner.invoke(
+        cli, ["market", "rank", "volume", "--include-managed", "1"]
+    )
+
+    assert result.exit_code == 1
+
+
+def test_rank_amount_default_mang_stk_incls_unchanged(runner, fake_client):
+    """Default send value for ka10032 mang_stk_incls must stay '0' (unchanged behavior)."""
+    result = runner.invoke(cli, ["market", "rank", "amount"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mang_stk_incls"] == "0"
+
+
+def test_rank_amount_include_managed_yes_is_polarity_opposite_of_volume(runner, fake_client):
+    """ka10032's --include-managed yes -> '1', the OPPOSITE polarity of ka10030's 0=include."""
+    result = runner.invoke(
+        cli, ["market", "rank", "amount", "--include-managed", "yes"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mang_stk_incls"] == "1"
+
+
+def test_rank_amount_exchange_widened_to_all(runner, fake_client):
+    """rank amount --exchange all is a pure widening (EXCHANGE_ALL, stex_tp=3)."""
+    result = runner.invoke(
+        cli, ["market", "rank", "amount", "--exchange", "all"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stex_tp"] == "3"
+
+
+def test_rank_volume_defaults_unchanged_full_body(runner, fake_client):
+    """Full smoke: converting free-text options to HumanChoice must not change any
+    default wire value sent to ka10030."""
+    result = runner.invoke(cli, ["market", "rank", "volume"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1] == {
+        "mrkt_tp": "000",
+        "sort_tp": "1",
+        "mang_stk_incls": "0",
+        "crd_tp": "0",
+        "trde_qty_tp": "0",
+        "pric_tp": "0",
+        "trde_prica_tp": "0",
+        "mrkt_open_tp": "0",
+        "stex_tp": "1",
+    }
+
+
+@pytest.mark.parametrize("option,cli_value,field,api_value", [
+    ("--sort", "turnover", "sort_tp", "2"),
+    ("--credit-type", "short", "crd_tp", "8"),
+    ("--vol-type", "500k", "trde_qty_tp", "500"),
+    ("--price-type", "over-100k", "pric_tp", "9"),
+    ("--amount-type", "50m", "trde_prica_tp", "4"),
+    ("--session", "after-hours", "mrkt_open_tp", "3"),
+])
+def test_rank_volume_other_options_converted(runner, fake_client, option, cli_value, field, api_value):
+    """The other free-text ka10030 options are also narrowed to HumanChoice enums."""
+    result = runner.invoke(cli, ["market", "rank", "volume", option, cli_value])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1][field] == api_value
+
+
+def test_rank_volume_invalid_stock_condition_exits_1(runner, fake_client):
+    result = runner.invoke(
+        cli, ["market", "rank", "volume", "--stock-condition", "bogus"]
+    )
+    assert result.exit_code == 1
+
+
+# ============================================================
+#  task-14: ka10038 rank broker-by-stock — dt/--period + --from/--to
+# ============================================================
+
+
+def test_broker_by_stock_default_dt_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "broker-by-stock", "005930"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == "1"
+
+
+def test_broker_by_stock_from_to_drops_dt_key(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "broker-by-stock", "005930",
+        "--from", "20260101", "--to", "20260107",
+    ])
+
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert "dt" not in body
+    assert body["strt_dt"] == "20260101"
+    assert body["end_dt"] == "20260107"
+
+
+def test_broker_by_stock_period_off_by_one(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "broker-by-stock", "005930", "--period", "5d",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == "4"
+
+
+def test_broker_by_stock_period_and_from_to_conflict_exits_1(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "broker-by-stock", "005930",
+        "--period", "5d", "--from", "20260101", "--to", "20260107",
+    ])
+
+    assert result.exit_code == 1
+
+
+def test_broker_by_stock_side_human_name(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "broker-by-stock", "005930", "--type", "net-buy",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["qry_tp"] == "2"
+
+
+# ============================================================
+#  task-14: ka30002 elw broker-top — required --issuer + HumanChoice
+# ============================================================
+
+
+def test_elw_broker_top_issuer_required(runner, fake_client):
+    result = runner.invoke(cli, ["market", "elw", "broker-top"])
+    assert result.exit_code == 1
+
+
+def test_elw_broker_top_sends_issuer_code(runner, fake_client):
+    result = runner.invoke(cli, ["market", "elw", "broker-top", "--issuer", "001"])
+
+    assert result.exit_code == 0
+    api_id, body = fake_client.calls[0]
+    assert api_id == "ka30002"
+    assert body["isscomp_cd"] == "001"
+
+
+def test_elw_broker_top_default_values_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "elw", "broker-top", "--issuer", "001"])
+
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["trde_qty_tp"] == "0"
+    assert body["trde_tp"] == "1"
+    assert body["dt"] == "1"
+    assert body["trde_end_elwskip"] == "1"
+
+
+def test_elw_broker_top_side_net_buy_net_sell(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "elw", "broker-top", "--issuer", "001", "--type", "net-sell",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == "2"
+
+
+def test_elw_broker_top_period_not_off_by_one(runner, fake_client):
+    """ka30002's dt is 5d=5 (NOT the ka10038 off-by-one codebook)."""
+    result = runner.invoke(cli, [
+        "market", "elw", "broker-top", "--issuer", "001", "--period", "5d",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == "5"
+
+
+def test_elw_broker_top_exclude_expired_human_name(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "elw", "broker-top", "--issuer", "001", "--exclude-expired", "include",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_end_elwskip"] == "0"

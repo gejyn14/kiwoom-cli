@@ -5,17 +5,31 @@ from __future__ import annotations
 import click
 
 from ..client import KiwoomClient
-from ..formatters import print_api_response
+from ..formatters import fail_input, print_api_response
 from ._constants import (
     AMT_QTY_TP_1_2,
+    BROKER_BY_STOCK_SIDE,
+    ELW_BROKER_END_SKIP,
+    ELW_BROKER_PERIOD,
+    ELW_BROKER_QTY_TYPE,
+    ELW_BROKER_SIDE,
     EXCHANGE_ALL,
     EXCHANGE_TWO,
     HOT_PERIOD,
+    MANAGED_STOCK_INCLUDE,
     MARKET_ALL,
     MARKET_KOSPI_KOSDAQ,
     MARKET_TWO,
     MIN_TIC_TP,
+    PERIOD_DAYS_OFF_BY_ONE,
     PROGRAM_MARKET_BY_EXCHANGE,
+    STOCK_CONDITION,
+    VOLUME_RANK_AMOUNT_TYPE,
+    VOLUME_RANK_CREDIT_TYPE,
+    VOLUME_RANK_PRICE_TYPE,
+    VOLUME_RANK_QTY_TYPE,
+    VOLUME_RANK_SESSION,
+    VOLUME_RANK_SORT,
     HumanChoice,
 )
 
@@ -286,13 +300,26 @@ def rank_expected_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, pric_
 
 @rank.command("volume")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--sort", "sort_tp", default="1", help="정렬 (1=거래량,2=거래회전율,3=거래대금)")
-@click.option("--include-managed", "mang_stk_incls", default="0", help="관리종목포함 (0=미포함, 1=포함)")
-@click.option("--credit-type", "crd_tp", default="0", help="신용구분")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--price-type", "pric_tp", default="0", help="가격구분")
-@click.option("--amount-type", "trde_prica_tp", default="0", help="거래대금구분")
-@click.option("--session", "mrkt_open_tp", default="0", help="장운영구분 (0=전체,1=장중,2=장전시간외,3=장후시간외)")
+@click.option("--sort", "sort_tp", type=HumanChoice(VOLUME_RANK_SORT), default="volume",
+              help="정렬 (volume=거래량,turnover=거래회전율,amount=거래대금)")
+@click.option("--stock-condition", "mang_stk_incls", type=HumanChoice(STOCK_CONDITION),
+              default="include-managed",
+              help="종목조건 (include-managed=관리종목포함, exclude-managed=관리종목미포함, "
+                   "exclude-preferred/exclude-liquidation/exclude-managed-preferred/"
+                   "exclude-margin-100/only-margin-100/only-margin-60/only-margin-50/"
+                   "only-margin-40/only-margin-30/only-margin-20/exclude-etf/exclude-spac/"
+                   "exclude-etf-etn)")
+@click.option("--credit-type", "crd_tp", type=HumanChoice(VOLUME_RANK_CREDIT_TYPE), default="all",
+              help="신용구분 (all,all-financing,a,b,c,d,short)")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(VOLUME_RANK_QTY_TYPE), default="all",
+              help="거래량구분 (all,5k,10k,50k,100k,200k,300k,500k,1000k = 이상)")
+@click.option("--price-type", "pric_tp", type=HumanChoice(VOLUME_RANK_PRICE_TYPE), default="all",
+              help="가격구분 (all,under-1k,over-1k,1k-2k,2k-5k,over-5k,5k-10k,under-10k,"
+                   "over-10k,over-50k,over-100k)")
+@click.option("--amount-type", "trde_prica_tp", type=HumanChoice(VOLUME_RANK_AMOUNT_TYPE), default="all",
+              help="거래대금구분 (all,10m,30m,50m,100m,300m,500m,1b,3b,5b,10b,30b,50b = 이상)")
+@click.option("--session", "mrkt_open_tp", type=HumanChoice(VOLUME_RANK_SESSION), default="all",
+              help="장운영구분 (all=전체,regular=장중,pre-open=장전시간외,after-hours=장후시간외)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_volume(mrkt_tp, sort_tp, mang_stk_incls, crd_tp, trde_qty_tp, pric_tp, trde_prica_tp, mrkt_open_tp, stex_tp):
     """당일 거래량 상위. (ka10030)"""
@@ -334,15 +361,16 @@ def rank_prev_volume(mrkt_tp, qry_tp, rank_strt, rank_end, stex_tp):
 
 @rank.command("amount")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--include-managed", "mang_stk_incls", default="0", help="관리종목포함 (0=미포함, 1=포함)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--include-managed", "mang_stk_incls", type=HumanChoice(MANAGED_STOCK_INCLUDE), default="no",
+              help="관리종목포함 (no=미포함, yes=포함)")
+@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_amount(mrkt_tp, mang_stk_incls, stex_tp):
     """거래대금 상위. (ka10032)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10032", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "mang_stk_incls": mang_stk_incls,
-            "stex_tp": EXCHANGE_TWO[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "거래대금상위")
 
@@ -449,17 +477,26 @@ def rank_foreign_broker(mrkt_tp, dt, trde_tp, sort_tp, stex_tp):
 
 @rank.command("broker-by-stock")
 @click.argument("code")
-@click.option("--type", "qry_tp", default="1", help="조회구분 (1=순매도순위, 2=순매수순위)")
+@click.option("--type", "qry_tp", type=HumanChoice(BROKER_BY_STOCK_SIDE), default="net-sell",
+              help="조회구분 (net-sell=순매도순위, net-buy=순매수순위)")
 @click.option("--from", "strt_dt", default="", help="시작일자 (YYYYMMDD)")
 @click.option("--to", "end_dt", default="", help="종료일자 (YYYYMMDD)")
-@click.option("--period", "dt", default="1", help="기간 (1=전일,4=5일,9=10일,19=20일,39=40일,59=60일,119=120일)")
+@click.option("--period", "dt", type=HumanChoice(PERIOD_DAYS_OFF_BY_ONE), default=None,
+              help="기간 (previous=전일,5d,10d,20d,40d,60d,120d — --from/--to와 동시 사용 불가)")
 def rank_broker_by_stock(code, qry_tp, strt_dt, end_dt, dt):
     """종목별 증권사 순위. (ka10038)"""
+    has_range = bool(strt_dt or end_dt)
+    if has_range and dt is not None:
+        fail_input("--period와 --from/--to는 함께 지정할 수 없습니다.")
+
+    body = {"stk_cd": code, "strt_dt": strt_dt, "end_dt": end_dt, "qry_tp": qry_tp}
+    if not has_range:
+        # 스펙: "시작일자와 종료일자로 조회를 원하는 경우 기간(dt)값은 빈값으로 설정"
+        # → 날짜 범위가 있으면 dt 키 자체를 아예 뺀다 (빈 문자열이 아니라 키 제외).
+        body["dt"] = dt if dt is not None else PERIOD_DAYS_OFF_BY_ONE["previous"]
+
     with KiwoomClient() as c:
-        data, _ = c.request("ka10038", {
-            "stk_cd": code, "strt_dt": strt_dt, "end_dt": end_dt,
-            "qry_tp": qry_tp, "dt": dt,
-        })
+        data, _ = c.request("ka10038", body)
         print_api_response(data, f"종목별증권사순위 ({code})")
 
 
@@ -1086,11 +1123,16 @@ def elw_surge(flu_tp, tm_tp, tm, trde_qty_tp, isscomp_cd, bsis_aset_cd, rght_tp,
 
 
 @elw.command("broker-top")
-@click.option("--issuer", "isscomp_cd", default="000000000000", help="발행사코드")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--type", "trde_tp", default="1", help="매매구분 (1=순매수, 2=순매도)")
-@click.option("--period", "dt", default="1", help="기간 (1=전일,5,10,40,60)")
-@click.option("--exclude-expired", "trde_end_elwskip", default="1", help="거래종료ELW제외 (0=포함, 1=제외)")
+@click.option("--issuer", "isscomp_cd", required=True,
+              help="발행사코드 3자리 (교보:001, 신한금융투자:002, 한국투자증권:003)")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(ELW_BROKER_QTY_TYPE), default="all",
+              help="거래량구분 (all,5k,10k,50k,100k,500k,1000k)")
+@click.option("--type", "trde_tp", type=HumanChoice(ELW_BROKER_SIDE), default="net-buy",
+              help="매매구분 (net-buy=순매수, net-sell=순매도)")
+@click.option("--period", "dt", type=HumanChoice(ELW_BROKER_PERIOD), default="previous",
+              help="기간 (previous=전일,5d,10d,40d,60d)")
+@click.option("--exclude-expired", "trde_end_elwskip", type=HumanChoice(ELW_BROKER_END_SKIP), default="exclude",
+              help="거래종료ELW제외 (include=포함, exclude=제외)")
 def elw_broker_top(isscomp_cd, trde_qty_tp, trde_tp, dt, trde_end_elwskip):
     """거래원별 ELW 순매매 상위. (ka30002)"""
     with KiwoomClient() as c:
