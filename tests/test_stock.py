@@ -62,6 +62,23 @@ def test_price_echoes_name_and_cur_prc(runner, fake_client):
     assert "삼성전자 (005930): 70,000원 (+500, +0.71%)" in result.output
 
 
+def test_compare_strips_direction_sign_from_price(runner, fake_client):
+    """compare table: 하락 종목의 현재가는 음수로 표시되지 않는다 (부호는 방향지시자)."""
+    fake_client.set_response(
+        "ka10001",
+        {
+            "stk_nm": "삼성전자",
+            "cur_prc": "-68000",
+            "trde_qty": "10000000",
+        },
+    )
+    result = runner.invoke(cli, ["stock", "compare", "005930", "000660"])
+
+    assert result.exit_code == 0
+    assert "-68,000" not in result.output, "현재가에 방향지시자 부호가 그대로 노출됨"
+    assert "68,000" in result.output
+
+
 def test_orderbook_sends_to_ka10004(runner, fake_client):
     """orderbook smoke: positional code -> stk_cd body, hits ka10004."""
     result = runner.invoke(cli, ["stock", "orderbook", "005930"])

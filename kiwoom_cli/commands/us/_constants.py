@@ -29,3 +29,10 @@ US_SELL_ONLY_TYPES = frozenset({"moc", "stop", "stop-limit"})
 US_BUY_TYPES = frozenset(US_ORDER_TYPES) - US_SELL_ONLY_TYPES
 US_SELL_TYPES = frozenset(US_ORDER_TYPES)
 US_STOP_TYPES = frozenset({"stop", "stop-limit"})
+
+# ord_uv(주문단가)가 빈 값 처리되는 시장가 계열 (ust20000/ust20001 스펙:
+# "trde_tp가 00(지정가),30(LOC)...인 경우 필수 입력, 그 외 시장가 거래유형
+# 설정 시 입력 값은 빈 값 처리"). vwap-limit(26)/twap-limit(27)/loc(30)은
+# "지정가" 계열이라 제외 — 시장가 변형인 moc(33)/vwap(36)/twap(37)/stop(35)
+# 만 포함한다. stop-limit(34)은 트리거 후 지정가로 체결되므로 제외.
+US_MARKET_TYPES = frozenset({"market", "moc", "vwap", "twap", "stop"})

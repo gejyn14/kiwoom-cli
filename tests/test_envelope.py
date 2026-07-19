@@ -175,6 +175,51 @@ def test_request_clears_last_cont_when_no_more_pages(httpx_mock):
     assert ctx.obj["last_cont"] is None
 
 
+def test_request_suppresses_last_cont_when_flagged(httpx_mock):
+    """변이 호출(_mutation.suppress_pagination()이 세팅하는 ctx.obj["suppress_cont"])은
+    업스트림이 cont-yn: Y/next-key를 보내더라도 last_cont를 기록하지 않는다.
+
+    이 값이 그대로 기록되면 envelope의 meta.cont가 살아남아, AGENTS.md의 안내를
+    따르는 에이전트가 --next-key로 "이어서" 실행 — 즉 주문/환전 등 실제 동작을
+    한 번 더 실행하게 된다. suppress_pagination()이 이미 ctx.obj["all_pages"]를
+    False로, next_key를 제거로 세팅하는 것과 같은 지점에서 이 플래그도 세팅하므로
+    (client.py:112-118 참고), 새 변이 커맨드가 추가돼도 이 억제를 별도로 잊을 수
+    없다."""
+    import click
+
+    from kiwoom_cli.client import KiwoomClient
+
+    httpx_mock.add_response(
+        url="https://mock.test/api/dostk/stkinfo",
+        json={"return_code": 0, "ord_no": "0000001"},
+        headers={"cont-yn": "Y", "next-key": "NK123"},
+    )
+    ctx = click.Context(click.Command("x"), obj={"suppress_cont": True})
+    with ctx:
+        with KiwoomClient(domain="https://mock.test", token="t") as c:
+            c.request("ka10001", {"stk_cd": "005930"})
+    assert ctx.obj["last_cont"] is None
+
+
+def test_request_without_suppress_flag_still_records_last_cont(httpx_mock):
+    """대조군: suppress_cont 플래그가 없는 평범한 조회는 여전히 last_cont를
+    정상적으로 기록해야 한다 — 변이 억제가 읽기 전용 페이지네이션까지 깨면 안 된다."""
+    import click
+
+    from kiwoom_cli.client import KiwoomClient
+
+    httpx_mock.add_response(
+        url="https://mock.test/api/dostk/stkinfo",
+        json={"return_code": 0, "stk_nm": "x"},
+        headers={"cont-yn": "Y", "next-key": "NK123"},
+    )
+    ctx = click.Context(click.Command("x"), obj={})
+    with ctx:
+        with KiwoomClient(domain="https://mock.test", token="t") as c:
+            c.request("ka10001", {"stk_cd": "005930"})
+    assert ctx.obj["last_cont"] == {"next_key": "NK123"}
+
+
 def test_success_meta_carries_cont(runner, monkeypatch):
     fake = FakeKiwoomClient()
     fake.set_response("ka10001", {"return_code": 0, "stk_nm": "삼성전자"})

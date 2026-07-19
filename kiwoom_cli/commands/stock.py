@@ -1752,7 +1752,7 @@ def compare(codes: tuple[str, ...]):
         for r in results:
             val = r.get(key, "-") or "-"
             if key in ("cur_prc", "trde_qty", "mac", "oyr_hgst", "oyr_lwst"):
-                display = _fmt_number(val)
+                display = _fmt_number(val, strip_sign=True)
                 if key == "mac":
                     display += "억"
             elif key == "pred_pre":

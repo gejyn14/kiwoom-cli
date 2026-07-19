@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import click
@@ -10,6 +11,8 @@ import pytest
 from click.testing import CliRunner
 
 from kiwoom_cli import config, idempotency
+from kiwoom_cli.client import KiwoomAPIError, KiwoomAuthError
+from kiwoom_cli.client import KiwoomClient as _RealKiwoomClient
 from kiwoom_cli.main import cli
 
 
@@ -292,3 +295,522 @@ def test_credit_modify_preview_before_confirm(runner, isolated_env, monkeypatch)
                                      "0000139", "005930", "1", "70000"])
     assert result.exit_code != 0
     assert calls == ["preview", "confirm"]
+
+
+# ── Task 8: in-flight record blocks duplicate after transport failure ──
+
+def test_inflight_record_blocks_duplicate_after_transport_failure(runner, isolated_env):
+    """전송 중 네트워크 오류 후 같은 키로 재시도하면 재전송하지 않는다 (inflight-only)."""
+    import httpx
+
+    sent = []
+
+    class FailingClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            raise httpx.ReadTimeout("timeout")
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", FailingClient):
+        r1 = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                 "--price", "70000", "--type", "limit",
+                                 "--confirm", "--client-order-id", "dup-1"])
+    assert r1.exit_code == 2
+    assert len(sent) == 1
+
+    class OkClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            return {"ord_no": "0000777", "return_code": 0}, {}
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", OkClient):
+        r2 = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                 "--price", "70000", "--type", "limit",
+                                 "--confirm", "--client-order-id", "dup-1"])
+    doc = json.loads(r2.stdout)
+    assert len(sent) == 1, "재시도가 주문을 재전송했다 — 중복 주문"
+    assert r2.exit_code == 2
+    assert doc["error"]["code"] == "ORDER_STATUS_UNKNOWN"
+    assert doc["error"]["retryable"] is False
+
+
+def test_legacy_ledger_without_status_still_replays(runner, isolated_env):
+    """v2.4~v2.8 원장(status 키 없음)은 CLI 경로에서도 종전대로 재생된다.
+
+    idempotency.record()를 거치지 않고 원장 줄을 직접 써서, 진짜로 "status" 키가
+    없는 레코드를 만든 뒤 CLI를 통해 재생 여부를 검증한다 (모듈 API로는
+    record()가 항상 "status": "done"을 쓰므로 이 경로를 재현할 수 없다).
+    """
+    # buy 005930 10 --price 70000 --type limit 이 실제로 구성하는 body와
+    # 정확히 일치해야 fingerprint가 맞아 재생(replay)으로 처리된다.
+    legacy_body = {
+        "dmst_stex_tp": "KRX",
+        "stk_cd": "005930",
+        "ord_qty": "10",
+        "ord_uv": "70000",
+        "trde_tp": "0",
+        "cond_uv": "",
+    }
+    fp = idempotency.fingerprint("kt10000", legacy_body)
+    ledger = idempotency._ledger_file()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    legacy_rec = {
+        "key": "legacy-no-status",
+        "api_id": "kt10000",
+        "ord_no": "0000111",
+        "fingerprint": fp,
+        # 의도적으로 "status" 키 없음 — v2.4~v2.8 원장 형식
+        "response": {"ord_no": "0000111", "return_code": 0, "return_msg": "정상"},
+        "ts": "2026-01-01T00:00:00+00:00",
+    }
+    with open(ledger, "a", encoding="utf-8") as f:
+        f.write(json.dumps(legacy_rec, ensure_ascii=False) + "\n")
+
+    hit = idempotency.lookup("legacy-no-status")
+    assert "status" not in hit  # 픽스처가 진짜로 status-less 레코드인지 확인
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        result = runner.invoke(cli, [
+            "-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit",
+            "--confirm", "--client-order-id", "legacy-no-status",
+        ])
+    assert result.exit_code == 0
+    doc = json.loads(result.stdout)
+    assert doc["data"]["idempotent_replay"] is True
+    assert doc["data"]["order_no"] == "0000111"
+    mock_cls.assert_not_called()
+
+
+# ── Task 9: upstream rejection does not burn the idempotency key ────────
+
+def test_rejected_order_can_be_retried_with_same_key(runner, isolated_env):
+    """업스트림 구조적 거부(KiwoomAPIError) 후 같은 키+같은 내용으로 재시도하면
+    실제로 재전송된다 (ORDER_STATUS_UNKNOWN으로 막히지 않고, replay로도 처리되지
+    않음) — inflight+rejected, 이어서 inflight+rejected+inflight+done 상태를 검증."""
+    sent = []
+
+    class RejectingClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            raise KiwoomAPIError(-1, "예수금부족")
+
+    args = ["-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit",
+            "--confirm", "--client-order-id", "reject-key"]
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", RejectingClient):
+        r1 = runner.invoke(cli, args)
+    assert r1.exit_code == 2
+    assert len(sent) == 1
+
+    # inflight+rejected 상태 확인
+    hit = idempotency.lookup("reject-key")
+    assert hit["status"] == "rejected"
+    assert hit["response"] is None
+
+    class OkClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            return {"ord_no": "0000555", "return_code": 0}, {}
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", OkClient):
+        r2 = runner.invoke(cli, args)
+    assert r2.exit_code == 0, r2.stdout
+    assert len(sent) == 2, "거부 후 재시도가 실제로 재전송되지 않았다"
+    doc = json.loads(r2.stdout)
+    assert "idempotent_replay" not in doc["data"], "재전송 결과가 replay로 오인됨"
+    assert doc["data"]["order_no"] == "0000555"
+
+    # inflight+rejected+inflight+done 상태 확인 (lookup은 마지막 매치를 반환)
+    lines = idempotency._ledger_file().read_text().strip().splitlines()
+    statuses = [json.loads(line)["status"] for line in lines]
+    assert statuses == ["inflight", "rejected", "inflight", "done"]
+    final_hit = idempotency.lookup("reject-key")
+    assert final_hit["status"] == "done"
+    assert final_hit["response"]["ord_no"] == "0000555"
+
+
+def test_rejected_record_still_conflicts_on_different_body(runner, isolated_env):
+    """거부 기록이 있어도 다른 주문 내용(다른 fingerprint)으로 같은 키를 재사용하면
+    여전히 IDEMPOTENCY_CONFLICT — '거부 후 재전송 허용'이 fingerprint 검사를
+    우회하지 않는다."""
+    sent = []
+
+    class RejectingClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            raise KiwoomAPIError(-1, "예수금부족")
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", RejectingClient):
+        r1 = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                 "--price", "70000", "--type", "limit",
+                                 "--confirm", "--client-order-id", "reject-key-2"])
+    assert r1.exit_code == 2
+    assert len(sent) == 1
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        r2 = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "20",
+                                 "--price", "71000", "--type", "limit",
+                                 "--confirm", "--client-order-id", "reject-key-2"])
+    assert r2.exit_code == 1
+    doc = json.loads(r2.stdout)
+    assert doc["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    mock_cls.assert_not_called()
+    assert len(sent) == 1  # 두 번째 시도는 전송되지 않음
+
+
+# ── I1: pre-transmission auth failure must not burn the idempotency key ──
+
+def test_auth_error_before_send_does_not_burn_key(runner, isolated_env):
+    """전송 전 인증 실패(토큰 없음)는 KiwoomAuthError로 나타난다 — 실제 HTTP 전송
+    (self._http.post) 이전, 요청 준비 단계에서 발생하므로 업스트림에 도달하지
+    않았음이 코드 구조상 보장된다. inflight로 영구히 막혀서는 안 되고, 토큰 발급
+    후 같은 키로 재시도하면 실제로 전송되어야 한다 (ORDER_STATUS_UNKNOWN에 막히지
+    않고, replay로도 처리되지 않음 — 실제로 새 요청이 나가야 한다)."""
+    sent = []
+
+    class NoTokenClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            # 실제 코드에서 KiwoomAuthError는 client.py의 _request_once()가
+            # self._http.post()를 호출하기 전, 토큰 유무를 확인하는 첫 줄에서
+            # 던진다 — 전송 시도 자체가 없다.
+            raise KiwoomAuthError()
+
+    args = ["-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit",
+            "--confirm", "--client-order-id", "auth-key"]
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", NoTokenClient):
+        r1 = runner.invoke(cli, args)
+    assert r1.exit_code == 3, r1.stdout  # EXIT_AUTH
+    assert len(sent) == 0, "인증 실패인데 전송 시도가 기록됐다"
+
+    # 핵심 검증: 인증 실패 후 원장이 "rejected"로 종결되어야 한다.
+    # inflight로 영구히 남으면(회귀 전 동작) 아래 재시도가 ORDER_STATUS_UNKNOWN으로
+    # 막히고, 이 assert가 그 사실을 직접 드러낸다.
+    hit = idempotency.lookup("auth-key")
+    assert hit is not None
+    assert hit["status"] == "rejected", (
+        f"인증 실패가 원장에 '{hit['status']}'로 남았다 — inflight로 남으면 "
+        "재시도가 영구히 ORDER_STATUS_UNKNOWN으로 막힌다 (아무것도 전송되지 않았는데도)."
+    )
+    assert hit["response"] is None
+
+    class OkClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            sent.append((api_id, body))
+            return {"ord_no": "0000999", "return_code": 0}, {}
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", OkClient):
+        r2 = runner.invoke(cli, args)
+    assert r2.exit_code == 0, r2.stdout
+    doc = json.loads(r2.stdout)
+    assert len(sent) == 1, (
+        "토큰 발급 후 재시도가 실제로 전송되지 않았다 — "
+        f"exit_code={r2.exit_code}, stdout={r2.stdout}"
+    )
+    assert "idempotent_replay" not in doc["data"], "재전송 결과가 replay로 오인됨"
+    assert doc["data"]["order_no"] == "0000999"
+
+    # inflight+rejected+inflight+done 상태 확인 (rejected 케이스와 동일한 형태)
+    lines = idempotency._ledger_file().read_text().strip().splitlines()
+    statuses = [json.loads(line)["status"] for line in lines]
+    assert statuses == ["inflight", "rejected", "inflight", "done"]
+
+
+# ── Task 10: OSError branches keep their fail-closed / fail-open direction ──
+
+def test_inflight_write_oserror_blocks_send(runner, isolated_env, monkeypatch):
+    """in-flight 기록 실패 시 주문을 전송하지 않는다 (fail closed)."""
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(idempotency, "record_inflight", boom)
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        result = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                     "--price", "70000", "--type", "limit",
+                                     "--confirm", "--client-order-id", "oserror-inflight"])
+    assert result.exit_code == 2
+    mock_cls.assert_not_called()
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is False
+
+
+def test_final_record_oserror_does_not_block_already_sent_order(runner, isolated_env, monkeypatch):
+    """완료 기록 실패는 이미 전송된 주문을 되돌리지 않는다 (fail open, exit 0)."""
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(idempotency, "record", boom)
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient") as mock_cls:
+        mock_cls.return_value = _mock_kiwoom_client(_ok_order_response)
+        result = runner.invoke(cli, ["-f", "json", "order", "buy", "005930", "10",
+                                     "--price", "70000", "--type", "limit",
+                                     "--confirm", "--client-order-id", "oserror-final"])
+    assert result.exit_code == 0
+    doc = json.loads(result.stdout)
+    assert doc["data"]["order_no"] == "0000001"
+
+
+# ── Task 11: pagination suppression pins record_rejected() safety ───────
+
+def test_send_order_forces_single_request_even_with_global_all_pages(runner, isolated_env):
+    """send_order는 전역 --all-pages를 강제로 꺼야 한다.
+
+    record_rejected()의 정확성은 주문 전송이 항상 단일 요청이라는 데 의존한다:
+    여러 페이지를 도는 도중 한 페이지가 체결(성공)되고 다른 페이지에서
+    KiwoomAPIError가 발생하면, 실제로 체결된 주문을 "rejected"(재사용 가능한
+    키)로 잘못 기록하게 된다. 오늘은 주문 API가 cont-yn: Y를 반환하지 않아
+    이중으로 보호되지만, _mutation.send_order가 ctx.obj["all_pages"]를 False로
+    강제하는 코드가 없어지면 그 방어선이 사라진다. 이 테스트는 그 강제 동작
+    자체를 고정한다."""
+    captured = {}
+
+    class RecordingClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def request(self, api_id, body, **kw):
+            ctx = click.get_current_context(silent=True)
+            captured["all_pages"] = ctx.obj.get("all_pages")
+            captured["next_key_present"] = "next_key" in ctx.obj
+            return {"ord_no": "1", "return_code": 0}, {}
+
+    with mock.patch("kiwoom_cli.commands.order.KiwoomClient", RecordingClient):
+        result = runner.invoke(cli, [
+            "--all-pages", "-f", "json", "order", "buy", "005930", "10",
+            "--price", "70000", "--type", "limit", "--confirm",
+        ])
+    assert result.exit_code == 0, result.stdout
+    # 전역 플래그가 켜져 있었음에도 send_order가 명령 실행 전에 꺼야 한다.
+    assert captured["all_pages"] is False
+    assert captured["next_key_present"] is False
+
+
+# ── Task 6: 환전 신청 + 조건검색 페이지네이션 가드 (audit N6) ───────────
+
+def _real_client(*_a, **_k):
+    """실제 KiwoomClient — domain/token만 고정해 프로필/키체인 해석을 우회한다.
+
+    FakeKiwoomClient류의 목은 client.py의 실제 페이지네이션 while 루프를
+    갖고 있지 않아 그 루프를 우회해버린다 — 이 헬퍼는 진짜 KiwoomClient를
+    써서 실제 반복 전송 메커니즘을 그대로 통과시킨다."""
+    return _RealKiwoomClient(domain="https://mock.test", token="test-token")
+
+
+def test_suppress_pagination_clears_all_pages_and_next_key():
+    """suppress_pagination()은 ctx.obj["all_pages"]를 False로 두고 next_key를 제거한다."""
+    from kiwoom_cli.commands._mutation import suppress_pagination
+
+    ctx = click.Context(click.Command("x"), obj={"all_pages": True, "next_key": "K"})
+    with ctx:
+        suppress_pagination()
+    assert ctx.obj["all_pages"] is False
+    assert "next_key" not in ctx.obj
+
+
+def test_suppress_pagination_noop_without_active_context():
+    """활성 click 컨텍스트가 없어도(라이브러리로 호출되는 경우) 예외를 던지지 않는다."""
+    from kiwoom_cli.commands._mutation import suppress_pagination
+
+    suppress_pagination()
+
+
+def test_exchange_apply_single_real_request_despite_all_pages(runner, isolated_env, monkeypatch, httpx_mock):
+    """환전 신청(ust31302) — 실제 KiwoomClient.request()의 페이지네이션 루프를 통해도
+    --all-pages가 반복 전송을 일으키지 않는지 실제 HTTP 요청 횟수로 검증한다.
+
+    가드가 없으면 cont-yn: Y가 계속 오는 한 client.py의 _ALL_PAGES_CAP(50)까지
+    같은 환전 요청이 반복 전송된다 — 감사 N6(high), 실제 자금이 최대 50회 이동."""
+    monkeypatch.setattr("kiwoom_cli.commands.us.exchange.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0, "krw_exmn_amt": "1000000", "buy_fc_amt": "723.85"},
+        headers={"cont-yn": "Y", "next-key": "K"},
+        is_reusable=True,
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "--all-pages", "account", "exchange", "apply", "1000000", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1, (
+        f"환전 요청이 {len(httpx_mock.get_requests())}회 전송됨 (기대: 1회)"
+    )
+
+
+@pytest.mark.parametrize("args", [
+    ["order", "condition", "search", "001", "--confirm"],
+    ["order", "condition", "realtime", "001", "--confirm"],
+    ["order", "condition", "stop", "001", "--confirm"],
+])
+def test_condition_commands_single_real_request_despite_all_pages(
+    runner, isolated_env, monkeypatch, httpx_mock, args,
+):
+    """조건검색 요청/실시간등록/실시간해제(ka10172~4) — confirm_gate는 있지만
+    MUTATION_APIS에는 없어 send_order 경로를 타지 않는다. 스윕 중 추가로 발견된
+    미보호 지점: --all-pages로 반복 전송되지 않아야 한다."""
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0},
+        headers={"cont-yn": "Y", "next-key": "K"},
+        is_reusable=True,
+    )
+    result = runner.invoke(cli, ["-f", "json", "--all-pages", *args])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1, (
+        f"{args[2]} 요청이 {len(httpx_mock.get_requests())}회 전송됨 (기대: 1회)"
+    )
+
+
+def test_send_order_single_real_request_despite_all_pages(runner, isolated_env, monkeypatch, httpx_mock):
+    """send_order 경로(국내 주식 매수, kt10000) — 실제 KiwoomClient.request() 루프를 통해도
+    단일 요청만 나가는지 확인한다. 기존 test_send_order_forces_single_request_even_with_global_all_pages
+    는 ctx.obj 플래그만 스냅샷하는 목을 쓰므로 그 목 자체가 반복 루프를 갖고 있지 않다 —
+    "메커니즘이 아니라 결과"를 증명하려면 실제 클라이언트로 실제 HTTP 요청 수를 세야 한다."""
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0, "ord_no": "0000001"},
+        headers={"cont-yn": "Y", "next-key": "K"},
+        is_reusable=True,
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "--all-pages", "order", "buy", "005930", "10",
+        "--price", "70000", "--type", "limit", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1, (
+        f"매수 주문이 {len(httpx_mock.get_requests())}회 전송됨 (기대: 1회)"
+    )
+
+
+# ── Task 6b: 변이 응답은 meta.cont를 남기지 않는다 (client.py:112-118) ───
+#
+# suppress_pagination()이 --all-pages 반복 전송(50회 상한)은 막았지만, 응답
+# envelope의 meta.cont는 여전히 살아있었다 — AGENTS.md는 meta.cont가 있으면
+# --next-key로 "이어서" 실행하라고 안내하므로, 변이(주문/환전/조건검색)에서는
+# 그 안내 자체가 실제 동작을 한 번 더 실행하라는 유도가 된다. 실제 HTTP
+# transport(httpx_mock)를 통해 진짜 KiwoomClient.request()가 만든 envelope을
+# 검증한다 — FakeKiwoomClient류의 클래스 치환 목은 last_cont를 기록하는 코드
+# 경로 자체를 우회해 이 결함을 놓친다.
+
+def test_order_buy_envelope_has_no_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
+    """order buy(kt10000) — 업스트림이 cont-yn: Y를 보내더라도 meta.cont는 None."""
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0, "ord_no": "0000001"},
+        headers={"cont-yn": "Y", "next-key": "K"},
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "order", "buy", "005930", "10",
+        "--price", "70000", "--type", "limit", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1
+    assert json.loads(result.stdout)["meta"]["cont"] is None
+
+
+def test_exchange_apply_envelope_has_no_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
+    """account exchange apply(ust31302) — 실제 자금 이동. 동일 결함 재현."""
+    monkeypatch.setattr("kiwoom_cli.commands.us.exchange.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0, "krw_exmn_amt": "1000000", "buy_fc_amt": "723.85"},
+        headers={"cont-yn": "Y", "next-key": "K"},
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "account", "exchange", "apply", "1000000", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1
+    assert json.loads(result.stdout)["meta"]["cont"] is None
+
+
+def test_exchange_apply_outgoing_request_has_no_cont_headers(
+    runner, isolated_env, monkeypatch, httpx_mock,
+):
+    """account exchange apply --next-key PREV — 실제 자금이 이동하는 POST 자체에
+    cont-yn/next-key 헤더가 실리면 안 된다.
+
+    이 결함의 사전-수정 형태(감사 N6 이전)는 정확히 이랬다: 전역 --next-key가
+    ctx.obj에 남아 있으면 client.py:150-158의 페이지네이션 주입 분기
+    (`if obj and not next_key and obj.get("next_key")`)가 그 값을 소비해
+    cont_yn="Y"/next_key="PREV"를 실제 환전 신청 요청에 실어 보냈다.
+    suppress_pagination()이 요청 전에 ctx.obj["next_key"]를 pop하면서 지금은
+    막혀 있지만, 지금까지는 이를 pin하는 테스트가 helper 단위 테스트
+    (test_suppress_pagination_clears_all_pages_and_next_key)와
+    test_raw_api_mutation_clears_global_next_key(test_security.py) 뿐이었다 —
+    둘 다 ctx.obj 스냅샷이거나 FakeKiwoomClient 클래스 치환이라
+    client.py의 실제 주입 분기 자체를 우회한다. 여기서는 실제 KiwoomClient +
+    httpx_mock으로 그 분기를 그대로 통과시켜 진짜 나가는 HTTP 요청의 헤더를
+    검사한다."""
+    monkeypatch.setattr("kiwoom_cli.commands.us.exchange.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0, "krw_exmn_amt": "1000000", "buy_fc_amt": "723.85"},
+        headers={"cont-yn": "N", "next-key": ""},
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "--next-key", "PREV", "account", "exchange", "apply", "1000000", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    reqs = httpx_mock.get_requests()
+    assert len(reqs) == 1
+    assert "next-key" not in reqs[0].headers, (
+        f"환전 신청 요청에 next-key 헤더가 실렸음: {dict(reqs[0].headers)}"
+    )
+    assert "cont-yn" not in reqs[0].headers, (
+        f"환전 신청 요청에 cont-yn 헤더가 실렸음: {dict(reqs[0].headers)}"
+    )
+
+
+def test_raw_api_mutation_envelope_has_no_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
+    """kiwoom api ust31302 — raw api 게이트를 거치는 변이 경로도 동일하게 억제."""
+    monkeypatch.setattr("kiwoom_cli.main.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0},
+        headers={"cont-yn": "Y", "next-key": "K"},
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "api", "ust31302", '{"exch_tp":"1","fc_exmn_amt":"1000000"}', "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1
+    assert json.loads(result.stdout)["meta"]["cont"] is None
+
+
+def test_condition_search_envelope_has_no_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
+    """order condition search(ka10172) — MUTATION_APIS 밖의 별도 변이 경로. 동일 결함 재현."""
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0},
+        headers={"cont-yn": "Y", "next-key": "K"},
+    )
+    result = runner.invoke(cli, [
+        "-f", "json", "order", "condition", "search", "001", "--confirm",
+    ])
+    assert result.exit_code == 0, result.stdout
+    assert len(httpx_mock.get_requests()) == 1
+    assert json.loads(result.stdout)["meta"]["cont"] is None
+
+
+def test_market_read_command_still_advertises_meta_cont(runner, isolated_env, monkeypatch, httpx_mock):
+    """대조군: 읽기 전용 명령(주문성 아님)은 여전히 meta.cont를 정상적으로 노출해야
+    한다 — 변이 억제가 읽기 전용 페이지네이션 계약을 깨면 원래 결함보다 더 나쁘다."""
+    monkeypatch.setattr("kiwoom_cli.commands.market.KiwoomClient", _real_client)
+    httpx_mock.add_response(
+        json={"return_code": 0},
+        headers={"cont-yn": "Y", "next-key": "K"},
+    )
+    result = runner.invoke(cli, ["-f", "json", "market", "rank", "volume"])
+    assert result.exit_code == 0, result.stdout
+    assert json.loads(result.stdout)["meta"]["cont"] == {"next_key": "K"}

@@ -13,6 +13,7 @@ from click.testing import CliRunner
 from kiwoom_cli import config  # noqa: F401
 from kiwoom_cli.client import KiwoomAPIError
 from kiwoom_cli.main import cli
+from tests.fakes import FakeKiwoomClient
 
 
 @pytest.fixture
@@ -305,6 +306,29 @@ def test_validate_rejects_market_plus_price(runner, isolated_env):
                                  "--price", "70000", "--type", "market"])
     assert result.exit_code == 1
     assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+
+
+def test_validate_rejects_best_plus_price(runner, isolated_env, monkeypatch):
+    """validate는 order buy/sell과 같은 _resolve_order_type을 거치므로 확장된
+    시장가 계열(최유리/최우선/중간가) 가드도 그대로 적용돼야 한다 — validate가
+    통과시키는데 실제 주문 경로가 거부하는 괴리(과거 발견 사례)를 막는다.
+
+    isolated_env만으로는(자격증명 없음) 가드가 없어도 실제 API 호출 시도가
+    KiwoomAuthError로 죽어 exit 3(AUTH_REQUIRED)이 나온다 — 그러면 이 테스트는
+    "가드가 거부했다"가 아니라 "인증이 안 됐다"로 우연히 실패/통과를 구분 못
+    한다(v2.9 audit finding 2). FakeKiwoomClient를 주입해 인증을 우회하면,
+    가드가 없을 때는 ka10001/kt00001 호출이 실제로 발생하고 exit 1이어도
+    error.code가 VALIDATION_FAILED(잔고부족 등)이지 INVALID_INPUT이 아니며
+    calls도 비어있지 않다 — sibling인 test_order.py의
+    `fake_client.calls == []` 패턴과 동일하게, 가드가 API 호출 전에 발동했다는
+    것 자체를 직접 확인한다."""
+    fake = FakeKiwoomClient()
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", lambda *a, **k: fake)
+    result = runner.invoke(cli, ["-f", "json", "order", "validate", "buy", "005930", "10",
+                                 "--price", "70000", "--type", "best"])
+    assert result.exit_code == 1
+    assert _doc(result)["error"]["code"] == "INVALID_INPUT"
+    assert fake.calls == []
 
 
 def test_us_stock_info_exchange_resolution_failure_json_envelope(runner, isolated_env, monkeypatch):

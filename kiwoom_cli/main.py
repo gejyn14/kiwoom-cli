@@ -534,7 +534,7 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str, confirm: bool):
         raise click.ClickException(f"Invalid JSON body: {e}")
 
     from .api_spec import MUTATION_APIS, get_description
-    from .commands._mutation import confirm_gate
+    from .commands._mutation import confirm_gate, suppress_pagination
     if api_id in MUTATION_APIS:
         if _get_format() == "table" and not confirm:
             # 미리보기 먼저, 확인은 그 다음 (Tier-1 불변식)
@@ -543,11 +543,7 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str, confirm: bool):
             )
             err_console.print(json.dumps(body_dict, ensure_ascii=False, indent=2))
         confirm_gate(confirm)
-        # 주문 전송은 페이지네이션 대상이 아님 — 전역 --all-pages/--next-key를 무시한다
-        ctx = click.get_current_context(silent=True)
-        if ctx is not None and isinstance(ctx.obj, dict):
-            ctx.obj["all_pages"] = False
-            ctx.obj.pop("next_key", None)
+        suppress_pagination()
 
     with KiwoomClient() as c:
         data, headers = c.request(
@@ -565,7 +561,7 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str, confirm: bool):
             title = get_description(api_id)
             print_generic_table(data, title=title)
 
-        if headers.get("cont-yn") == "Y":
+        if headers.get("cont-yn") == "Y" and api_id not in MUTATION_APIS:
             err_console.print(f"\n[dim]연속조회 가능 (next-key: {headers.get('next-key', '')})[/]")
 
 

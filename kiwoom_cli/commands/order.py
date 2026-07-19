@@ -29,8 +29,16 @@ from rich.panel import Panel
 
 from .. import envelope
 from ..client import KiwoomAPIError, KiwoomClient
-from ..formatters import _get_format, fail_input, human, print_generic_table
-from ._mutation import confirm_gate, dry_run_payload, finish_dry_run, send_order
+from ..formatters import _get_format, fail_api, fail_input, human, print_generic_table
+from ._mutation import (
+    QuoteUnavailable,
+    confirm_gate,
+    dry_run_payload,
+    finish_dry_run,
+    parse_quote_price,
+    send_order,
+    suppress_pagination,
+)
 from .us import order_ops as us_order_ops
 from .us._constants import US_ORDER_TYPES
 from .us.detect import is_us_symbol
@@ -75,7 +83,23 @@ def _kr_type_or_exit(order_type: str) -> str:
     return ORDER_TYPES[order_type]
 
 
-_MARKET_TYPES = frozenset({"market", "market-ioc", "market-fok"})
+# 시장가 계열 — ord_uv(주문단가)를 시스템이 결정하므로 사용자가 넘긴 --price는
+# 조용히 버려진다. kt10000 스펙 자체에는 US ust20001처럼 "빈 값 처리" 문구가
+# 없지만, 최유리지정가/최우선지정가/중간가는 체결가가 최우선/최유리 호가나
+# 중간가로 자동 결정되는 유형이라 사용자 지정 가격이 의미를 갖지 않는다
+# (v2.9 audit finding N2 — 시장가/시장가IOC/시장가FOK 3종만 막고 최유리·최우선·
+# 중간가 7종은 빠뜨려 --price가 조용히 전송·무시되던 갭).
+#
+# "stop"(28, 스톱지정가)은 여기 포함하지 않는다 — 도메인이 같은 dict를 공유하는
+# 미국 stop(시장가, 35)과 이름만 같을 뿐 국내 스톱지정가는 지정가 계열이라
+# 가격을 유지해야 한다(us/_constants.py의 US_MARKET_TYPES가 미국 쪽을 별도로
+# 담당).
+_MARKET_TYPES = frozenset({
+    "market", "market-ioc", "market-fok",
+    "best", "best-ioc", "best-fok",
+    "first",
+    "mid", "mid-ioc", "mid-fok",
+})
 
 
 def _resolve_order_type(order_type: str | None, price: float) -> str:
@@ -83,11 +107,18 @@ def _resolve_order_type(order_type: str | None, price: float) -> str:
 
     조용히 가격을 버리고 시장가로 나가는 사고(가격 지정 매수가 시장가 체결)를
     막는 안전장치다.
+
+    입력 오류는 `fail_input`으로 종료한다 — `click.UsageError`를 쓰면 csv/table
+    모드에서 프로젝트 컨벤션(fail_input의 스타일 있는 오류 출력/envelope)
+    대신 Click 기본 usage 배너가 노출된다(v2.9 audit finding 4: us/order_ops.py의
+    동급 가드는 이미 fail_input을 쓰는데 이쪽만 다른 메커니즘이었다). json 모드는
+    두 메커니즘 모두 이전에도 KiwoomGroup의 ClickException 처리로 envelope가
+    나갔지만, csv 모드는 raw Click 텍스트가 그대로 노출되고 있었다.
     """
     if order_type is None:
         return "limit" if price else "market"
     if price and order_type in _MARKET_TYPES:
-        raise click.UsageError(
+        fail_input(
             f"'{order_type}' 주문유형은 가격을 사용하지 않습니다. "
             "--price를 빼거나 --type limit을 지정하세요."
         )
@@ -109,24 +140,94 @@ def _strip_signed_int(value: Any) -> int:
     except ValueError:
         try:
             return int(float(v))
-        except ValueError:
+        except (ValueError, OverflowError):
+            # float(v)가 inf/-inf일 때 int()는 ValueError가 아니라 OverflowError를
+            # 던진다 — 이 분기가 없으면 계좌 잔고류 응답이 예상 밖의 값을 줄 때
+            # 전역 핸들러가 잡지 못하는 traceback으로 이어진다(json 모드 stdout
+            # 공백 — envelope-항상 계약 위반).
             return 0
 
 
 def _quote_price_kr(client, code: str) -> int:
-    """현재가 조회 (ka10001). 시장가 주문의 예상비용 계산용."""
+    """현재가 조회 (ka10001). 시장가 주문(주식/신용)의 예상비용 계산용.
+
+    가격 파싱은 (검증 등 다른 용도에 쓰이는) `_strip_signed_int`가 아니라
+    `parse_quote_price`를 거친다 — 파싱 실패를 조용히 0으로 넘기지 않고
+    QuoteUnavailable로 호출자(_dry_run_kr)에 전파한다.
+
+    ka10001은 국내주식 종목코드 전용이다 — 금현물 코드(M04020000 등)는
+    `_quote_price_gold`로 별도 라우팅한다.
+    """
     data, _ = client.request("ka10001", {"stk_cd": code}, internal=True)
-    return _strip_signed_int(data.get("cur_prc"))
+    cur_prc = data.get("cur_prc")
+    price = int(parse_quote_price(cur_prc))
+    if price <= 0:
+        # parse_quote_price는 f > 0만 보장한다(> 0, >= 1이 아님) — (0, 1) 구간의
+        # 소수가 여기서 int() 절삭으로 0이 되면 이 함수가 막으려는 바로 그 실패
+        # (price=0의 미리보기를 "실제 시세로 계산했다"고 주장)가 재현된다.
+        raise QuoteUnavailable(f"시세 값이 정수로 절삭되며 0이 되었습니다: {cur_prc!r}")
+    return price
+
+
+def _quote_price_gold(client, code: str) -> int:
+    """금현물 현재가 조회 (ka50010, 금현물체결추이). 시장가 금현물 주문의
+    예상비용 계산용.
+
+    ka10001(주식기본정보요청)은 금현물 코드를 받지 않는다 — 스펙(docs/미국
+    REST API 문서.xlsx 'ka10001' 시트) request의 stk_cd 설명이 "거래소별
+    종목코드(KRX:039490,NXT:039490_NX,SOR:039490_AL)"로 한정되고, 메뉴 위치도
+    "국내주식 > 종목정보"다. 금현물 코드는 "국내주식 > 시세 > 금현물..." 계열
+    전용 API(ka50010/ka50012/ka50079/ka50087/ka50100/ka50101 등, stk_cd에
+    M04020000/M04020100 명시)로만 조회 가능하다.
+
+    ka50010은 stk_cd만 필요해 가장 단순하고(다른 금현물 시세 API는 base_dt/
+    tic_scope 등 추가 필수 파라미터가 있음) `market gold executions`에서 이미
+    쓰이고 있어 검증된 응답 형태다. gold_cntr 리스트의 첫 원소(최신 체결)의
+    cntr_pric(체결가)을 현재가로 쓴다 — 순서가 최신(newest-first)임은 한 예시가
+    아니라 구조적으로 확정된다: 스펙 Response Example에서 0번 행이 1번 행보다
+    tm이 늦을 뿐 아니라(090106 vs 090100) trde_qty(1385 vs 1375)와
+    acc_trde_prica도 더 크다 — 이 둘은 누적값이라 시간이 지나며 감소할 수 없으므로,
+    리스트가 oldest-first라면 누적 합계가 뒤로 갈수록 줄어드는 모순이 된다.
+    주식 시세 분석의 동일 계열 API인 ka10003(체결정보)도 같은 newest-first
+    관례를 보인다.
+    """
+    data, _ = client.request("ka50010", {"stk_cd": code}, internal=True)
+    rows = data.get("gold_cntr") or []
+    if not rows:
+        raise QuoteUnavailable(f"금현물 체결 데이터가 없습니다: {code!r}")
+    cntr_pric = rows[0].get("cntr_pric")
+    price = int(parse_quote_price(cntr_pric))
+    if price <= 0:
+        # _quote_price_kr과 동일한 재검사 — parse_quote_price는 f > 0만 보장하므로
+        # (0, 1) 구간의 소수는 여기서 int() 절삭으로 0이 될 수 있다.
+        raise QuoteUnavailable(f"시세 값이 정수로 절삭되며 0이 되었습니다: {cntr_pric!r}")
+    return price
 
 
 def _dry_run_kr(api_id: str, side: str, code: str, qty: int, kr_price: int,
                 order_type: str | None, dmst_stex_tp: str | None,
                 body: dict[str, Any], show_preview) -> None:
-    """국내 주문 dry-run. 시장가면 현재가를 조회해 예상비용을 계산한다."""
+    """국내 주문 dry-run. 시장가면 현재가를 조회해 예상비용을 계산한다.
+
+    금현물 주문(kt50000/kt50001)은 ka10001이 이해하지 못하는 금현물 코드를
+    쓰므로 시세 조회를 ka50010(_quote_price_gold)으로 라우팅한다 — 그 외
+    (주식/신용, kt10000/1/kt10006/7)는 ka10001(_quote_price_kr) 그대로.
+
+    현재가 파싱이 실패하면(빈 값/숫자 아님/NaN/Inf/0 이하) price=0인 미리보기를
+    price_source="market_quote"와 함께 보여주지 않고 QUOTE_UNAVAILABLE로
+    exit 2 — "실제 시세로 계산했다"는 거짓 주장을 막는다.
+    """
     price, src = kr_price, None
     if not kr_price and side in ("buy", "sell"):
+        quote_fn = _quote_price_gold if api_id.startswith("kt50") else _quote_price_kr
         with KiwoomClient() as c:
-            price, src = _quote_price_kr(c, code), "market_quote"
+            try:
+                price, src = quote_fn(c, code), "market_quote"
+            except QuoteUnavailable as e:
+                fail_api(
+                    f"현재가 조회 결과를 해석할 수 없어 예상비용을 계산할 수 없습니다: {e}",
+                    code="QUOTE_UNAVAILABLE",
+                )
     finish_dry_run(dry_run_payload(
         api_id=api_id, side=side, symbol=code, qty=qty, price=price,
         order_type=order_type, exchange=dmst_stex_tp, currency="KRW",
@@ -395,8 +496,14 @@ def _market_open_kr() -> bool:
 def validate(side: str, code: str, qty: int, price: float, order_type: str | None, dmst_stex_tp: str):
     """주문 사전점검 — 주문을 전송하지 않는 read-only 프리플라이트. (ka10001/kt00001/kt00004)
 
-    symbol_ok / market_open / sufficient_balance / price_ok 를 점검합니다.
-    국내 주식 전용 (미국 종목 미지원). market_open은 KST 시계 휴리스틱입니다.
+    symbol_ok / market_open / sufficient_balance / price_ok / price_known 를
+    점검합니다. 국내 주식 전용 (미국 종목 미지원). market_open은 KST 시계
+    휴리스틱입니다. price_known은 --price 미지정 시 현재가(ka10001의 cur_prc)로
+    예상비용을 계산할 수 있었는지 — 시세를 해석할 수 없으면(빈 값/0 이하/NaN/
+    Inf 등) False이고, 가격을 확정하지 못한 사전점검은 valid: true를 주장하지
+    않는다(est_cost도 신뢰할 수 없는 0이 된다). 매수 측 sufficient_balance는
+    price_known이 false이면 est_cost=0에 대해 계산한 결과를 true로 보고하지
+    않는다(checks만 읽는 에이전트가 미수행 점검을 참으로 오인하지 않도록).
 
     예: kiwoom order validate buy 005930 10 --price 70000 -f json
     """
@@ -406,18 +513,41 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
 
     price_ok = price == int(price)  # 국내 지정가는 정수(원)
     with KiwoomClient() as c:
+        quote_price: float | None = None
         try:
             quote, _ = c.request("ka10001", {"stk_cd": code})
-            symbol_ok = bool(str(quote.get("stk_nm") or "").strip()
-                             or _strip_signed_int(quote.get("cur_prc")))
         except KiwoomAPIError:
-            quote = {}
             symbol_ok = False
-        est_price = int(price) if price else _strip_signed_int(quote.get("cur_prc"))
+        else:
+            # 가격 파싱은 (검증 대상이 아닌 다른 필드에 쓰이는) `_strip_signed_int`가
+            # 아니라 dry-run과 동일한 `parse_quote_price`를 거친다 — inf 같은
+            # 값에서 `_strip_signed_int`가 내는 OverflowError(미포착 traceback)를
+            # 피하고, symbol_ok 판정에 쓰는 "시세 있음"의 의미도 dry-run과 통일한다.
+            try:
+                quote_price = parse_quote_price(quote.get("cur_prc"))
+            except QuoteUnavailable:
+                quote_price = None
+            symbol_ok = bool(str(quote.get("stk_nm") or "").strip() or quote_price)
+        if price:
+            est_price = int(price)
+            price_known = True
+        elif quote_price is not None:
+            # parse_quote_price는 f > 0만 보장한다(> 0, >= 1이 아님) — (0, 1) 구간의
+            # 소수는 여기서 int() 절삭으로 0이 될 수 있다. 그 경우 price_known을
+            # true로 주장하면 est_cost=0인 사전점검이 그대로 통과(valid: true)해
+            # dry-run 경로가 막는 것과 같은 실패를 재현한다.
+            est_price = int(quote_price)
+            price_known = est_price > 0
+        else:
+            est_price = 0
+            price_known = False
         est_cost = qty * est_price
         if side == "buy":
             deposit, _ = c.request("kt00001", {"qry_tp": "3"})
-            sufficient = _strip_signed_int(deposit.get("ord_alow_amt")) >= est_cost
+            # price_known이 false면 est_cost는 신뢰할 수 없는 0이므로
+            # "ord_alow_amt >= 0"이 공허하게 참이 된다 — sufficient_balance는
+            # 수행하지 못한 점검을 true로 주장해서는 안 된다(v2.9 audit finding 1).
+            sufficient = price_known and _strip_signed_int(deposit.get("ord_alow_amt")) >= est_cost
         else:
             balance, _ = c.request("kt00004", {"qry_tp": "0", "dmst_stex_tp": dmst_stex_tp})
             held = sum(
@@ -432,6 +562,7 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
         "market_open": _market_open_kr(),
         "sufficient_balance": sufficient,
         "price_ok": price_ok,
+        "price_known": price_known,
     }
     result = {"valid": all(checks.values()), "checks": checks,
               "est_cost": est_cost, "heuristic": True}
@@ -822,13 +953,14 @@ def condition_list():
 @click.option("--exchange", "stex_tp", default="K", type=click.Choice(["K"]), help="거래소 (K=KRX)")
 @click.option("--cont-yn", default="", help="연속조회여부")
 @click.option("--next-key", default="", help="연속조회키")
-@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
+@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 조건검색 조회 실행")
 def condition_search(seq: str, stex_tp: str, cont_yn: str, next_key: str, confirm: bool):
     """조건검색 요청 일반 (ka10172).
 
     예: kiwoom order condition search 001 --confirm
     """
     confirm_gate(confirm)
+    suppress_pagination()  # 조건검색 요청도 confirm_gate 대상 — --all-pages로 재전송하면 안 됨
 
     body = {
         "trnm": "CNSRREQ",
@@ -849,13 +981,14 @@ def condition_search(seq: str, stex_tp: str, cont_yn: str, next_key: str, confir
 @condition.command("realtime")
 @click.argument("seq")
 @click.option("--exchange", "stex_tp", default="K", type=click.Choice(["K"]), help="거래소 (K=KRX)")
-@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
+@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 조건검색 실시간 등록 실행")
 def condition_realtime(seq: str, stex_tp: str, confirm: bool):
     """조건검색 요청 실시간 (ka10173).
 
     예: kiwoom order condition realtime 001 --confirm
     """
     confirm_gate(confirm)
+    suppress_pagination()  # 실시간 등록 반복은 서버측 중복 구독을 유발 — --all-pages 무시
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10173", {
@@ -869,13 +1002,14 @@ def condition_realtime(seq: str, stex_tp: str, confirm: bool):
 
 @condition.command("stop")
 @click.argument("seq")
-@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
+@click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 조건검색 실시간 해제 실행")
 def condition_stop(seq: str, confirm: bool):
     """조건검색 실시간 해제 (ka10174).
 
     예: kiwoom order condition stop 001 --confirm
     """
     confirm_gate(confirm)
+    suppress_pagination()  # 해제 요청도 confirm_gate 대상 — --all-pages로 재전송하면 안 됨
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10174", {

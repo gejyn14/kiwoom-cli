@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from click.testing import CliRunner
 
@@ -58,7 +60,9 @@ def test_us_apis_have_korean_descriptions():
 from kiwoom_cli.commands.us._constants import (  # noqa: E402
     US_BUY_TYPES,
     US_EXCHANGE,
+    US_MARKET_TYPES,
     US_ORDER_TYPES,
+    US_SELL_ONLY_TYPES,
     US_SELL_TYPES,
     US_STOP_TYPES,
 )
@@ -95,6 +99,13 @@ def test_us_order_type_codes():
     )
     assert US_SELL_TYPES == US_BUY_TYPES | frozenset({"moc", "stop", "stop-limit"})
     assert US_EXCHANGE == {"nasdaq": "ND", "nyse": "NY", "amex": "NA"}
+
+
+# test_us_market_types_reject_price (아래, Task 5 섹션)가 US_MARKET_TYPES의
+# 각 멤버에 대해 실제 주문 명령을 실행해 --price 거부를 행동으로 검증한다 —
+# 여기 있던 이전 버전(test_us_market_types_ignore_price)은 상수가 자기
+# 리터럴과 같은지만 확인해 가드 유무와 무관하게 항상 통과했다(v2.9 audit
+# finding 3, 위양성 위험 — 상수만 존재하면 가드가 실제로는 빠져 있어도 green).
 
 
 # ============================================================
@@ -291,6 +302,75 @@ def test_us_sell_stop_type_requires_stop_price(runner, us_fake):
     assert result.exit_code == 1
 
 
+# ── v2.9 task 7: US 시장가 계열(moc/vwap/twap/stop)도 --price를 거부한다
+# (ust20000/ust20001 스펙: "그 외 시장가 거래유형 설정 시 입력 값은 빈 값 처리") ──
+
+
+@pytest.mark.parametrize("otype,extra_args", [
+    ("moc", []),
+    ("stop", ["--stop", "199.99"]),
+])
+def test_us_sell_market_family_rejects_price(runner, us_fake, otype, extra_args):
+    """매도전용 시장가 계열(moc/stop)은 --price와 함께 쓰면 exit 1.
+
+    moc에는 --stop을 주지 않는다 — --stop은 stop/stop-limit 전용이라 moc과
+    같이 쓰면 (이번에 고치는 가격 가드가 아니라) 그 검사가 먼저 걸려 exit 1의
+    원인이 뒤바뀐다."""
+    result = runner.invoke(
+        cli,
+        ["order", "sell", "NVDA", "5", "--type", otype, *extra_args,
+         "--price", "200", "--confirm"],
+    )
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust20001") == []
+
+
+@pytest.mark.parametrize("otype", ["vwap", "twap"])
+def test_us_buy_market_family_rejects_price(runner, us_fake, otype):
+    """매수/매도 공통 시장가 계열(vwap/twap)은 --price와 함께 쓰면 exit 1."""
+    result = runner.invoke(
+        cli, ["order", "buy", "NVDA", "10", "--type", otype, "--price", "200", "--confirm"]
+    )
+    assert result.exit_code == 1
+    assert _order_calls(us_fake, "ust20000") == []
+
+
+def test_us_sell_stop_limit_still_accepts_price(runner, us_fake):
+    """stop-limit(34)은 시장가 계열이 아니다 — 트리거 후 지정가로 체결되므로
+    --price(정정지정가)를 계속 받아야 한다 (market-family 확장이 이름이 비슷한
+    이 유형까지 잘못 삼키지 않는지 확인, 기존 test_us_sell_stop_limit_body와
+    동일한 의도를 명시적으로 재확인)."""
+    result = runner.invoke(
+        cli,
+        ["order", "sell", "NVDA", "5", "--type", "stop-limit",
+         "--price", "200.5", "--stop", "199.99", "--confirm"],
+    )
+    assert result.exit_code == 0
+    body = _order_calls(us_fake, "ust20001")[0][1]
+    assert body["trde_tp"] == "34"
+    assert body["ord_uv"] == "200.5"
+
+
+@pytest.mark.parametrize("otype", sorted(US_MARKET_TYPES))
+def test_us_market_types_reject_price(runner, us_fake, otype):
+    """US_MARKET_TYPES의 모든 멤버가 --price와 함께 쓰이면 실제로 거부되는지
+    행동으로 검증한다 (v2.9 audit finding 3 — 이전에는 상수가 자기 리터럴과
+    같은지만 확인해 가드 유무와 무관하게 항상 통과하는 테스트가 있었다).
+
+    moc/stop은 매도 전용(US_SELL_ONLY_TYPES)이라 side=sell로 보낸다. stop은
+    --stop 트리거 가격도 함께 줘야 한다 — 안 그러면 (이번에 검증하려는 가격
+    가드가 아니라) '--stop 필요' 가드가 먼저 걸려 exit 1의 원인이 뒤바뀐다
+    (test_us_sell_market_family_rejects_price와 동일한 주의사항)."""
+    side = "sell" if otype in US_SELL_ONLY_TYPES else "buy"
+    args = ["order", side, "NVDA", "5", "--type", otype, "--price", "200", "--confirm"]
+    if otype in US_STOP_TYPES:
+        args += ["--stop", "199.99"]
+    result = runner.invoke(cli, args)
+    assert result.exit_code == 1
+    api_id = "ust20001" if side == "sell" else "ust20000"
+    assert _order_calls(us_fake, api_id) == []
+
+
 def test_kr_buy_unchanged_and_fractional_price_rejected(runner, us_fake):
     ok = runner.invoke(
         cli, ["order", "buy", "005930", "10", "--price", "70000", "--type", "limit", "--confirm"]
@@ -330,6 +410,56 @@ def test_us_sell_rejects_cond_price(runner, us_fake):
     result = runner.invoke(cli, ["order", "sell", "NVDA", "1", "--cond-price", "500", "--confirm"])
     assert result.exit_code == 1
     assert _order_calls(us_fake, "ust20001") == []
+
+
+# ============================================================
+#  v2.9 audit fix: US dry-run est_cost must use real quote (cur_prc)
+# ============================================================
+
+
+def test_us_market_dry_run_uses_real_quote(runner, us_fake):
+    """US 시장가 dry-run의 est_cost는 usa20100의 cur_prc에서 계산된다 (now_pric 아님).
+
+    usa20100 스펙 응답 예시: "cur_prc": "+201.4700". 필드명이 틀리면 quote lookup이
+    항상 미스해 est_cost가 조용히 0으로 렌더링된다 — dry-run의 목적(주문 전 안전
+    점검)을 정확히 무력화하는 버그.
+    """
+    us_fake.set_response(
+        "usa20100", {"return_code": 0, "stk_cd": "NVDA", "cur_prc": "+201.4700"}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "NVDA", "10", "--type", "market", "--dry-run"],
+    )
+    assert result.exit_code == 0
+    doc = json.loads(result.output)
+    payload = doc["data"]
+    assert payload["price"] == pytest.approx(201.47)
+    assert payload["est_cost"] == pytest.approx(2014.70)
+    assert payload["price_source"] == "market_quote"
+    assert _order_calls(us_fake, "ust20000") == []  # dry-run이므로 실제 주문 미전송
+
+
+def test_us_market_dry_run_unparseable_quote_fails_loudly(runner, us_fake):
+    """cur_prc가 파싱 불가능하면 est_cost=0 + price_source='market_quote'인 거짓
+    미리보기 대신 QUOTE_UNAVAILABLE(exit 2)로 실패해야 한다 (KR과 동일한 계약).
+
+    스펙상 cur_prc는 항상 포매팅된 숫자 문자열이지만, 업스트림이 예상 밖의 값을
+    주는 경우까지 대비한다 — dry-run이 "실제 시세로 계산했다"고 주장하면서
+    가격 0을 보여주는 것이 최악의 결과다.
+    """
+    us_fake.set_response(
+        "usa20100", {"return_code": 0, "stk_cd": "NVDA", "cur_prc": "N/A"}
+    )
+    result = runner.invoke(
+        cli,
+        ["-f", "json", "order", "buy", "NVDA", "10", "--type", "market", "--dry-run"],
+    )
+    assert result.exit_code == 2
+    doc = json.loads(result.output)
+    assert doc["error"]["code"] == "QUOTE_UNAVAILABLE"
+    assert doc["data"] is None
+    assert _order_calls(us_fake, "ust20000") == []
 
 
 # ============================================================

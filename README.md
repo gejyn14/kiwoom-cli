@@ -440,7 +440,7 @@ kiwoom order condition search 001 --confirm
 
 - `--dry-run` — 실제 전송될 request body를 그대로 출력하고 아무것도 전송하지 않습니다. `--confirm`보다 우선합니다. 시장가 주문은 현재가를 조회해 예상비용(`est_cost`)을 계산합니다.
 - `--client-order-id KEY` — 멱등성 키. 같은 키로 재실행하면 재전송 없이 이전 응답을 반환합니다(`idempotent_replay: true`). 네트워크 단절·에이전트 재시도로 인한 중복 주문을 방지합니다. 원장: `~/.kiwoom/idempotency/<프로필>-<환경>.jsonl`
-- `order validate buy|sell CODE QTY` — read-only 사전점검. `symbol_ok` / `market_open`(KST 시계 휴리스틱, 공휴일 미감지) / `sufficient_balance` / `price_ok`를 점검하고, 실패 시 `VALIDATION_FAILED` + 실패 항목을 `error.details`에 담아 exit 1. 국내 주식 전용.
+- `order validate buy|sell CODE QTY` — read-only 사전점검. `symbol_ok` / `market_open`(KST 시계 휴리스틱, 공휴일 미감지) / `sufficient_balance` / `price_ok` / `price_known`(--price 미지정 시 현재가로 예상비용을 계산할 수 있었는지)를 점검하고, 실패 시 `VALIDATION_FAILED` + 실패 항목을 `error.details`에 담아 exit 1. 국내 주식 전용.
 
 ---
 
@@ -593,7 +593,12 @@ kiwoom -f csv stock daily 005930 > samsung_daily.csv
 
 ### JSON 응답 envelope (v1)
 
-`-f json`의 모든 응답은 성공/실패 모두 하나의 안정적인 envelope로 감쌉니다. table/csv 모드는 그대로입니다.
+`-f json`의 모든 응답은 성공/실패 모두 하나의 안정적인 envelope로 감쌉니다 —
+이 envelope 구조 자체는 table/csv 모드에는 적용되지 않습니다. 단, 호가·체결가
+등 방향지시자 필드의 부호 제거·숫자 타입 변환(`kiwoom_cli/formatters.py`의
+`_ABS_FIELDS`/`_SIGNED_FIELDS`)은 `-f json`의 `data`뿐 아니라 **table** 렌더링에도
+동일하게 적용됩니다(`_needs_fmt`가 같은 필드 분류를 공유) — `-f csv`는
+정규화·서식 변환 없이 원본 값을 그대로 쓰므로 영향이 없습니다.
 
 ```json
 {
@@ -619,6 +624,8 @@ kiwoom -f csv stock daily 005930 > samsung_daily.csv
 | code | retryable | 의미 (upstream) |
 | --- | :---: | --- |
 | `INVALID_INPUT` | X | 입력 값/필수 파라미터 오류 (2, 1511, 1512, 1517) |
+| `VALIDATION_FAILED` | X | `order validate` 사전점검 실패 — 실패 항목은 `error.details` (exit 1) |
+| `CONFIRMATION_REQUIRED` | X | 변이 명령에 `--confirm`/`--yes` 없이 json/csv 모드로 실행 (exit 1) |
 | `INVALID_API` | X | 잘못된 API ID (1501, 1504, 1505) |
 | `NOT_FOUND` | X | 시장/종목 정보 없음 (1901, 1902) |
 | `AUTH_REQUIRED` | X | 인증 헤더/토큰 누락 (1513~1516, 토큰 미보유 시 로컬 감지) |
@@ -634,7 +641,10 @@ kiwoom -f csv stock daily 005930 > samsung_daily.csv
 | `KEYCHAIN_UNAVAILABLE` | X | OS 키체인 접근 불가 (샌드박스/CI) |
 | `NOT_CONFIGURED` | X | `config setup` 미실행 (CLI 로컬 감지) |
 | `DEPENDENCY_MISSING` | X | 선택적 패키지 미설치 (예: `websockets` 없이 `stream`) |
+| `IDEMPOTENCY_CONFLICT` | X | 같은 `--client-order-id`가 다른 주문 내용으로 이미 사용됨 — 전송되지 않음 (exit 1) |
 | `LEDGER_BUSY` | O | 멱등성 원장 잠금 경합 — 재시도 (exit 2) |
+| `ORDER_STATUS_UNKNOWN` | X | 이전 시도가 전송 후 응답을 받지 못함 — 재전송하지 않음, `account orders pending`으로 확인 (exit 2) |
+| `QUOTE_UNAVAILABLE` | X | `--dry-run` 시장가 예상비용 계산용 시세를 숫자로 해석할 수 없음 (exit 2) |
 | `UPSTREAM_ERROR` | 5xx·1999는 O | 미분류 업스트림 오류 (기본값) |
 
 CLI 수준의 인자/옵션 오류(잘못된 값, 인자 누락 등)도 json 모드에서는 `INVALID_INPUT` envelope로 출력됩니다 (`upstream_code: null`, exit 1). `kiwoom api --raw`는 json 모드에서도 envelope로 감싸되 `data`에 응답 원본을 그대로(`return_code` 포함) 담습니다. `auth login`은 json 모드에서 `{profile, token_storage, saved, token}`을 반환하며, `token` 원문은 env 모드에서만 포함됩니다.

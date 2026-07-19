@@ -190,6 +190,46 @@ _ABS_FIELDS = frozenset({
     "buy_1bid", "buy_2bid", "buy_3bid", "buy_4bid", "buy_5bid",
     "buy_6bid", "buy_7bid", "buy_8bid", "buy_9bid", "buy_10bid",
     "poss_qty", "sell_alowq",
+    # Task 3b — 스펙 Response Example에서 +/- 방향지시자를 확인한 호가·체결가 필드.
+    # sel_bid(ka10016/17/18/24/26/29/32/34 등 13개), buy_bid(12개): "매도호가"/"매수호가"
+    "sel_bid", "buy_bid",
+    # cntr_pric(체결가, ka10055/50010/50092/50101 등에서 "+" 확인)
+    "cntr_pric",
+    # pri_sel_bid_unit/pri_buy_bid_unit(ka10003/ka10084 등에서 +/- 확인)
+    "pri_sel_bid_unit", "pri_buy_bid_unit",
+    # wonju_pric(원주가격, ka40006/ka40007 예시 "-10")
+    "wonju_pric",
+    # past_curr_prc(과거현재가, ka00198 예시 "+70700")
+    "past_curr_prc",
+    # 52wk_hgst_pric/52wk_lwst_pric(ka20001/ka20009 예시 "+3001.91"/"-1608.07")
+    "52wk_hgst_pric", "52wk_lwst_pric",
+    # tdy_high_pric/tdy_low_pric(당일고가/당일저가, ka10018 예시 +/- 확인)
+    "tdy_high_pric", "tdy_low_pric",
+    # ka10095(관심종목정보) 호가 1~5단계: 예시에서 "+" 확인. buy_5th_bid만 예시값이
+    # "121700"으로 부호 없이 나타나지만, 같은 object의 나머지 9개 호가 필드(sel_1th_bid~
+    # sel_5th_bid, buy_1th_bid~buy_4th_bid)가 모두 signed이고 매수호가는 어떤 경우에도
+    # 음수가 될 수 없으므로 부호 제거는 안전하다 — 4개만 벗기고 5번째만 방향지시자를
+    # 노출하면 그 자체로 버그처럼 보인다 (리뷰 Finding 3, 문서 예시가 진짜여도 안전한 판단).
+    "sel_1th_bid", "sel_2th_bid", "sel_3th_bid", "sel_4th_bid", "sel_5th_bid",
+    "buy_1th_bid", "buy_2th_bid", "buy_3th_bid", "buy_4th_bid", "buy_5th_bid",
+    # cur_prc_n(지수현재가 짝필드, ka20001/ka20009/ka40008 예시 +/- 확인).
+    # _get_label이 "_n" 접미사를 떼고 base 라벨을 쓰지만 멤버십 검사는 원본 키로
+    # 하므로 별도 등록 필요 (base cur_prc와 동일 취급).
+    #
+    # 불변식(리뷰 Finding 4에서 확인): _get_label()은 "_n"으로 끝나는 아무 키에나
+    # 접미사를 떼는 *일반* fallback을 쓰지만, 이 멤버십 검사(_ABS_FIELDS/_SIGNED_FIELDS)는
+    # 하드코딩된 개별 키 나열이라 라벨 fallback과 동기화돼 있지 않다. 오늘은 스펙에
+    # "_n" 접미사 필드가 정확히 10개뿐이고(직접 재검증함) 그중 가격류 5개(cur_prc_n/
+    # trde_qty_n/acc_trde_qty_n 및 아래 _SIGNED_FIELDS의 pred_pre_n/flu_rt_n)만 여기
+    # 등록돼 있어 문제가 없지만 — 향후 새 "_n" 가격 필드가 스펙에 추가되면 라벨은
+    # 정상 표시되면서 부호는 조용히 그대로 새어나갈 수 있다.
+    "cur_prc_n",
+    # trde_qty_n/acc_trde_qty_n: base(trde_qty/acc_trde_qty)가 이미 ABS이므로 짝필드도
+    # 동일 취급 — 스펙 예시에서 +/- 부호가 관측된 적은 없는 수량 필드다(근거 없이 base를
+    # 따라간 것으로, 형제 필드 정황 증거로 편입한 buy_5th_bid와는 다른 기준). "부호가
+    # 없으니 벗겨도 no-op"이라는 주장은 틀렸다: normalize.py를 거치면 문자열 "890"이
+    # 정수 890으로 타입 자체가 바뀌므로 -f json 소비자에게는 실질적인 변화다 (Finding 4).
+    "trde_qty_n", "acc_trde_qty_n",
 })
 
 # Fields where +/- is meaningful (changes, rates).
@@ -198,12 +238,106 @@ _SIGNED_FIELDS = frozenset({
     "tdy_lspft", "lspft", "tdy_lspft_rt", "lspft_rt", "lspft_ratio",
     "11", "12", "15",  # WebSocket: 전일대비, 등락율, 거래량(+매수/-매도)
     "938", "940", "950", "951",  # WebSocket: 당일순매수수량, 당일총매도손익, 당일실현손익(율)
+    # Task 3b — pred_pre_n/flu_rt_n: base(pred_pre/flu_rt)가 실제 등락폭·등락율(부호가
+    # 곧 값)이므로 짝필드(ka20001/ka20009/ka40008 지수)도 동일하게 부호 보존
+    "pred_pre_n", "flu_rt_n",
 })
 
-# Code fields that should never be number-formatted.
+# Code fields that should never be number-formatted. 날짜(YYYYMMDD)/시각(HHMMSS)
+# 필드. print_generic_table은 API 응답(Response)만 그리고 요청 바디는 거치지
+# 않으므로, 아래 각 항목은 Response 필드 기준으로 검증했다. expires_dt(au10001)만
+# 별도 표기가 있는데, 이는 Request/Response 구분의 예외가 아니라 — au10001의
+# expires_dt는 정상적인 Response 필드다 — 렌더링 경로의 예외다(client.py가
+# 직접 처리해 보통 이 게이트를 타지 않고, raw `kiwoom api au10001`로만 도달함;
+# 아래 개별 항목 참고). 스펙 전체(미구현 API 포함, 339시트)에서 "dt" 필드는
+# 49개 시트에서 일자(YYYYMMDD)로, 3개 시트(usa26410/usa26413/usa26414)에서
+# 연도(YYYY)로 쓰인다.
 _CODE_FIELDS = frozenset({
     "stk_cd", "ord_no",
     "symbol", "order_no",  # 정규화 canonical 이름 (history 등 이벤트 테이블)
+    "dt", "date", "tm",
+    "ord_tm", "cntr_tm", "cntr_dt", "trde_dt",
+    "qry_dt", "qry_tm",  # ka10040/ka10053 조회일자/조회시간(같은 오브젝트의 형제
+    # 필드쌍). 실제 예시값은 둘 다 3자리 이하 잡음("012"/"017"/"050" 등)이고 desc도
+    # 비어 있어 개별 근거는 약하지만 정확히 동일하게 약하다 — 한쪽만 등록하면 같은
+    # 오브젝트 안에서 렌더링이 갈리므로 둘 다 포함(오늘은 길이<=4라 무해, 값이
+    # 길어지면 실질적 불일치가 됨).
+    "expr_dt", "loan_dt", "crd_loan_dt",
+    "dt_n", "tm_n",  # ka20001/ka20009 지수 짝필드. _get_label()은 "_n" 접미사를 떼고
+    # base 라벨(일자/시간)로 표시하지만 이 멤버십 검사는 원본 키로 하므로 별도 등록
+    # 필요 (cur_prc_n과 동일 패턴, 위 _ABS_FIELDS 블록의 불변식 주석 참고).
+    #
+    # "dt"는 Response 바디에서는 예외 없이 일자(YYYYMMDD) — kiwoom-cli가 구현한
+    # 217개 API 중 46개가 한글명 "일자"로 쓰고 "연도"로 쓰는 구현 API는 0개다.
+    # Request 바디에서는 일부 순위류 API(ka10016/34/36/37/38/39/42/43/131,
+    # ka30002, ka40001)에서 "기간"(조회 기간 코드: 5/10/20/60/120/250 등)을
+    # 의미하지만, 요청 파라미터로만 나타나고 print_generic_table은 응답만 그리므로
+    # 이 플랫 셋에 안전하게 함께 둘 수 있다 — 기간 코드값은 최대 3자리라 길이 게이트
+    # 자체를 넘지 못해 어차피 무해하다.
+    #
+    # 제외한 후보:
+    # - base_dt("기준일자") — 구현된 217개 API에서는 17개(ka10051/ka10080~83/
+    #   ka10094/ka10170/ka20005~08/ka20019/ka30003/ka50012/ka50081~83) 모두
+    #   Request 전용이고 그 Response 바디에는 등장하지 않는다 — 이 게이트가 다루는
+    #   표시 경로(API 응답 렌더링)에 도달할 수 없어 제외. 스펙 전체(미구현 API
+    #   포함) 관점에서는 usa21670/usa21680/usa21690(기준일 — 값이 시트마다 다름:
+    #   usa21670 "20260503"=YYYYMMDD, usa21680 "202605"=YYYYMM, usa21690
+    #   "2026"=연도만), usa24110/usa24111(최고/최저일시), usa24120/usa24121
+    #   (기준일자, 예 "20260508") 7개 US 시트에서 Response 필드로도 쓰이지만,
+    #   전부 API_REGISTRY에 없는(미구현) API라 이 코드베이스에서 base_dt가
+    #   Response로 렌더링될 경로는 없다.
+    # - rgt_dt — 스펙 전체(Request/Response 불문)에 해당 키가 존재하지 않음
+    #   (브리프의 오기로 추정).
+    "exp_tm",  # ka50087 예상 체결 시간, 예 "085957"(HHmmss, 선행 0 유실 사례)
+    "elwexpr_dt",  # ka10095 ELW만기일, 예 "00000000"(만기 없음 0 sentinel)
+    "bid_req_base_tm",  # ka10004/ka10087 호가잔량기준시간, 예 "162000"(HHmmss)
+    "regDay",  # ka10099/ka10100 상장일, 예 "20091204" (camelCase 원본 필드명)
+    "bid_tm",  # ka10095 호가시간 "164000"(HHmmss) / usa20101 "08:16"(HH:mm)
+    "52wk_hgst_pric_dt", "52wk_lwst_pric_dt",  # ka20001/ka20009/usa20100, 예 "20241004"/"20241031"
+    "oyr_hgst_dt", "oyr_lwst_dt",  # usa20100 연중최고/최저가일, 예 "20260514"/"20260330"
+    "setl_dt",  # kt00008 결제일자, 예 "20241126"
+    "d0_setl_dt", "d1_setl_dt", "d2_setl_dt", "d3_setl_dt", "d4_setl_dt",  # ust21160 D0~D4 국내결제일자
+    "bus_dt",  # usa06010/usa06011 영업일자, 예 "20260624"
+    "trde_cntr_proc_time", "virelis_time",  # ka10054 매매체결처리시각/VI해제시각, 예 "172311"/"172511"
+    "sel_scesn_tm", "buy_scesn_tm",  # ka10040/ka10053 매도/매수이탈시간, 예 "154706"/"151615"
+    "deal_dt",  # kt50032/ust21100 거래일자, 예 "20260511"
+    "sell_dt",  # ust21530 매도일자, 예 "20260611"
+    "cnfm_tm",  # kt00007/kt50031 확인시간(desc "HH:mm:ss"). 두 API 모두 스펙 예시는
+    # 공백이지만 desc가 명시적이고 모순되는 값이 없어 등록.
+    "exec_dt",  # ka30012 행사일, 예 "20241216"
+    "fin_trde_dt", "flo_dt",  # ka30005 최종거래일/상장일(elw 접두사 없는 원본 키), 예 "20241212"/"20240320"
+    "elwfin_trde_dt", "elwflo_dt", "elwpay_dt", "lpsuply_end_dt",  # ka30012, 예 "20241212"/"20240124"/"20241218"/"20241212"
+    "lpinitlast_suply_dt",  # ka30005 LP초종공급일, 예 "20241212"
+    "trde_strt_dt",  # ka10007 거래시작일, 예 "00000000" (만기 없음과 동일한 0 sentinel)
+    "ord_dt",  # ust21180 주문일, 예 "20260605"
+    "expires_dt",  # au10001(OAuth 토큰발급) 만료일, 예 "20241107083713"(YYYYMMDDHHmmss).
+    # client.py의 issue_token()이 직접 다뤄 보통은 print_generic_table을 거치지
+    # 않지만, raw `kiwoom api au10001 '{}'`(table 모드)는 이 경로를 그대로 탄다.
+    #
+    # 아래 둘은 desc가 명시적으로 "YYYYMMDD"이고 동일 목적의 자매 필드
+    # (52wk_hgst_pric_dt 등)가 확인돼 있어 편입했지만, 이 API 자신의 Response
+    # Example만으로는 직접 확인되지 않는다 — 근거가 간접적임을 밝혀둔다.
+    "hgst_pric_dt", "lwst_pric_dt",  # ka10007 최고가일/최저가일. 예시가 항상 공백("")
+    "250hgst_pric_dt", "250lwst_pric_dt",  # ka10001 250최고가일/최저가일. 이 API의
+    # Response Example 자체가 손상돼 있다(같은 예시에서 upl_pric/base_pric에는
+    # 날짜값이, 250hgst_pric_dt/250lwst_pric_dt에는 "3"/"0.00"이 들어있음 — 컬럼이
+    # 밀린 문서 오류로 보임. docs/키움 REST API 문서.xlsx에도 동일하게 손상돼 있어
+    # 파싱 오류가 아니라 스펙 문서 자체의 결함으로 확인함).
+    "base_pric_tm",  # ka90008/ka90013 기준가시간, desc "HHmmss"(예시는 공백). 같은
+    # 키가 ka30001에도 있으나 값이 "기준가(11/21)" 같은 텍스트 라벨이라 애초에
+    # isdigit() 게이트를 통과 못해 멤버십과 무관하게 안전하다 — 세 API가 이 플랫
+    # 셋을 공유하므로, ka90008/ka90013 쪽 실제 HHmmss 값을 지키기 위해 포함한다.
+    "fr_dt", "to_dt",  # ka30012 평가시작일자/평가종료일자(desc 없음, 이 API 자신의
+    # 예시는 항상 공백). 같은 키가 kt00016(desc "YYYYMMDD", 예 "20241111"/
+    # "20241125")과 ust21650(desc "YYYYMMDD", 예 "20260501"/"20260507")에서
+    # 실제 날짜값으로 확인됨 — 그 두 API에서는 Request 전용이라 이 게이트와 무관
+    # 하지만, 동일 키가 ka30012에서는 Response 필드이므로 그 경로로 렌더링될 수
+    # 있어 포함한다.
+    #
+    # 검토했으나 제외: fr_tm/evlt_end_tm(ka30012 평가시작/종료시간) — desc가 없고
+    # 예시도 항상 공백이며, fr_dt/to_dt와 달리 스펙 전체(339 + 209시트)를 통틀어
+    # 이 두 키가 등장하는 곳이 ka30012 하나뿐이라 대조할 자매 필드가 없다 — 근거
+    # 부족으로 제외.
 })
 
 # USD decimal fields (up to 4 decimals). Routed to _fmt_usd by _smart_fmt.
@@ -234,6 +368,26 @@ def _smart_fmt(value: str, field_key: str) -> str:
     if field_key in _ABS_FIELDS:
         return _fmt_number(value, strip_sign=True)
     return _fmt_number(value)
+
+
+# Union of every field _smart_fmt knows how to classify. Fields in this set
+# always bypass the length-gated fallback below (see _needs_fmt).
+_CLASSIFIED_FIELDS = _USD_FIELDS | _ABS_FIELDS | _SIGNED_FIELDS
+
+
+def _needs_fmt(k: str, v: str) -> bool:
+    """Whether print_generic_table should route a cell through _smart_fmt.
+
+    Classified fields (_USD_FIELDS/_ABS_FIELDS/_SIGNED_FIELDS — the project's
+    source of truth for numeric field types) always go through _smart_fmt,
+    regardless of value length. Everything else falls back to the historical
+    heuristic (numeric-looking and >4 chars, excluding known code fields) so
+    unclassified short numeric codes (e.g. leading-zero business codes like
+    inds_cd) keep their pre-existing raw rendering.
+    """
+    if k in _CLASSIFIED_FIELDS:
+        return True
+    return k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4
 
 
 def _find_list(data: dict) -> list | None:
@@ -418,7 +572,7 @@ def print_account_eval(data: dict[str, Any]) -> None:
                 h.get("stk_nm", ""),
                 _fmt_number(h.get("rmnd_qty", "")),
                 _fmt_number(h.get("avg_prc", "")),
-                _fmt_number(h.get("cur_prc", "")),
+                _fmt_number(h.get("cur_prc", ""), strip_sign=True),
                 _fmt_number(h.get("evlt_amt", "")),
                 Text(_fmt_number(pl), style=color),
                 Text(h.get("pl_rt", "0") + "%", style=color),
@@ -803,7 +957,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             row = []
             for k in keys:
                 v = str(item.get(k, ""))
-                if k in _USD_FIELDS or (k not in _CODE_FIELDS and v.lstrip("+-").isdigit() and len(v) > 4):
+                if _needs_fmt(k, v):
                     row.append(_smart_fmt(v, k))
                 else:
                     row.append(v)
@@ -824,7 +978,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
             for k, v in scalar.items():
                 label = _get_label(k)
                 sv = str(v)
-                if k in _USD_FIELDS or (k not in _CODE_FIELDS and sv.lstrip("+-").isdigit() and len(sv) > 4):
+                if _needs_fmt(k, sv):
                     sv = _smart_fmt(sv, k)
                 t.add_row(label, sv)
             console.print(t)
@@ -935,7 +1089,7 @@ def print_unified_balance(kr_data: dict[str, Any] | None, us_data: dict[str, Any
                 h.get("stk_nm", ""),
                 _fmt_number(h.get("rmnd_qty", "")),
                 _fmt_number(h.get("avg_prc", "")),
-                _fmt_number(h.get("cur_prc", "")),
+                _fmt_number(h.get("cur_prc", ""), strip_sign=True),
                 f"₩{_fmt_number(h.get('evlt_amt', ''))}",
                 Text(_fmt_number(pl), style=color),
                 Text(h.get("pl_rt", "0") + "%", style=color),
