@@ -9,6 +9,7 @@ representative smoke per additional subgroup.
 
 from __future__ import annotations
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -2109,15 +2110,78 @@ def test_sector_index_sector_code_alias_matches_old_name(runner, fake_client):
     assert fake_client.calls == [("ka20003", {"inds_cd": "101"})]
 
 
-def test_rank_new_highlow_help_shows_human_name_first():
-    """Click은 처음 선언한 이름을 대표 이름으로 --help에 보여준다 — human
-    이름(--stock-cond)이 구 이름(--stk-cnd)보다 먼저 보여야 한다."""
+def _discover_dual_spelling_options() -> list[tuple[list[str], str, str]]:
+    """Click 트리를 순회해 human/legacy 이중 철자 옵션을 모두 찾는다.
+
+    대상: 롱폼(--) 이름을 정확히 2개 가지면서 값을 받는(is_flag=False)
+    옵션. --confirm/--yes 같은 boolean 플래그 별칭은 두 이름이 대등한
+    선택지이지 "human 이름이 legacy 이름의 대표"인 관계가 아니므로
+    (constraint 3의 대상이 아니므로) 제외한다.
+
+    하드코딩된 사이트 목록 대신 트리를 직접 순회하는 이유: 사이트가
+    추가돼도 이 목록이 자동으로 따라가야 커버리지 누락을 막을 수 있다.
+
+    human/legacy 판별: 두 스펠링 중 더 긴 쪽(풀어쓴 human 이름)이 human,
+    짧은 쪽(키움 wire 필드를 그대로 축약한 이름)이 legacy다. 이 판별은
+    문자열 길이만으로 결정하며 `param.opts`의 선언 순서를 절대 참조하지
+    않는다 — 선언 순서 자체가 검증 대상(constraint 3)이므로, 그 순서에서
+    "어느 쪽이 human인지"를 역산하면 항상 참이 되는 순환 검증이 되어
+    선언 순서가 뒤바뀌어도 테스트가 잡아내지 못한다.
+    """
+    sites: list[tuple[list[str], str, str]] = []
+
+    def walk(cmd: click.BaseCommand, path: list[str]) -> None:
+        if isinstance(cmd, click.Group):
+            for name, sub in cmd.commands.items():
+                walk(sub, path + [name])
+            return
+        for param in cmd.params:
+            if (
+                isinstance(param, click.Option)
+                and len(param.opts) == 2
+                and all(opt.startswith("--") for opt in param.opts)
+                and not param.is_flag
+            ):
+                opt_a, opt_b = param.opts
+                assert len(opt_a) != len(opt_b), (
+                    f"{path} {param.opts}: 두 스펠링의 길이가 같아 "
+                    "길이 기준으로 human/legacy를 구분할 수 없다 — "
+                    "판별 기준을 재검토할 것"
+                )
+                human_opt, legacy_opt = sorted(param.opts, key=len, reverse=True)
+                sites.append((path, human_opt, legacy_opt))
+
+    walk(cli, [])
+    return sites
+
+
+_DUAL_SPELLING_SITES = _discover_dual_spelling_options()
+
+
+@pytest.mark.parametrize(
+    "cmd_path,human_opt,legacy_opt",
+    _DUAL_SPELLING_SITES,
+    ids=[f"{'-'.join(path)}:{human}" for path, human, _ in _DUAL_SPELLING_SITES],
+)
+def test_help_shows_human_name_before_legacy_name(cmd_path, human_opt, legacy_opt):
+    """Click은 처음 선언한 이름을 대표 이름으로 --help에 보여준다 — 모든
+    human/legacy 이중 철자 옵션 사이트에서 human 이름이 legacy 이름보다
+    먼저 선언(따라서 --help에도 먼저 표시)되어야 한다 (constraint 3).
+
+    kiwoom-cli 전체에서 발견되는 이중 철자 사이트 20곳을 전수 커버한다."""
     runner_ = CliRunner()
-    result = runner_.invoke(cli, ["market", "rank", "new-highlow", "--help"])
+    result = runner_.invoke(cli, [*cmd_path, "--help"])
     assert result.exit_code == 0
-    assert "--stock-cond" in result.output
-    idx_new = result.output.index("--stock-cond")
-    idx_old = result.output.index("--stk-cnd")
-    assert idx_new < idx_old
+    assert human_opt in result.output
+    assert legacy_opt in result.output
+    idx_human = result.output.index(human_opt)
+    idx_legacy = result.output.index(legacy_opt)
+    assert idx_human < idx_legacy
+
+
+def test_discover_dual_spelling_options_finds_all_twenty_sites():
+    """발견 로직 자체의 회귀 테스트 — 20곳이라는 숫자가 임의로 줄어들면
+    (검색 조건이 잘못돼 사이트를 놓치면) 여기서 바로 드러나야 한다."""
+    assert len(_DUAL_SPELLING_SITES) == 20
 
 
