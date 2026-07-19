@@ -40,6 +40,38 @@
   영향이 없습니다. 값 목록이 API마다 다른 자리(`stk_cnd`/`sort_tp`/가격조건)는
   형제 API에만 있는 이름이 거부되는지까지 테스트로 못 박았습니다.
 
+`market rank change`(ka10027)의 `--vol-cnd`(`trde_qty_cnd`) 기본값도 원시
+`"0"`이었습니다. 이 API의 거래량조건은 4자리 zero-pad(`0000`~`1000`)만
+받는데, `"0"`은 그 목록에 없는 값입니다. 그 밖에 `market rank`의
+등락률상위~증권사별매매상위 9개 커맨드(ka10027/29/31/33/34/35/36/37/39)의
+나머지 숫자코드 옵션도 human-readable 이름으로 전환했습니다
+(`rank volume`/`rank amount`/`rank broker-by-stock` = ka10030/32/38은
+직전 릴리스에서 이미 전환됐습니다).
+
+**Fixed**
+
+- **`market rank change`(ka10027)의 `--vol-cnd` 기본 전송값이 스펙 값이
+  아니었습니다.** `"0"` → `"0000"`으로 고쳤습니다. 스펙의 전체조회 값이라
+  종전 의도인 "거래량 필터 없음"이 그대로 유지됩니다.
+
+**Breaking**
+
+- **`market rank change --vol-cnd 0`이 거부됩니다(exit 1).** `"0"`이 종전
+  기본값이었으므로 스크립트에 박혀 있을 가능성이 있습니다. 스펙 값
+  (`0000`/`0010`/`0050`/`0100`/`0150`/`0200`/`0300`/`0500`/`1000`)이나
+  `--vol-cnd all` 같은 human-readable 이름으로 바꿔야 합니다.
+
+**Non-breaking (사람이 읽는 이름 추가, 하위호환)**
+
+- `market rank`의 `change`/`expected-change`/`prev-volume`/`credit-ratio`/
+  `foreign-period`/`foreign-consecutive`/`foreign-exhaust`/`foreign-broker`/
+  `broker-top`(ka10027/29/31/33/34/35/36/37/39) 9개 커맨드의 옵션 28개가
+  human-readable 이름을 받습니다(`--sort rise-rate`, `--credit
+  all-financing`, `--type net-buy`, `--period previous` 등). raw
+  숫자코드도 그대로 통과하므로 기존 호출은 `--vol-cnd 0`을 제외하면
+  영향이 없습니다. `ka10034`/`ka10036`/`ka10037`의 `--period`(`dt`)는 값이
+  완전히 동일해 하나의 코드북으로 수렴시켰습니다.
+
 ## [2.11.0] - 2026-07-19
 
 `market rank volume`(ka10030)의 `--include-managed` help 문구가 스펙과 정반대였고,
