@@ -765,6 +765,11 @@ CREDIT_RATIO_CREDIT_CND = {
 # _constants.py 상단 AMT_QTY_TP_0_1 주석 옆 참고). ka10038의
 # PERIOD_DAYS_OFF_BY_ONE(off-by-one)이나 ka10039의 BROKER_TOP_PERIOD
 # (20d 없음)와는 값 집합이 달라 그쪽과는 절대 합치지 말 것.
+# 이 상수는 이 파일에서 유일하게 3개 API(ka10034/ka10036/ka10037)를 동시에
+# 서빙한다 — 지금은 워크북상 세 시트의 dt 값 집합이 character-for-character
+# 동일함이 확인됐지만, 나중에 키움이 셋 중 하나만 개정하면 여기를 제자리에서
+# 고치지 말고 그 API 전용 상수로 갈라낼 것 — 제자리 수정은 나머지 두 API를
+# 조용히 함께 오염시킨다.
 PERIOD_TODAY_PREV_5_60 = {
     "today": "0", "previous": "1", "5d": "5", "10d": "10", "20d": "20", "60d": "60",
 }
@@ -781,7 +786,12 @@ FOREIGN_PERIOD_SIDE = {"net-sell": "1", "net-buy": "2", "net-trade": "3"}
 FOREIGN_CONSECUTIVE_SIDE = {"net-sell": "1", "net-buy": "2"}
 
 # ka10035(외인연속순매매상위) 전용 — base_dt_tp(기준일구분, 0:당일기준,
-# 1:전일기준). 1곳: ka10035.
+# 1:전일기준). 1곳: ka10035. **cross-field 해저드**: 값 집합(today:0,
+# previous:1)이 PERIOD_TODAY_PREV_5_60(ka10034/36/37의 dt)과
+# BROKER_TOP_PERIOD(ka10039의 dt) 양쪽 모두의 진짜 부분집합이다 — 필드
+# 자체가 다른데(base_dt_tp vs dt) 흔한 today/previous 키 이름 때문에
+# "today/previous 상수 통합" 리팩터가 이 상수를 그 두 상수 중 하나로 잘못
+# 흡수하기 쉽다. 절대 합치지 말 것.
 FOREIGN_CONSECUTIVE_BASE_DATE = {"today": "0", "previous": "1"}
 
 # ka10037(외국계창구매매상위) 전용 — trde_tp(매매구분, 1:순매수,2:순매도,

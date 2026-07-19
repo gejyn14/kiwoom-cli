@@ -1126,6 +1126,23 @@ def test_rank_change_credit_rejects_name_absent_from_ka10027(runner, fake_client
     assert fake_client.calls == []
 
 
+@pytest.mark.parametrize("absent", ["exclude-overlimit", "short"])
+def test_rank_credit_ratio_credit_rejects_name_absent_from_ka10033(runner, fake_client, absent):
+    """exclude-overlimit/short는 ka10029 EXPECTED_CHANGE_CREDIT_CND엔 있지만 ka10033 CREDIT_RATIO_CREDIT_CND엔 없다."""
+    result = runner.invoke(cli, ["market", "rank", "credit-ratio", "--credit", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("absent", ["5d", "20d"])
+def test_rank_foreign_consecutive_base_date_rejects_name_absent_from_ka10035(runner, fake_client, absent):
+    """5d/20d는 PERIOD_TODAY_PREV_5_60(ka10034/36/37)엔 있지만 ka10035 FOREIGN_CONSECUTIVE_BASE_DATE엔
+    없다. 5d는 BROKER_TOP_PERIOD(ka10039)에도 있어 두 형제 상수 바꿔치기를 모두 잡아낸다."""
+    result = runner.invoke(cli, ["market", "rank", "foreign-consecutive", "--base-date", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
 def test_rank_credit_ratio_vol_type_rejects_5k(runner, fake_client):
     """5k는 ka10039 BROKER_TOP_QTY_TYPE엔 있지만 ka10033 CREDIT_RATIO_QTY_TYPE엔 없다."""
     result = runner.invoke(cli, ["market", "rank", "credit-ratio", "--vol-type", "5k"])
