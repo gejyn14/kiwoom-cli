@@ -336,6 +336,55 @@ human-readable 이름을 추가했습니다(하위호환).
   (ka10082/ka10083)를 쓸 것 — 이쪽은 실제로 다른 기간 데이터를 반환하는
   진짜 엔드포인트입니다.
 
+`stock analysis trader-analysis`(ka10043)는 `--from`/`--to`가 이미
+`required=True`인데도 `--date-type`(`qry_dt_tp`) 기본값이 `"0"`(기간으로 조회)이라
+그 필수 날짜를 API가 무시하고 있었고, `--broker`(`mmcm_cd`, Required=Y)는
+기본값이 빈 문자열이었습니다. 두 곳을 고치고, 나머지 원시 숫자 코드 옵션
+(`--date-type`/`--pot`/`--sort`/`--days`)도 human-readable 이름으로 전환했습니다.
+
+**Fixed**
+
+- **`--date-type` 기본값이 사용자가 반드시 입력해야 하는 `--from`/`--to`를
+  무력화하고 있었습니다.** ka10043 Request Body(`docs/미국 REST API 문서.xlsx`)의
+  `qry_dt_tp`는 `0:기간으로 조회, 1:시작일자·종료일자로 조회`인데, 기존 기본값
+  `"0"`은 `--from`/`--to`가 `required=True`로 항상 채워지는데도 API가 이를 무시하고
+  `dt`(기간) 기준으로 조회하게 만들었습니다. 기본값을 `"1"`(start-end)로
+  바꿨습니다 — CLI로 직접 확인: `stock analysis trader-analysis 005930 --from
+  20260101 --to 20260107 --broker 001` 기본 호출의 전송 body가
+  `qry_dt_tp="0"`에서 `"1"`로 바뀝니다.
+- **`--broker`(`mmcm_cd`)가 Required=Y 필드인데 기본값이 빈 문자열이었습니다.**
+  옵션을 생략하면 항상 빈 `mmcm_cd`를 전송했습니다(회원사 코드 조회는
+  `stock brokers`, ka10102). 이제 필수 옵션으로 승격했고, help에
+  `stock brokers`를 안내합니다.
+
+**Breaking**
+
+- **`--date-type` 기본 전송값이 `qry_dt_tp="0"`에서 `"1"`로 바뀝니다.** 다만
+  이전 동작은 사용자가 필수로 입력한 `--from`/`--to`를 API가 조용히 무시하는
+  것이었으므로, 이는 **고쳐진 것이지 기능이 바뀐 게 아닙니다** — 이전에
+  기본 호출로 얻던 "기간(dt) 기준 조회 결과"에 의존하던 스크립트만 영향을
+  받으며, 그 결과 자체가 사용자가 지정한 날짜 범위와 무관했습니다.
+- **`--broker`가 이제 필수입니다.** 이전엔 생략 시 빈 값(`mmcm_cd=""`)을
+  전송했고 — Required=Y 필드에 빈 값이므로 서버가 거부했을 값입니다 — 이제
+  생략하면 `Error: Missing option '--broker'.`로 `exit 1`이고 요청 자체가
+  나가지 않습니다(CLI로 직접 실행해 확인).
+- **자유 텍스트였던 `--date-type`/`--pot`/`--sort`/`--days`가 enum(`HumanChoice`)
+  으로 좁혀졌습니다.** 매핑에 없는 값(스펙 밖 raw 문자열)을 넘기던 호출만
+  이제 `exit 1`로 거부됩니다. `HumanChoice` 전환 자체는 breaking이 아닙니다 —
+  기존에 쓰던 raw 숫자 코드(`"0"`/`"1"`/`"5"`.../`"120"` 등)는 계속 그대로
+  받습니다.
+
+**Non-breaking (사람이 읽는 이름 추가, 하위호환)**
+
+- **`--date-type`가 `period`(`qry_dt_tp=0`)/`start-end`(`=1`)를, `--pot`가
+  `today`(`pot_tp=0`)/`previous`(`=1`)를, `--sort`가 `close`(`sort_base=1`)/
+  `date`(`=2`)를 받습니다.** 전송값은 원시 코드와 동일함을 CLI로 확인했습니다.
+- **`--days`가 `5d`/`10d`/`20d`/`40d`/`60d`/`120d` 이름도 받습니다.** 이
+  코드북은 `5일=5`로 코드가 일수와 그대로 일치합니다 — `market rank
+  broker-by-stock`(ka10038)의 `dt`(`5일=4`, `10일=9`, ... 하루씩 어긋나는
+  off-by-one 코드북)와 값 집합이 다르므로 절대 혼용하지 않도록 CLI 테스트로
+  `--days 5d → dt="5"`(`"4"` 아님)를 고정했습니다.
+
 ## [2.10.1] - 2026-07-19
 
 금현물 주문(`order gold buy`/`sell`, kt50000/kt50001)이 API가 받지 않는 주문타입을
