@@ -15,9 +15,10 @@ from ..formatters import (
     _fmt_number,
     _get_format,
     _sign_color,
+    fail_api,
     print_generic_table,
 )
-from ..output import console
+from ..output import console, err_console
 
 
 def _build_account_panel(data: dict[str, Any]) -> Panel:
@@ -76,14 +77,18 @@ def dashboard():
     acct_data: dict[str, Any] | None = None
     movers_data: dict[str, Any] | None = None
     movers_items: list[dict[str, Any]] = []
+    acct_failed = False
+    movers_failed = False
 
     with KiwoomClient() as c:
         # Account balance -- skip gracefully when not logged in
         if c.token:
             try:
                 acct_data, _ = c.request("kt00004", {"qry_tp": "0", "dmst_stex_tp": "KRX"})
-            except KiwoomAPIError:
+            except KiwoomAPIError as e:
                 acct_data = None
+                acct_failed = True
+                err_console.print(f"[dim]계좌 조회 실패: {e}[/]")
         else:
             acct_data = None
 
@@ -106,15 +111,24 @@ def dashboard():
                     if isinstance(v, list):
                         movers_items = v
                         break
-        except KiwoomAPIError:
+        except KiwoomAPIError as e:
             movers_data = None
+            movers_failed = True
+            err_console.print(f"[dim]거래량 상위 조회 실패: {e}[/]")
+
+    if acct_failed and movers_failed:
+        fail_api("계좌·거래량 조회가 모두 실패했습니다.")
 
     # ── JSON / CSV output ─────────────────────────────────
     if fmt in ("json", "csv"):
         combined: dict[str, Any] = {}
-        if acct_data:
+        if acct_failed:
+            combined["account"] = None
+        elif acct_data:
             combined["account"] = acct_data
-        if movers_items:
+        if movers_failed:
+            combined["top_volume"] = None
+        elif movers_items:
             combined["top_volume"] = movers_items
         elif movers_data:
             combined["top_volume"] = movers_data

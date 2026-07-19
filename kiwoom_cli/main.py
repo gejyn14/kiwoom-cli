@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 
@@ -54,9 +55,9 @@ class KiwoomGroup(click.Group):
             if self._json_mode(ctx):
                 envelope.emit(error=envelope.error_body(e.msg, upstream_code=e.code))
             elif auth_related:
-                console.print(f"[red]인증 오류:[/] {e} [dim]kiwoom auth login[/]")
+                err_console.print(f"[red]인증 오류:[/] {e} [dim]kiwoom auth login[/]")
             else:
-                console.print(f"[red]API 오류:[/] {e}")
+                err_console.print(f"[red]API 오류:[/] {e}")
             ctx.exit(EXIT_AUTH if auth_related else EXIT_API)
         except KiwoomAuthError:
             keychain_ok = auth.keychain_readable()
@@ -70,10 +71,10 @@ class KiwoomGroup(click.Group):
                     msg, code="AUTH_REQUIRED", retryable=False,
                 ))
             elif keychain_ok:
-                console.print("[red]인증 필요:[/] 토큰이 없습니다. [dim]kiwoom auth login[/]")
+                err_console.print("[red]인증 필요:[/] 토큰이 없습니다. [dim]kiwoom auth login[/]")
             else:
-                console.print("[red]인증 필요:[/] 토큰이 없습니다 (키체인 접근 불가 환경).")
-                console.print(
+                err_console.print("[red]인증 필요:[/] 토큰이 없습니다 (키체인 접근 불가 환경).")
+                err_console.print(
                     "[dim]본인 터미널에서 'kiwoom auth login'으로 발급한 토큰을 "
                     "KIWOOM_TOKEN 환경변수로 전달하세요. (README '샌드박스 환경' 참고)[/]"
                 )
@@ -85,8 +86,8 @@ class KiwoomGroup(click.Group):
                     code="KEYCHAIN_UNAVAILABLE", retryable=False,
                 ))
             else:
-                console.print("[red]키체인 오류:[/] OS 키체인에 접근할 수 없습니다 (잠김 또는 비대화형 세션).")
-                console.print(
+                err_console.print("[red]키체인 오류:[/] OS 키체인에 접근할 수 없습니다 (잠김 또는 비대화형 세션).")
+                err_console.print(
                     "[dim]키체인 없는 환경에서는 본인 터미널에서 토큰을 발급한 뒤 "
                     "KIWOOM_TOKEN 환경변수로 전달하세요. (README '샌드박스 환경' 참고)[/]"
                 )
@@ -96,9 +97,9 @@ class KiwoomGroup(click.Group):
             if self._json_mode(ctx):
                 envelope.emit(error=envelope.error_body(f"HTTP {status}", http_status=status))
             elif status == 401:
-                console.print("[red]인증 오류:[/] 토큰이 만료되었습니다. [dim]kiwoom auth login[/]")
+                err_console.print("[red]인증 오류:[/] 토큰이 만료되었습니다. [dim]kiwoom auth login[/]")
             else:
-                console.print(f"[red]HTTP 오류:[/] {status}")
+                err_console.print(f"[red]HTTP 오류:[/] {status}")
             ctx.exit(EXIT_AUTH if status == 401 else EXIT_API)
         except httpx.ConnectError:
             if self._json_mode(ctx):
@@ -107,7 +108,7 @@ class KiwoomGroup(click.Group):
                     code="NETWORK_ERROR", retryable=True,
                 ))
             else:
-                console.print("[red]연결 오류:[/] API 서버에 연결할 수 없습니다. 도메인을 확인하세요.")
+                err_console.print("[red]연결 오류:[/] API 서버에 연결할 수 없습니다. 도메인을 확인하세요.")
             ctx.exit(EXIT_API)
         except httpx.RequestError as e:
             # 타임아웃 등 나머지 전송 오류 — traceback 대신 계약대로 종료
@@ -117,14 +118,17 @@ class KiwoomGroup(click.Group):
                     code="NETWORK_ERROR", retryable=True,
                 ))
             else:
-                console.print(f"[red]네트워크 오류:[/] {type(e).__name__} — 잠시 후 재시도하세요.")
+                err_console.print(f"[red]네트워크 오류:[/] {type(e).__name__} — 잠시 후 재시도하세요.")
             ctx.exit(EXIT_API)
         except click.ClickException as e:
             # 인자/옵션 오류(UsageError 포함)도 json 모드에서는 envelope로.
             # table 모드는 Click 기본 출력 그대로 (re-raise).
+            # 일부 호출부(예: config.load_config의 TOMLDecodeError 재발생)는
+            # 더 구체적인 코드를 e.code에 실어 보낸다 — 없으면 INVALID_INPUT.
             if self._json_mode(ctx):
                 envelope.emit(error=envelope.error_body(
-                    e.format_message(), code="INVALID_INPUT", retryable=False,
+                    e.format_message(), code=getattr(e, "code", "INVALID_INPUT"),
+                    retryable=False,
                 ))
                 ctx.exit(e.exit_code)
             raise
@@ -165,7 +169,15 @@ def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
     ctx.obj["profile"] = profile
     ctx.obj["fields"] = [s.strip() for s in fields.split(",") if s.strip()] if fields else None
 
-    resolved_profile = config.resolve_profile(profile)
+    try:
+        resolved_profile = config.resolve_profile(profile)
+    except click.ClickException:
+        # config.toml이 손상된 경우 루트 콜백에서 여기서 죽으면 그 어떤
+        # 서브커맨드도(복구용인 'config setup'조차) 실행될 기회가 없다 — 실제
+        # 진단/복구는 각 서브커맨드가 필요할 때 load_config()를 다시 호출해
+        # 스스로 판단하게 둔다: config_setup은 자신의 폴백으로 복구하고,
+        # 나머지는 자기 몸체에서 동일하게 NOT_CONFIGURED로 정상 실패한다.
+        resolved_profile = profile or "default"
     if not config.is_valid_profile_name(resolved_profile):
         fail_input(
             f"잘못된 프로필 이름 '{resolved_profile}' — "
@@ -180,15 +192,20 @@ def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
     # v2.7 이하가 만든 느슨한 권한(0755/0644)을 매 실행 시 조인다 — 생성은 하지 않음
     config.harden_permissions()
 
-    # Auto-migrate plaintext credentials into the keychain
-    if config.migrate_from_plaintext():
-        from .output import err_console
-        err_console.print("[yellow]인증정보를 키체인으로 이전했습니다.[/]")
+    try:
+        # Auto-migrate plaintext credentials into the keychain
+        if config.migrate_from_plaintext():
+            from .output import err_console
+            err_console.print("[yellow]인증정보를 키체인으로 이전했습니다.[/]")
 
-    # Auto-migrate pre-profile config to profile-aware format
-    if config.migrate_to_profiles():
-        from .output import err_console
-        err_console.print("[yellow]프로필 형식으로 마이그레이션 완료.[/]")
+        # Auto-migrate pre-profile config to profile-aware format
+        if config.migrate_to_profiles():
+            from .output import err_console
+            err_console.print("[yellow]프로필 형식으로 마이그레이션 완료.[/]")
+    except click.ClickException:
+        # 위와 같은 이유로 건너뛴다 — 마이그레이션은 유효한 config.toml을
+        # 전제로 하므로, 손상된 파일 위에서는 서브커맨드가 판단하게 둔다.
+        pass
 
     # Legacy password-encrypted format: credentials must be re-entered
     if config.is_legacy_encrypted():
@@ -258,9 +275,24 @@ def config_setup(ctx, profile: str | None, appkey: str | None, secretkey: str | 
         # Old password-encrypted entries are unusable — purge before writing new keys
         config.purge_legacy_credentials()
         config.clear_legacy_sentinels()
+    try:
+        cfg = config.load_config()
+    except click.ClickException:
+        # config.toml이 손상된 경우에도 setup은 이걸 복구하는 명령이어야 한다 —
+        # 어차피 아래에서 덮어쓸 것이므로 기본값에서 새로 시작한다. 이 명령이
+        # 실패하면 (load_config()가 재발생시키는 NOT_CONFIGURED로) 안내하는
+        # 'kiwoom config setup을 다시 실행하세요'가 그 자체로 다시 실패하는
+        # 무한루프가 됐었다.
+        err_console.print(
+            f"[yellow]config.toml이 손상되어 있어 기본값으로 새로 씁니다 ({config.CONFIG_FILE}).[/]"
+        )
+        cfg = copy.deepcopy(config.DEFAULT_CONFIG)
+    # load_config()가 성공한 뒤에만 키체인에 쓴다 — 실패 케이스가 위에서
+    # 처리되므로 여기 도달했다는 것은 cfg 구성이 확정됐다는 뜻이고, appkey/
+    # secretkey를 먼저 써버린 뒤 이후 단계가 죽어 키체인만 반쯤 갱신된 채
+    # 남는 상황을 막는다.
     config.set_appkey(appkey, profile=profile)
     config.set_secretkey(secretkey, profile=profile)
-    cfg = config.load_config()
     cfg.setdefault("profiles", {}).setdefault(profile, {})["domain"] = domain
     if account:
         cfg["profiles"][profile]["account"] = account
@@ -511,8 +543,9 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str, confirm: bool):
     api_id 자리에 list를 주면 전체 API 목록(217개 REST)을 출력합니다.
     두 번째 인자는 검색 키워드: kiwoom api list 미체결
     """
+    from .api_spec import API_REGISTRY
+
     if api_id == "list":
-        from .api_spec import API_REGISTRY
         keyword = "" if body == "{}" else body.lower()
         rows = [
             {"api_id": aid, "url_path": url, "description": desc}
@@ -527,6 +560,9 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str, confirm: bool):
             console.print(f"  {r['api_id']}  [dim]{escape(r['description'])}[/]", highlight=False)
         console.print(f"[dim]{len(rows)}개 API — kiwoom api <id> '<body-json>' 로 호출[/]")
         return
+
+    if api_id not in API_REGISTRY:
+        fail_input(f"알 수 없는 API ID: {api_id}", code="INVALID_API")
 
     try:
         body_dict = json.loads(body)

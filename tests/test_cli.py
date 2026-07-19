@@ -146,6 +146,28 @@ def test_api_error_handling(runner):
         assert "오류" in result.output
 
 
+def test_api_error_csv_mode_stdout_is_clean(runner):
+    """-f csv에서 API 오류가 나면 stdout은 비어 있고 오류는 stderr로 가야 한다.
+
+    KiwoomGroup.invoke의 오류 핸들러는 이전에 json 모드만 확인하고 그 외에는
+    (csv 포함) console.print로 stdout에 Rich 서식 오류 문구를 찍었다 —
+    `kiwoom -f csv ... > out.csv` 가 오류 시 CSV 파일을 한국어 산문으로 오염시켰다.
+    """
+    from kiwoom_cli.client import KiwoomAPIError
+
+    with patch("kiwoom_cli.commands.stock.KiwoomClient") as mock_cls:
+        mock_client = MagicMock()
+        mock_client.request.side_effect = KiwoomAPIError(-1, "테스트 오류")
+        mock_client.__enter__ = lambda s: s
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_cls.return_value = mock_client
+
+        result = runner.invoke(cli, ["-f", "csv", "stock", "info", "005930"])
+        assert result.exit_code == 2
+        assert result.stdout == ""
+        assert "오류" in result.stderr
+
+
 # Note: Order command tests moved to tests/test_order.py for strict coverage.
 
 
@@ -183,3 +205,97 @@ def test_unknown_command_exits_1(runner):
 def test_invalid_json_body_exits_1(runner):
     result = runner.invoke(cli, ["api", "ka10001", "not-json"])
     assert result.exit_code == 1
+
+
+# ── Unhandled exceptions → envelope errors (Task 19 / 감사 발견 N9-N11) ──
+# 아래 3건은 수정 전에는 KiwoomGroup.invoke의 핸들러 목록에 없는 예외가
+# escape해 traceback + 빈 stdout + exit 1로 종료됐다 — 에이전트가 "인자 오류"로
+# 오인하게 된다.
+
+
+def test_unknown_api_id_returns_invalid_api_envelope(runner, monkeypatch):
+    """잘못된 api_id는 client.py의 get_url()이 ValueError를 던져 escape했다.
+
+    (토큰이 있어야 KiwoomAuthError보다 먼저 get_url()에 도달한다.)
+    """
+    monkeypatch.setenv("KIWOOM_TOKEN", "test-token")
+
+    result = runner.invoke(cli, ["-f", "json", "api", "bogus999", "{}"])
+
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert result.exit_code == 1
+    doc = json.loads(result.output)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "INVALID_API"
+
+
+def test_corrupted_config_toml_returns_not_configured_envelope(runner, monkeypatch, tmp_path):
+    """손상된 config.toml은 루트 콜백(resolve_profile -> load_config)에서
+    TOMLDecodeError로 죽어 kiwoom config show조차 불가능했다."""
+    from kiwoom_cli import config
+
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("this is not [ valid toml", encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)
+
+    result = runner.invoke(cli, ["-f", "json", "config", "show"])
+
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert result.exit_code == 1
+    doc = json.loads(result.output)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "NOT_CONFIGURED"
+    assert str(cfg_file) in doc["error"]["message"]
+
+
+def test_config_setup_recovers_from_corrupted_config_toml(runner, monkeypatch, tmp_path):
+    """`config setup`은 그 자체가 손상된 config.toml을 복구하는 명령으로 안내되므로
+    (NOT_CONFIGURED 메시지가 'kiwoom config setup을 다시 실행하세요'라고 말한다),
+    손상된 파일 위에서도 성공해야 한다 — 실패하면 안내를 따른 에이전트가
+    똑같은 오류를 계속 반복해서 받는 무한루프가 된다."""
+    from kiwoom_cli import config
+
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("this is not [ valid toml", encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)
+    monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+    monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+
+    result = runner.invoke(cli, [
+        "-f", "json", "config", "setup",
+        "--appkey", "AK", "--secretkey", "SK", "--domain", "mock",
+    ])
+
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert result.exit_code == 0, result.output
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is True
+    assert doc["data"]["profile"] == "default"
+    assert doc["data"]["domain"] == "mock"
+    # 파일이 실제로 다시 쓰였는지 확인 — 이제 유효한 toml이어야 한다.
+    assert config.load_config()["profiles"]["default"]["domain"] == "mock"
+    assert config.get_appkey(profile="default") == "AK"
+
+
+def test_non_json_response_returns_upstream_error_envelope(runner, monkeypatch, httpx_mock):
+    """HTTP 200 유지보수 페이지처럼 응답 바디가 JSON이 아니면 resp.json()이
+    json.JSONDecodeError를 던져 escape했다."""
+    from kiwoom_cli import client as client_mod
+
+    monkeypatch.setattr(client_mod.config, "get_domain", lambda profile=None: "https://mock.test")
+    monkeypatch.setattr(client_mod.auth, "load_token", lambda profile=None: "test-token")
+    httpx_mock.add_response(
+        url="https://mock.test/api/dostk/stkinfo",
+        text="<html>점검 중입니다</html>",
+        status_code=200,
+    )
+
+    result = runner.invoke(cli, ["-f", "json", "api", "ka10001", "{}"])
+
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert result.exit_code == 2
+    doc = json.loads(result.output)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "UPSTREAM_ERROR"

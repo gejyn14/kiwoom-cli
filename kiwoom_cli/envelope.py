@@ -97,16 +97,44 @@ def classify(upstream_code: int | None = None, http_status: int | None = None) -
 def build_meta() -> dict[str, Any]:
     ctx = click.get_current_context(silent=True)
     obj = ctx.obj if ctx is not None and isinstance(ctx.obj, dict) else {}
-    profile = config.resolve_profile(obj.get("profile"))
-    env = config.get_domain_key(profile)
+    try:
+        profile = config.resolve_profile(obj.get("profile"))
+        env = config.get_domain_key(profile)
+    except click.ClickException as e:
+        # config.toml이 손상된 경우(config.load_config()가 재발생시키는
+        # NOT_CONFIGURED ClickException) meta 구성이 load_config()를 다시 호출해
+        # 같은 오류를 또 던지면, 그 오류 자체를 알리는 envelope 생성이 깨진다 —
+        # 서브 정보일 뿐이므로 안전한 기본값으로 대체한다. 이 폴백은 그 특정
+        # 원인(NOT_CONFIGURED)에만 좁혀 적용한다 — resolve_profile/get_domain_key가
+        # 나중에 다른 이유로 ClickException을 던지게 되어도 조용히 삼켜지지
+        # 않도록.
+        if getattr(e, "code", None) != "NOT_CONFIGURED":
+            raise
+        profile = obj.get("profile") or "default"
+        # env는 실제로 알 수 없으므로 "mock"을 지어내지 않는다 — AGENTS.md가
+        # 에이전트에게 주문 전 meta.env로 prod/mock을 확인하라고 안내하므로,
+        # 허용적인 방향("mock"이라 안전할 것)으로 거짓 값을 주는 것이 더 위험하다.
+        env = None
     return {"profile": profile, "env": env, "cont": obj.get("last_cont") or None}
 
 
 def project_fields(data: Any, fields: list[str]) -> Any:
     """--fields 투영: 요청된 키만 유지, raw 제거.
 
-    list/dict 컨테이너는 유지하되 내부 요소를 같은 필드 목록으로 투영한다
-    (리스트 응답에서 --fields symbol,price 가 동작하도록).
+    키 자체가 fields에 있으면 값이 dict/list여도 통째로 선택된다
+    (예: --fields body가 dry-run의 body 전체를 반환). 선택된 값이 dict이면
+    최상위 "raw" 키만 제거하고(중첩 raw는 그대로 둠) 원본은 변경하지 않는다.
+    선택된 값이 list이면 요소를 건드리지 않고 그대로 반환한다.
+
+    키 자체가 요청되지 않은 dict 컨테이너는 내부를 같은 필드 목록으로
+    재귀 투영하고, 결과가 비어 있으면 그 키는 버려진다.
+
+    키 자체가 요청되지 않은 list 컨테이너는 각 dict 원소만 재귀 투영하고
+    (스칼라 원소는 그대로 둠), "적어도 하나의 원소가 비어있지 않은 dict로
+    투영됐는가"로 보존 여부를 판단한다 — 원소 값의 진위(0, "", False 등)가
+    아니라 "요청한 필드를 실제로 담고 있는 dict가 있는가"를 본다. dict를
+    하나도 담지 않은 리스트(스칼라 리스트, 빈 리스트)는 이름으로 요청되지
+    않는 한 키를 가질 수 없으므로 항상 버려진다.
     """
     if isinstance(data, list):
         return [project_fields(x, fields) if isinstance(x, (dict, list)) else x for x in data]
@@ -116,14 +144,20 @@ def project_fields(data: Any, fields: list[str]) -> Any:
     for k, v in data.items():
         if k == "raw":
             continue
+        if k in fields:
+            if isinstance(v, dict):
+                out[k] = {kk: vv for kk, vv in v.items() if kk != "raw"}
+            else:
+                out[k] = v
+            continue
         if isinstance(v, list):
-            out[k] = [project_fields(x, fields) if isinstance(x, dict) else x for x in v]
+            projected = [project_fields(i, fields) if isinstance(i, dict) else i for i in v]
+            if any(isinstance(p, dict) and p for p in projected):
+                out[k] = projected
         elif isinstance(v, dict):
             sub = project_fields(v, fields)
             if sub:
                 out[k] = sub
-        elif k in fields:
-            out[k] = v
     return out
 
 

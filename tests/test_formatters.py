@@ -9,6 +9,7 @@ from kiwoom_cli.formatters import (
     _CLASSIFIED_FIELDS,
     _CODE_FIELDS,
     _fmt_number,
+    _flat_dict,
     _sign_color,
     print_generic_table,
     print_stock_info,
@@ -100,6 +101,33 @@ class TestGenericTableCsv:
         assert lines[0] == "a,b"
         assert lines[1] == "1,2"
         assert lines[2] == "3,4"
+
+
+class TestGenericTableColumnUnion:
+    """감사 확인 #21/N29 — 컬럼 집합을 첫 행 키만으로 정하면 이후 행에만
+    존재하는 고유 키가 모든 행에서 사라진다 (테이블·CSV 둘 다)."""
+
+    def test_table_mode_shows_key_unique_to_second_row(self, capsys):
+        data = [
+            {"a": "1"},
+            {"a": "2", "b": "unique-value"},
+        ]
+        print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        assert "unique-value" in out
+
+    def test_csv_mode_shows_key_unique_to_second_row(self, capsys):
+        data = [
+            {"a": "1"},
+            {"a": "2", "b": "unique-value"},
+        ]
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        lines = [line.rstrip("\r") for line in out.strip().split("\n")]
+        assert lines[0] == "a,b"
+        assert lines[1] == "1,"
+        assert lines[2] == "2,unique-value"
 
 
 class TestStockInfoJson:
@@ -400,3 +428,171 @@ def test_code_fields_and_classified_fields_are_disjoint():
     _CODE_FIELDS 등록이 조용히 무효화된다. _CODE_FIELDS가 17->55개로 늘어난
     지금, 이 불변식을 명시적으로 지켜야 한다."""
     assert (_CODE_FIELDS & _CLASSIFIED_FIELDS) == frozenset()
+
+
+# ── Task 21: csv 모드에서 스칼라 요약 블록 소실 (감사 확인 #17/#18/N33) ──
+
+
+class TestFlatDict:
+    """`_flat_dict`은 CSV 출력을 위해 dict 하나를 한 줄짜리 row로 평탄화한다."""
+
+    def test_scalar_only(self):
+        assert _flat_dict({"a": "1", "b": "2"}) == [{"a": "1", "b": "2"}]
+
+    def test_drops_return_code_and_msg(self):
+        assert _flat_dict({"a": "1", "return_code": 0, "return_msg": "OK"}) == [{"a": "1"}]
+
+    def test_drops_list_values(self):
+        assert _flat_dict({"a": "1", "items": [1, 2]}) == [{"a": "1"}]
+
+    def test_recurses_one_level_into_dict_with_dot_prefix(self):
+        result = _flat_dict({"acnt_nm": "홍길동", "info": {"entr": "1000000"}})
+        assert result == [{"acnt_nm": "홍길동", "info.entr": "1000000"}]
+
+    def test_all_values_are_dicts_still_produces_a_row(self):
+        """감사 버그의 핵심: 값이 전부 dict이면 예전엔 []를 반환해 0바이트 출력이 됐다."""
+        result = _flat_dict({"info": {"a": "1", "b": "2"}})
+        assert result == [{"info.a": "1", "info.b": "2"}]
+
+    def test_recursion_stops_after_one_level(self):
+        """명시된 스코프: 한 단계만 재귀 — 중첩 dict/list 안의 dict/list는 버려진다."""
+        result = _flat_dict({"info": {"a": "1", "nested": {"x": "1"}, "deep_list": [1]}})
+        assert result == [{"info.a": "1"}]
+
+    def test_only_containers_with_no_scalars_returns_empty(self):
+        """리스트만 있고 재귀할 dict도 없으면 여전히 빈 리스트 — 호출부가 리스트를 따로 출력한다."""
+        assert _flat_dict({"items": [1, 2]}) == []
+
+    def test_empty_dict_returns_empty(self):
+        """회귀 고정용 — 빈 dict는 애초에 반복할 게 없으니 [] (falsification 테스트 아님)."""
+        assert _flat_dict({}) == []
+
+    def test_dict_of_empty_dicts_returns_empty(self):
+        """회귀 고정용 — 중첩 dict가 스칼라를 하나도 안 갖고 있으면 여전히 [] (falsification 테스트 아님)."""
+        assert _flat_dict({"info": {}}) == []
+
+    def test_collision_last_write_wins(self):
+        """실제 API 데이터에서는 나올 수 없는 형태(dot이 든 리터럴 키)지만, 문서화된
+        저하 모드(last-write-wins)를 명시적으로 고정해둔다."""
+        result = _flat_dict({"a.x": 1, "a": {"x": 2}})
+        assert result == [{"a.x": 2}]
+
+
+class TestGenericTableCsvScalarSummary:
+    """print_generic_table의 csv 분기 — 리스트가 있어도 스칼라/딕트 요약이 사라지면 안 된다."""
+
+    def test_mixed_list_and_scalars_emits_both(self, capsys):
+        """account balance류 payload: 계좌 요약(스칼라) + 보유종목(리스트)."""
+        data = {
+            "acnt_nm": "홍길동",
+            "entr": "1000000",
+            "stk_acnt_evlt_prst": [{"stk_cd": "005930", "stk_nm": "삼성전자"}],
+        }
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        assert "홍길동" in out, "스칼라 요약(계좌명)이 리스트 때문에 통째로 사라짐"
+        assert "1000000" in out
+        assert "005930" in out
+        assert "삼성전자" in out
+
+    def test_mixed_list_and_scalars_summary_comes_first(self, capsys):
+        """table 모드(print_generic_table dict 분기)가 이미 스칼라 요약 -> 리스트 순서이므로
+        csv 모드도 동일한 순서를 따른다 (기존 관례 일치)."""
+        data = {
+            "acnt_nm": "홍길동",
+            "stk_acnt_evlt_prst": [{"stk_cd": "005930"}],
+        }
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        lines = [line.rstrip("\r") for line in out.strip("\n").split("\n")]
+        assert lines[0] == "acnt_nm"
+        assert lines[1] == "홍길동"
+
+    def test_all_values_are_containers_is_not_zero_bytes(self, capsys):
+        """감사 버그의 두번째 절반: dict 값이 전부 dict/list이면 이전엔 0바이트+exit 0이었다."""
+        data = {
+            "acnt_info": {"acnt_nm": "홍길동", "entr": "1000000"},
+        }
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        assert out != "", "스칼라 요약이 전혀 없어 0바이트 출력됨"
+        assert "홍길동" in out
+        assert "1000000" in out
+
+
+class TestAccountEvalCsvScalarSummary:
+    """print_account_eval의 csv 분기 — 보유종목(리스트)이 있어도 계좌 요약(스칼라)이
+    사라지면 안 된다 (감사 브리프의 원래 예시: account balance의 예수금/총매입금액)."""
+
+    def test_holdings_present_emits_both_summary_and_holdings(self, capsys):
+        """보유종목이 있는(가장 흔한) 케이스에서도 예수금/총매입금액 요약이 함께 나와야 한다."""
+        from kiwoom_cli.formatters import print_account_eval
+        data = {
+            "acnt_nm": "홍길동",
+            "entr": "1000000",
+            "tot_pur_amt": "7000000",
+            "stk_acnt_evlt_prst": [
+                {"stk_cd": "005930", "stk_nm": "삼성전자"},
+            ],
+        }
+        with _make_ctx("csv"):
+            print_account_eval(data)
+        out = capsys.readouterr().out
+        assert "홍길동" in out, "보유종목이 있으면 계좌 요약(계좌명)이 통째로 사라짐"
+        assert "1000000" in out, "보유종목이 있으면 예수금 요약이 통째로 사라짐"
+        assert "7000000" in out, "보유종목이 있으면 총매입금액 요약이 통째로 사라짐"
+        assert "005930" in out
+        assert "삼성전자" in out
+
+    def test_summary_comes_before_holdings(self, capsys):
+        """print_generic_table csv 분기와 동일한 순서(스칼라 요약 -> 리스트)를 따른다."""
+        from kiwoom_cli.formatters import print_account_eval
+        data = {
+            "acnt_nm": "홍길동",
+            "stk_acnt_evlt_prst": [{"stk_cd": "005930"}],
+        }
+        with _make_ctx("csv"):
+            print_account_eval(data)
+        out = capsys.readouterr().out
+        lines = [line.rstrip("\r") for line in out.strip("\n").split("\n")]
+        assert lines[0] == "acnt_nm"
+        assert lines[1] == "홍길동"
+
+    def test_no_holdings_still_emits_summary(self, capsys):
+        """보유종목이 없는 경우는 dd136aa 이전에도 정상 동작했다 — 회귀가 아님을 확인."""
+        from kiwoom_cli.formatters import print_account_eval
+        data = {"acnt_nm": "홍길동", "entr": "1000000", "stk_acnt_evlt_prst": []}
+        with _make_ctx("csv"):
+            print_account_eval(data)
+        out = capsys.readouterr().out
+        assert "홍길동" in out
+        assert "1000000" in out
+
+
+class TestCsvEmptyBlockSeparator:
+    """IMPORTANT 4: 빈 리스트 블록은 아무 것도 안 담고 있어도 구분용 빈 줄을
+    하나 남겼다 — 성공 호출인데도 EOF 직전에 빈 레코드가 남는 문제. 또한 두 개
+    이상의 비어있지 않은 리스트 블록은 서로 붙어 나왔다 — 헤더 행이 뒤섞인다."""
+
+    def test_empty_list_produces_no_trailing_blank_line(self, capsys):
+        """{"a": 1, "items": []}: 요약 뒤에 빈 리스트 때문에 남는 빈 줄이 없어야 한다."""
+        data = {"a": 1, "items": []}
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        assert out == "a\r\n1\r\n", f"빈 리스트 블록이 dangling blank line을 남김: {out!r}"
+
+    def test_two_non_empty_lists_separated_by_exactly_one_blank_line(self, capsys):
+        """리스트 타입 키가 2개 이상이고 모두 비어있지 않으면, 두 블록 사이에
+        빈 줄이 정확히 하나 있어야 한다 (이전엔 이어 붙어 나왔다)."""
+        data = {
+            "xs": [{"p": 1}],
+            "ys": [{"q": 2}],
+        }
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        assert out == "p\r\n1\r\n\r\nq\r\n2\r\n", f"블록 사이 구분이 예상과 다름: {out!r}"

@@ -8,6 +8,8 @@ parametrization for non-trivial CLI -> API mappings.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from click.testing import CliRunner
 
@@ -30,6 +32,13 @@ def fake_client(monkeypatch):
         lambda *args, **kwargs: fake,
     )
     return fake
+
+
+@pytest.fixture
+def tmp_stock_cache(tmp_path, monkeypatch):
+    """Point the stock list cache at a temp dir."""
+    monkeypatch.setattr("kiwoom_cli.config.CACHE_DIR", tmp_path)
+    return tmp_path / "stocks.json"
 
 
 # ============================================================
@@ -111,6 +120,60 @@ def test_watchlist_passes_pipe_delimited_codes(runner, fake_client):
 
     assert result.exit_code == 0
     assert fake_client.calls == [("ka10095", {"stk_cd": "005930|000660"})]
+
+
+def test_sync_emits_json_envelope(runner, fake_client, tmp_stock_cache):
+    """stock sync -f json 출력은 파싱 가능한 envelope이어야 한다.
+
+    기존에는 모든 포맷에서 click.echo로 평문을 찍어 -f json이 stdout에
+    envelope 대신 사람이 읽는 문장을 남겼다 (agent contract 위반).
+    """
+    result = runner.invoke(cli, ["-f", "json", "stock", "sync"])
+
+    assert result.exit_code == 0
+    doc = json.loads(result.output)
+    assert doc["ok"] is True
+    assert doc["data"]["synced"] == 0
+    assert doc["data"]["cache"].endswith("stocks.json")
+
+
+def test_sync_csv_stdout_is_empty(runner, fake_client, tmp_stock_cache):
+    """stock sync -f csv 는 stdout에 아무것도 남기지 않아야 한다 (CSV 계약).
+
+    envelope.emit은 항상 JSON을 찍으므로 `_get_format() != "table"` 게이트로는
+    -f csv에서도 JSON 블롭이 stdout에 새어나간다. csv 모드에서는 완료 메시지가
+    stderr로만 가고 stdout은 완전히 비어 있어야 한다.
+    """
+    result = runner.invoke(cli, ["-f", "csv", "stock", "sync"])
+
+    assert result.exit_code == 0
+    assert result.stdout == ""
+    assert "동기화 완료" in result.stderr
+
+
+def test_search_empty_result_emits_json_envelope(runner, tmp_stock_cache):
+    """검색 결과가 없을 때도 -f json은 파싱 가능한 envelope을 출력해야 한다.
+
+    기존에는 click.echo("검색 결과가 없습니다.")로 평문만 남겨 -f json에서
+    stdout이 파싱 불가능한 문장이 됐다.
+    """
+    tmp_stock_cache.write_text(
+        json.dumps({
+            "fetched_at": "2026-01-01T00:00:00",
+            "count": 1,
+            "data": [
+                {"stk_cd": "005930", "stk_nm": "삼성전자", "market": "코스피", "type": "주식"},
+            ],
+        }),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(cli, ["-f", "json", "stock", "search", "존재하지않는종목명"])
+
+    assert result.exit_code == 0
+    doc = json.loads(result.output)
+    assert doc["ok"] is True
+    assert doc["data"]["items"] == []
 
 
 def test_daily_price_required_date(runner, fake_client):

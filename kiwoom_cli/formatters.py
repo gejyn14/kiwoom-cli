@@ -88,7 +88,7 @@ def _output_csv(rows: list[dict], keys: list[str] | None = None) -> None:
     if not rows:
         return
     if keys is None:
-        keys = list(rows[0].keys())
+        keys = list(dict.fromkeys(k for r in rows for k in r))
     w = csv.DictWriter(sys.stdout, fieldnames=keys, extrasaction="ignore")
     w.writeheader()
     for r in rows:
@@ -96,10 +96,43 @@ def _output_csv(rows: list[dict], keys: list[str] | None = None) -> None:
 
 
 def _flat_dict(data: dict) -> list[dict]:
-    """Flatten a dict with scalar values into a single-row list for CSV."""
-    clean = {k: v for k, v in data.items()
-             if not isinstance(v, (list, dict)) and k not in ("return_code", "return_msg")}
+    """Flatten a dict into a single-row list for CSV.
+
+    Scalar values pass through as-is. dict values recurse exactly one level:
+    their keys are emitted as "parent_key.nested_key" instead of being dropped
+    (a payload whose values are all dicts used to flatten to [], producing
+    0-byte CSV output on a successful call). Values still list or dict after
+    that one level of recursion are dropped — callers with list data emit it
+    separately (see print_generic_table's csv branch). Keys collide last-write
+    -wins, following the input dict's iteration order.
+    """
+    clean: dict[str, Any] = {}
+    for k, v in data.items():
+        if k in ("return_code", "return_msg"):
+            continue
+        if isinstance(v, dict):
+            for nk, nv in v.items():
+                if not isinstance(nv, (list, dict)):
+                    clean[f"{k}.{nk}"] = nv
+        elif not isinstance(v, list):
+            clean[k] = v
     return [clean] if clean else []
+
+
+def _emit_csv_summary_then_blocks(summary_rows: list[dict], list_blocks: list[list[dict]]) -> None:
+    """csv 모드 공용 출력 순서: 스칼라 요약 블록 먼저, 그 다음 리스트 블록(들).
+
+    빈 블록(빈 리스트)은 아무것도 출력하지 않으므로 애초에 건너뛴다 — 그러지
+    않으면 데이터가 없는 블록도 구분용 빈 줄을 하나 남겨, 성공한 호출인데도
+    EOF 바로 앞에 빈 레코드가 남는다. 실제로 출력되는(비어 있지 않은) 블록들
+    사이에만 빈 줄 하나를 두고, 마지막 블록 뒤에는 두지 않는다. `print_generic_table`의
+    table 모드 dict 분기(스칼라 요약 먼저, 리스트는 그 다음)와 순서를 맞춘다.
+    """
+    blocks = ([summary_rows] if summary_rows else []) + [b for b in list_blocks if b]
+    for i, block in enumerate(blocks):
+        if i:
+            sys.stdout.write("\r\n")  # csv.DictWriter도 \r\n을 쓰므로 줄바꿈을 통일
+        _output_csv(block)
 
 
 def _sign_color(value: str) -> str:
@@ -526,10 +559,7 @@ def print_account_eval(data: dict[str, Any]) -> None:
         return
     if fmt == "csv":
         holdings = data.get("stk_acnt_evlt_prst", [])
-        if holdings:
-            _output_csv(holdings)
-        else:
-            _output_csv(_flat_dict(data))
+        _emit_csv_summary_then_blocks(_flat_dict(data), [holdings])
         return
     summary = Table(title="💰 계좌평가현황", show_header=False, border_style="dim")
     summary.add_column("항목", style="cyan", width=20)
@@ -920,13 +950,8 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
         if isinstance(data, list):
             _output_csv(data)
         elif isinstance(data, dict):
-            # Flatten: output lists first, then scalars
             lists = {k: v for k, v in data.items() if isinstance(v, list)}
-            if lists:
-                for lv in lists.values():
-                    _output_csv(lv)
-            else:
-                _output_csv(_flat_dict(data))
+            _emit_csv_summary_then_blocks(_flat_dict(data), list(lists.values()))
         return
 
     # Table mode (default)
@@ -934,7 +959,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
         if not data:
             console.print("[dim]데이터가 없습니다.[/]")
             return
-        all_keys = list(data[0].keys())
+        all_keys = list(dict.fromkeys(k for item in data[:_TABLE_ROW_CAP] for k in item))
         keys = [
             k for k in all_keys
             if any(str(item.get(k, "")).strip() for item in data[:_TABLE_ROW_CAP])

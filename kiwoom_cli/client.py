@@ -5,6 +5,7 @@ Handles authentication headers, pagination, and error handling.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import click
@@ -95,7 +96,12 @@ class KiwoomClient:
         else:
             resp = self._http.post(url_path, headers=headers, json=body or {})
         resp.raise_for_status()
-        data = resp.json()
+        try:
+            data = resp.json()
+        except json.JSONDecodeError:
+            # HTTP 200이면서 바디가 JSON이 아닌 경우(예: 점검 페이지) — raise_for_status()를
+            # 통과하므로 여기서 잡지 않으면 KiwoomGroup.invoke의 핸들러 목록을 escape한다.
+            raise KiwoomAPIError(1999, f"API 응답이 JSON이 아닙니다 (HTTP {resp.status_code})")
 
         rc = data.get("return_code")
         if rc is not None and rc != 0:
@@ -188,7 +194,11 @@ class KiwoomClient:
             },
         )
         resp.raise_for_status()
-        data = resp.json()
+        try:
+            data = resp.json()
+        except json.JSONDecodeError:
+            # _request_once()와 동일한 실패 모드 — HTTP 200 + 비-JSON 바디.
+            raise KiwoomAPIError(1999, f"API 응답이 JSON이 아닙니다 (HTTP {resp.status_code})")
 
         rc = data.get("return_code")
         if rc is not None and rc != 0:

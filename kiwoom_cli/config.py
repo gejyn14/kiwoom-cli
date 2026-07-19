@@ -32,6 +32,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
+import click
 import keyring
 import tomli_w
 
@@ -134,8 +135,19 @@ def load_config() -> dict:
     if not CONFIG_FILE.exists():
         # deepcopy: 호출자가 중첩 dict를 수정해도 DEFAULT_CONFIG가 오염되지 않도록
         return copy.deepcopy(DEFAULT_CONFIG)
-    with open(CONFIG_FILE, "rb") as f:
-        return tomllib.load(f)
+    try:
+        with open(CONFIG_FILE, "rb") as f:
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        # resolve_profile() 등 루트 콜백에서 호출되므로 여기서 escape하면
+        # kiwoom config show조차 불가능해진다 — KiwoomGroup.invoke의 기존
+        # ClickException 핸들러가 envelope으로 감싸도록 재발생시킨다.
+        err = click.ClickException(
+            f"config.toml이 손상되었습니다 ({CONFIG_FILE}): {e}. "
+            "파일을 복구하거나 'kiwoom config setup'을 다시 실행하세요."
+        )
+        err.code = "NOT_CONFIGURED"
+        raise err from e
 
 
 def save_config(cfg: dict) -> None:

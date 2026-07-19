@@ -66,6 +66,26 @@ def test_success_envelope_shape(runner, fake_stock):
     assert doc["meta"]["cont"] is None
 
 
+# ── build_meta: 손상된 config에서 env는 null (지어내지 않는다) ──
+
+
+def test_meta_env_is_null_not_fabricated_mock_on_corrupt_config(runner, isolated_config):
+    """config.toml이 손상되면 meta.env는 알 수 없다 — 예전에는 여기서 "mock"을
+    지어냈는데, AGENTS.md는 에이전트에게 주문 전 meta.env로 prod/mock을
+    확인하라고 안내한다. 실제로는 모르는데 "mock"(안전해 보이는 쪽)이라고
+    답하는 것은 허용적인 방향의 거짓말이라 오히려 위험하다."""
+    cfg_file = isolated_config / "config.toml"
+    cfg_file.write_text("this is not [ valid toml", encoding="utf-8")
+
+    result = runner.invoke(cli, ["-f", "json", "config", "show"])
+
+    assert result.exit_code == 1
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "NOT_CONFIGURED"
+    assert doc["meta"]["env"] is None
+
+
 # ── 에러 envelope ─────────────────────────────────────
 
 
@@ -105,6 +125,133 @@ def test_http_401_envelope_token_expired_exit_3(runner, monkeypatch):
     assert doc["error"]["code"] == "TOKEN_EXPIRED"
     assert doc["error"]["retryable"] is False
     assert doc["error"]["upstream_code"] == 401
+
+
+# ── project_fields: dict/list 값 키 선택 (Task 18) ─────
+
+
+def test_project_fields_selects_dict_valued_key():
+    """--fields body 처럼, 값이 dict인 키를 이름으로 통째로 선택할 수 있어야 한다.
+
+    dry-run(body)/validate(checks)가 실제로 겪는 버그: 값이 dict/list인 키는
+    isinstance(v, dict)/isinstance(v, list) 분기로 먼저 빠져 `k in fields`가
+    평가되지 않았다."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"a": 1, "body": {"x": 1}, "rows": [{"p": 1}]}
+    assert project_fields(data, ["body"]) == {"body": {"x": 1}}
+
+
+def test_plain_empty_list_dropped_regression_lock():
+    """회귀 고정용 — 빈 리스트는 dict를 하나도 담지 못하므로(빈 리스트라
+    담을 수조차 없음) 이름으로 요청되지 않는 한 항상 버려진다. 이건 새 보존
+    규칙의 경계 케이스를 고정해두는 것일 뿐, 버그를 재현/반증하는 테스트가
+    아니다(falsification 테스트 아님)."""
+    from kiwoom_cli.envelope import project_fields
+
+    assert project_fields({"a": 1, "xs": []}, ["a"]) == {"a": 1}
+
+
+# ── project_fields: 컨테이너 보존 규칙 교정 (Fix round 1) ─────
+#
+# any(projected)는 값 진위(0/""/False 등)를 테스트하므로, 거래 데이터에서
+# 흔한 0 수량/가격/손익이 우연히 리스트를 삭제하거나 살렸다. "요청한 필드를
+# 실제로 담고 있는 dict가 있는가"로 바꾼다.
+
+
+def test_all_falsy_scalar_list_dropped():
+    """스칼라 리스트는 dict를 하나도 담지 못하므로 이름으로 요청되지 않으면
+    항상 버려진다 — 값이 전부 falsy(0)여도 마찬가지고, 이 사실 자체가
+    버려지는 이유여서는 안 된다(다음 테스트가 대조군)."""
+    from kiwoom_cli.envelope import project_fields
+
+    assert project_fields({"a": 1, "qtys": [0, 0, 0]}, ["a"]) == {"a": 1}
+
+
+def test_mixed_truthy_scalar_list_also_dropped():
+    """이전 버그: any(projected)가 값 진위를 테스트해서 [0, 5, 0]처럼 하나라도
+    truthy면 리스트가 남았다. qtys는 요청되지 않았으니 all-falsy든 아니든
+    동일하게 버려져야 한다 — 시장 데이터에 따라 필드가 나타났다 사라지면
+    안 되기 때문."""
+    from kiwoom_cli.envelope import project_fields
+
+    assert project_fields({"a": 1, "qtys": [0, 5, 0]}, ["a"]) == {"a": 1}
+
+
+def test_list_of_dicts_with_one_matching_element_kept():
+    """dict 리스트는 요소를 투영한 뒤, 적어도 하나가 비어있지 않은 dict로
+    투영되면 유지된다. 순서/값은 변하지 않는다(매칭 안 된 요소는 {}로)."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"rows": [{"x": 1, "y": 2}, {"y": 3}]}
+    assert project_fields(data, ["x"]) == {"rows": [{"x": 1}, {}]}
+
+
+def test_list_of_dicts_with_no_matching_elements_dropped():
+    """dict 리스트라도 요청된 필드를 하나도 담지 못하면(모든 요소가 {}로
+    투영되면) 버려진다."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"a": 1, "rows": [{"y": 2}, {"z": 3}]}
+    assert project_fields(data, ["a"]) == {"a": 1}
+
+
+def test_requested_by_name_list_returned_whole_and_unaltered():
+    """리스트 키 자체가 요청되면(hoisted 체크) 원소는 전혀 건드리지 않고
+    통째로 반환한다 — dict 원소 내부의 raw도 스트립하지 않는다(Finding 3은
+    선택된 값이 dict일 때의 최상위 raw만 다룬다; 리스트는 그대로)."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"rows": [{"p": 1, "raw": {"secret": 1}}, 5, "x"]}
+    assert project_fields(data, ["rows"]) == {
+        "rows": [{"p": 1, "raw": {"secret": 1}}, 5, "x"]
+    }
+
+
+# ── project_fields: 선택된 dict의 최상위 raw 제거 (Fix round 1, Finding 3) ──
+
+
+def test_selected_dict_key_strips_top_level_raw():
+    """--fields body 처럼 값이 dict인 키를 통째로 선택해도, 함수 자체의
+    'raw 제거' 계약은 지켜져야 한다 — 최상위 raw만 제거하고 원본은
+    변경하지 않는다."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"body": {"x": 1, "raw": {"secret": 1}}}
+    assert project_fields(data, ["body"]) == {"body": {"x": 1}}
+    # 원본은 변경되지 않는다 (copy, not mutate)
+    assert data["body"] == {"x": 1, "raw": {"secret": 1}}
+
+
+def test_selected_dict_key_does_not_deep_strip_nested_raw():
+    """raw 제거는 선택된 dict의 최상위 한 겹만 다룬다 — 중첩된 raw는 건드리지
+    않는다(계약 범위를 넘는 deep-strip은 하지 않는다)."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"body": {"x": {"raw": 1}}}
+    assert project_fields(data, ["body"]) == {"body": {"x": {"raw": 1}}}
+
+
+# ── build_meta: 폴백은 NOT_CONFIGURED에만 좁혀 적용 ──────
+
+
+def test_build_meta_fallback_only_catches_not_configured(monkeypatch):
+    """build_meta의 except click.ClickException은 config.load_config()가
+    재발생시키는 NOT_CONFIGURED 하나만을 위한 안전장치다. resolve_profile이나
+    get_domain_key가 나중에 다른 이유로 ClickException을 던지게 되면(예: 잘못된
+    프로필 이름), 그 오류가 이 폴백에 조용히 삼켜져 안전한 기본값으로
+    둔갑해서는 안 된다 — 그러면 진짜 원인이 사라진다."""
+    import click
+
+    from kiwoom_cli import config, envelope
+
+    def _raise_unrelated(*a, **k):
+        raise click.ClickException("무관한 다른 오류")
+
+    monkeypatch.setattr(config, "resolve_profile", _raise_unrelated)
+
+    with pytest.raises(click.ClickException, match="무관한 다른 오류"):
+        envelope.build_meta()
 
 
 # ── classify ──────────────────────────────────────────

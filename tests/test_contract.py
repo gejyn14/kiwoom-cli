@@ -288,6 +288,68 @@ def test_fields_match_no_flag(runner, isolated_env):
     assert doc["data"] == {"profile": "default"}
 
 
+# ── Task 18 fix round 1: --fields end-to-end on container-valued keys ────
+#
+# The unit test in test_envelope.py only exercises project_fields() directly.
+# These drive the full CLI (emit() → project_fields() → _collect_matched())
+# for the two motivating cases documented in AGENTS.md: --fields body on a
+# dry-run order and --fields checks on `order validate`.
+
+def test_fields_body_on_dry_run_order_returns_whole_payload(runner, isolated_env, monkeypatch):
+    """--fields body must return the whole dry-run body dict (Task 18's
+    original bug: body vanished because `k in fields` was checked after the
+    isinstance(v, dict) branch had already recursed into it)."""
+    fake = FakeKiwoomClient()
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", lambda *a, **k: fake)
+    result = runner.invoke(cli, [
+        "-f", "json", "--fields", "body",
+        "order", "buy", "005930", "10", "--price", "70000", "--type", "limit", "--dry-run",
+    ])
+    assert result.exit_code == 0
+    assert fake.calls == []
+    doc = _doc(result)
+    assert "fields_unmatched" not in doc["meta"]
+    assert doc["data"] == {
+        "body": {
+            "dmst_stex_tp": "KRX",
+            "stk_cd": "005930",
+            "ord_qty": "10",
+            "ord_uv": "70000",
+            "trde_tp": "0",
+            "cond_uv": "",
+        }
+    }
+
+
+def test_fields_checks_on_order_validate_returns_whole_dict(runner, isolated_env, monkeypatch):
+    """--fields checks must return the whole checks dict (all 5 booleans),
+    the second container-valued key documented in AGENTS.md for Task 18."""
+    fake = FakeKiwoomClient()
+    fake.set_response("ka10001", {"stk_nm": "삼성전자", "cur_prc": "70000"})
+    fake.set_response("kt00001", {"ord_alow_amt": "100000000"})
+    monkeypatch.setattr("kiwoom_cli.commands.order.KiwoomClient", lambda *a, **k: fake)
+    # market_open is a KST wall-clock heuristic (real Sat/Sun or off-hours would
+    # make "valid" False and exit 1 regardless of --fields) — pin it so this
+    # test's outcome depends only on the --fields projection under test, not
+    # on when it happens to run.
+    monkeypatch.setattr("kiwoom_cli.commands.order._market_open_kr", lambda: True)
+    result = runner.invoke(cli, [
+        "-f", "json", "--fields", "checks",
+        "order", "validate", "buy", "005930", "10", "--price", "70000",
+    ])
+    assert result.exit_code == 0
+    doc = _doc(result)
+    assert "fields_unmatched" not in doc["meta"]
+    assert set(doc["data"]) == {"checks"}
+    assert doc["data"]["checks"] == {
+        "symbol_ok": True,
+        "market_open": True,
+        "sufficient_balance": True,
+        "price_ok": True,
+        "price_known": True,
+    }
+
+
 # ── Task 10: tier-1 follow-ups ───────────────────────────
 
 def test_lock_busy_typed_error(runner, isolated_env, monkeypatch):
@@ -363,3 +425,55 @@ def test_send_order_strips_pagination_flags(runner, isolated_env):
     assert result.exit_code == 0
     assert captured["all_pages"] is False
     assert captured["next_key"] is None
+
+
+# ── csv 출력 계약: 실제 CLI를 통한 end-to-end 검증 ────────
+#
+# 그동안의 csv 테스트는 전부 formatters의 함수(print_generic_table 등)를
+# 손으로 만든 context로 직접 호출했다 — 실제 명령의 stdout이 csv.reader로
+# 파싱되는지, envelope 계약대로 stdout에 CSV만 담기는지는 아무도 검증하지
+# 않았다.
+
+
+def test_account_balance_kr_csv_round_trips_through_csv_reader(runner, monkeypatch):
+    """`-f csv account balance --market kr`의 실제 stdout을 csv.reader로
+    되읽어 계좌 요약(스칼라)과 보유종목(리스트) 두 블록이 모두 파싱 가능한
+    레코드로 담겨 있는지 확인한다."""
+    import csv
+    import io
+
+    fake = FakeKiwoomClient()
+    fake.set_response("kt00004", {
+        "return_code": 0,
+        "acnt_nm": "홍길동",
+        "entr": "1000000",
+        "tot_pur_amt": "7000000",
+        "stk_acnt_evlt_prst": [
+            {"stk_cd": "005930", "stk_nm": "삼성전자"},
+        ],
+    })
+    monkeypatch.setattr("kiwoom_cli.commands.account.KiwoomClient", lambda *a, **k: fake)
+
+    result = runner.invoke(cli, ["-f", "csv", "account", "balance", "--market", "kr"])
+
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""  # csv 모드 stdout에는 CSV만, 잡음은 stderr에도 없어야 함
+
+    rows = list(csv.reader(io.StringIO(result.stdout)))
+    # 블록 사이 빈 줄은 csv.reader가 빈 리스트([])로 돌려준다.
+    blank_indices = [i for i, r in enumerate(rows) if r == []]
+    assert len(blank_indices) == 1, f"블록 구분 빈 줄이 정확히 하나가 아님: {rows}"
+
+    summary_rows = rows[: blank_indices[0]]
+    holdings_rows = rows[blank_indices[0] + 1 :]
+
+    summary_header, summary_values = summary_rows[0], summary_rows[1]
+    summary = dict(zip(summary_header, summary_values))
+    assert summary["acnt_nm"] == "홍길동"
+    assert summary["entr"] == "1000000"
+    assert summary["tot_pur_amt"] == "7000000"
+
+    holdings_header, holdings_values = holdings_rows[0], holdings_rows[1]
+    holding = dict(zip(holdings_header, holdings_values))
+    assert holding["stk_cd"] == "005930"
+    assert holding["stk_nm"] == "삼성전자"

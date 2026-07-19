@@ -13,6 +13,7 @@ from ..formatters import (
     _output_json,
     _sign_color,
     fail_input,
+    human,
     print_chart_data,
     print_generic_table,
     print_orderbook,
@@ -212,8 +213,9 @@ def watchlist(codes: str):
 def _load_stock_cache() -> list[dict] | None:
     """Load cached stock list."""
     import json
-    from ..config import CACHE_DIR
-    path = CACHE_DIR / "stocks.json"
+
+    from .. import config
+    path = config.CACHE_DIR / "stocks.json"
     if not path.exists():
         return None
     try:
@@ -227,10 +229,11 @@ def _save_stock_cache(data: list[dict]) -> None:
     """Save stock list to cache."""
     import json
     from datetime import datetime
-    from ..config import CACHE_DIR, ensure_cache_dir
-    ensure_cache_dir()
+
+    from .. import config
+    config.ensure_cache_dir()
     payload = {"fetched_at": datetime.now().isoformat(), "count": len(data), "data": data}
-    (CACHE_DIR / "stocks.json").write_text(
+    (config.CACHE_DIR / "stocks.json").write_text(
         json.dumps(payload, ensure_ascii=False), encoding="utf-8",
     )
 
@@ -263,10 +266,19 @@ def _sync_stocks() -> list[dict]:
 @stock.command("sync")
 def sync():
     """전 시장 종목 리스트를 다운받아 캐시에 저장. (ka10099)"""
+    from pathlib import Path
+
+    from .. import config, envelope
     from ..output import err_console
     with err_console.status("[dim]종목 리스트 동기화 중...[/]", spinner="dots"):
         items = _sync_stocks()
-    click.echo(f"동기화 완료: {len(items)}개 종목 저장 (~/.kiwoom/cache/stocks.json)")
+    cache_path = config.CACHE_DIR / "stocks.json"
+    home = Path.home()
+    cache_display = f"~/{cache_path.relative_to(home)}" if cache_path.is_relative_to(home) else str(cache_path)
+    if _get_format() == "json":
+        envelope.emit(data={"synced": len(items), "cache": str(cache_path)})
+        return
+    human(f"동기화 완료: {len(items)}개 종목 저장 ({cache_display})")
 
 
 @stock.command("search")
@@ -310,7 +322,7 @@ def search(keyword: str | None, mrkt_tp: str, exchange: str):
     if items:
         print_generic_table(items, title=f"종목 리스트 ({len(items)}개)")
     else:
-        click.echo("검색 결과가 없습니다.")
+        print_generic_table([], title="종목 리스트")
 
 
 

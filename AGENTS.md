@@ -28,6 +28,8 @@ kiwoom-cli는 AI 에이전트가 파싱 없이 안전하게 쓰도록 설계된 
 - `data` — 성공 페이로드. API 응답은 **정규화된 타입 필드** + 원본(`data.raw`).
   리스트형 응답은 `{"items": [...], "raw": [...]}`.
 - `meta.env` — `"mock"`(모의투자) 또는 `"prod"`(실거래). **주문 전 반드시 확인하세요.**
+  설정을 읽을 수 없는 오류 envelope(`NOT_CONFIGURED` — 손상된 config.toml)에서는
+  `null`일 수 있습니다 — 실제로 알 수 없는 값을 `"mock"`으로 지어내지 않습니다.
 - `meta.cont` — 연속조회 커서. 값이 있으면 `--next-key <값>`으로 다음 페이지.
 - `error` — `{"code", "retryable", "message", "upstream_code", "details"?}`.
 
@@ -67,8 +69,48 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 `data`(및 내부 모든 리스트의 각 요소)를 지정한 키로만 투영하고 `data.raw`를
 제거합니다. 대량 조회 시 응답 토큰을 크게 줄입니다.
 
+**값이 dict나 list인 키도 이름으로 통째로 선택할 수 있습니다.** 요청한 키가
+컨테이너면 내부를 다시 투영하지 않고 그대로 반환합니다(최상위 `raw` 키만
+제거). dry-run의 `body`와 `order validate`의 `checks`가 대표적인 경우입니다.
+
+```bash
+kiwoom -f json --fields body  order buy 005930 --qty 1 --price 70000 --dry-run
+kiwoom -f json --fields checks order validate buy 005930 --qty 1 --price 70000
+```
+
+요청하지 않은 리스트 키는 **요청한 필드를 담은 원소가 하나라도 있을 때만**
+남습니다. dict가 들어 있지 않은 리스트(숫자·문자열 배열)는 이름으로 직접
+요청하지 않는 한 항상 제거됩니다 — 값이 `0`인지 여부는 판단에 쓰이지 않습니다.
+
 요청한 키 중 하나라도 매칭되지 않으면(부분 매칭 포함, 오타 등) 조용히 넘어가지 않고
-`meta.fields_unmatched`에 매칭 실패한 키 목록을 담아 반환합니다.
+`meta.fields_unmatched`에 매칭 실패한 키 목록을 담아 반환합니다. (`--fields`는
+`-f json` 전용입니다 — csv는 아래에서 설명하는 자체 컬럼 규칙을 따릅니다.)
+
+## CSV 출력 형식
+
+`-f csv`는 envelope을 쓰지 않고 순수 CSV만 stdout에 씁니다. 응답이 스칼라
+요약과 리스트(예: 계좌 요약 + 보유종목)를 모두 갖고 있으면 **여러 블록**이
+하나의 스트림에 이어져 나옵니다:
+
+- 스칼라 요약 블록이 있으면 항상 먼저 나옵니다(딕트 값은 `parent.nested`로
+  한 겹만 평탄화됩니다).
+- 실제로 출력되는(비어 있지 않은) 블록들 사이에는 빈 줄이 **정확히 하나**
+  있고, 마지막 블록 뒤에는 없습니다. 빈 리스트(예: 보유종목 없음)는 블록
+  자체가 생략되므로 구분용 빈 줄도 남기지 않습니다.
+- 블록마다 헤더 행이 하나씩 있습니다 — 여러 블록을 하나의 테이블처럼
+  이어붙여 파싱하면 안 됩니다.
+- 블록의 컬럼은 **그 블록에 속한 모든 행의 합집합**입니다(첫 행의 키만이
+  아님) — 행마다 필드가 들쭉날쭉해도 뒤쪽 행에만 있는 컬럼이 잘리지 않습니다.
+- 결과가 완전히 비어 있으면(요약도 리스트도 없음) 출력은 0바이트이고
+  exit 0입니다 — 이는 "성공했지만 보여줄 게 없다"이지 오류가 아닙니다.
+- `account balance --market all`은 위 규칙과 다른 **단일 테이블 통합
+  스키마**를 씁니다 — 요약 블록 없이 국내/미국 보유종목을 한 테이블(`market`,
+  `symbol`, `eval_krw` 등 통화 환산 컬럼 포함)로만 냅니다. 환율 환산 소계를
+  스칼라 요약으로 낼지가 아직 미확정이라, 이 비대칭은 당분간 의도된
+  상태입니다.
+- table 모드는 최상위 딕트 값을 아예 표시하지 않고 건너뛰지만, csv는 그
+  딕트를 한 겹 평탄화(`부모키.자식키`)해 컬럼으로 노출합니다 — 두 포맷이
+  같은 데이터를 다르게 보여주는 의도된 비대칭입니다.
 
 ## 페이지네이션 (연속조회)
 
@@ -164,7 +206,7 @@ exit 2로 하드 실패하지 않고) `checks.price_known`이 `false`가 되어 
 | `AUTH_REQUIRED` | ✗ | 토큰 없음. 키체인 불가 환경이면 메시지가 `KIWOOM_TOKEN` 안내 |
 | `TOKEN_EXPIRED` | ✗ | 재로그인 필요 (upstream 8005, HTTP 401) |
 | `INVALID_INPUT` | ✗ | 파라미터 형식/누락 (upstream 1511/1512/1517/2) |
-| `INVALID_API` | ✗ | 잘못된 API ID |
+| `INVALID_API` | ✗ | 잘못된 API ID. `exit 1`(raw `kiwoom api`가 로컬 레지스트리에 없는 api_id를 보내기 전에 클라이언트 사전검증으로 거부) / `exit 2`(업스트림이 실제로 1501/1504/1505를 응답) — 둘 다 같은 `error.code`이므로, exit code만 보고 분기하면 두 경우를 뒤섞는다. `error.code`로 먼저 분기하세요 |
 | `NOT_FOUND` | ✗ | 종목/시장 없음 |
 | `RATE_LIMITED` | ✓(1700) | 호출 제한 — backoff 후 재시도 |
 | `ENV_MISMATCH` | ✗ | 실전/모의 불일치 (appkey/token) |
@@ -179,6 +221,14 @@ exit 2로 하드 실패하지 않고) `checks.price_known`이 `false`가 되어 
 통합 명령(`account balance/deposit/pnl/orders --market all`)에서 국내·미국이 모두
 실패하면 json 모드는 `UPSTREAM_ERROR` envelope + exit 2를 반환합니다. table 모드도
 동일한 경우 빨간 stderr 메시지와 함께 exit 2로 종료합니다(이전에는 조용히 exit 0).
+`dashboard`(계좌 잔고+거래량 상위)도 동일한 계약입니다 — 두 API가 모두 실패하면
+포맷 불문 exit 2, 하나만 실패하면 나머지로 계속 진행(exit 0, json은 해당 키가
+명시적 `null`). 단, `data.account` 키는 두 상태를 구분합니다: 토큰이 없어
+애초에 조회를 시도조차 안 했으면 키 자체가 **없고**, 토큰은 있는데 조회가
+실패했으면 `account`가 명시적으로 **`null`**입니다 — 전자는 "로그인하면
+나올 수도 있다", 후자는 "시도했지만 실패했다"로 의미가 다릅니다.
+`data.top_volume`은 계좌와 달리 토큰 유무로 게이팅되지 않고 항상 시도되므로,
+실패 시에는 (조회를 아예 안 하는 경우가 없어) 언제나 `null`로 나타납니다.
 
 ## 주문 안전장치
 
