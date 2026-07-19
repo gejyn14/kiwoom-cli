@@ -12,6 +12,7 @@ from ._constants import (
     AFTERHOURS_CHANGE_QTY_CND,
     AFTERHOURS_CHANGE_SORT,
     AFTERHOURS_CHANGE_STK_CND,
+    AMT_QTY_TP_0_1,
     AMT_QTY_TP_1_2,
     BALANCE_RATE_QTY_TYPE_BARE,
     BALANCE_RATE_STK_CND,
@@ -87,6 +88,8 @@ from ._constants import (
     SAME_NET_TRADE_SIDE,
     SAME_NET_TRADE_SORT,
     SAME_NET_TRADE_UNIT,
+    SECTOR_CODES_MARKET,
+    SECTOR_PRICE_MARKET,
     STOCK_CONDITION,
     SURGE_CREDIT_CND,
     SURGE_DIRECTION,
@@ -95,6 +98,8 @@ from ._constants import (
     SURGE_QTY_TYPE_5DIGIT,
     SURGE_STK_CND,
     SURGE_TIME_UNIT,
+    THEME_LOOKUP_KIND,
+    THEME_LOOKUP_SORT,
     TRADER_ANALYSIS_DATE_MODE,
     TRADER_ANALYSIS_POSITION,
     TRADER_ANALYSIS_SORT,
@@ -877,7 +882,7 @@ def sector_program(code):
 
 @sector.command("investor")
 @click.option("--market", "mrkt_tp", default="kospi", type=click.Choice(["kospi", "kosdaq"]), help="시장구분")
-@click.option("--unit", "amt_qty_tp", default="0", help="금액/수량 (0=금액, 1=수량)")
+@click.option("--unit", "amt_qty_tp", default="amount", type=HumanChoice(AMT_QTY_TP_0_1), help="금액/수량 구분")
 @click.option("--date", "base_dt", default="", help="기준일자 (YYYYMMDD)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def sector_investor(mrkt_tp, amt_qty_tp, base_dt, stex_tp):
@@ -896,7 +901,7 @@ def sector_investor(mrkt_tp, amt_qty_tp, base_dt, stex_tp):
 
 @sector.command("current")
 @click.argument("inds_cd")
-@click.option("--market", "mrkt_tp", default="0", help="시장구분 (0=코스피, 1=코스닥, 2=코스피200)")
+@click.option("--market", "mrkt_tp", default="kospi", type=HumanChoice(SECTOR_PRICE_MARKET), help="시장구분")
 def sector_current(inds_cd, mrkt_tp):
     """업종 현재가 조회. (ka20001)"""
     with KiwoomClient() as c:
@@ -911,7 +916,7 @@ def sector_current(inds_cd, mrkt_tp):
 
 @sector.command("stocks")
 @click.argument("inds_cd")
-@click.option("--market", "mrkt_tp", default="0", help="시장구분")
+@click.option("--market", "mrkt_tp", default="kospi", type=HumanChoice(SECTOR_PRICE_MARKET), help="시장구분")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def sector_stocks(inds_cd, mrkt_tp, stex_tp):
     """업종별 주가. (ka20002)"""
@@ -940,7 +945,7 @@ def sector_index(inds_cd):
 
 @sector.command("daily")
 @click.argument("inds_cd")
-@click.option("--market", "mrkt_tp", default="0", help="시장구분")
+@click.option("--market", "mrkt_tp", default="kospi", type=HumanChoice(SECTOR_PRICE_MARKET), help="시장구분")
 def sector_daily(inds_cd, mrkt_tp):
     """업종 현재가 일별. (ka20009)"""
     with KiwoomClient() as c:
@@ -954,7 +959,7 @@ def sector_daily(inds_cd, mrkt_tp):
 
 
 @sector.command("codes")
-@click.option("--market", "mrkt_tp", default="0", help="시장구분 (0=코스피,1=코스닥,2=KOSPI200,4=KOSPI100,7=KRX100)")
+@click.option("--market", "mrkt_tp", default="kospi", type=HumanChoice(SECTOR_CODES_MARKET), help="시장구분")
 def sector_codes(mrkt_tp):
     """업종코드 리스트. (ka10101)"""
     with KiwoomClient() as c:
@@ -1077,12 +1082,12 @@ def theme():
 
 
 @theme.command("groups")
-@click.option("--type", "qry_tp", default="0", help="검색구분 (0=전체, 1=테마검색, 2=종목검색)")
+@click.option("--type", "qry_tp", default="all", type=HumanChoice(THEME_LOOKUP_KIND), help="검색구분")
 @click.option("--code", "stk_cd", default="", help="종목코드 (종목검색시)")
 @click.option("--date-type", "date_tp", default="1", help="날짜구분 (n일전)")
 @click.option("--theme-name", "thema_nm", default="", help="테마명 (테마검색시)")
-@click.option("--sort", "flu_pl_amt_tp", default="1",
-              help="정렬 (1=상위기간수익률,2=하위기간수익률,3=상위등락률,4=하위등락률)")
+@click.option("--sort", "flu_pl_amt_tp", default="profit-top",
+              type=HumanChoice(THEME_LOOKUP_SORT), help="정렬 기준")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def theme_groups(qry_tp, stk_cd, date_tp, thema_nm, flu_pl_amt_tp, stex_tp):
     """테마 그룹별 조회. (ka90001)"""

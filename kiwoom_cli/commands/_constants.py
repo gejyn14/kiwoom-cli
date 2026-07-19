@@ -87,10 +87,13 @@ TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 AMT_QTY_TP_1_2 = {"amount": "1", "quantity": "2"}
 
 # AMT_QTY_TP_1_2와 키 집합(amount/quantity)은 같지만 극성이 다른 짝(0:금액,
-# 1:수량) — ka10131(stock.py, 기관외국인연속매매현황)에서 사용. ka10051
-# (market.py:651, 업종별투자자순매수)도 같은 코드북이나 아직 이관 전이라
-# 이 상수를 쓰지 않는다(별도 작업 대상). 절대 AMT_QTY_TP_1_2와 합치지 말 것 —
-# 키 집합이 같아 합쳐도 조용히 통과하고, 극성만 뒤집힌 값이 나간다.
+# 1:수량) — ka10131(stock.py, 기관외국인연속매매현황)/ka10051(market.py,
+# 업종별투자자순매수, Task 32에서 이관)이 공유한다(워크북으로 character-
+# for-character 동일 확인: "금액:0, 수량:1"). 절대 AMT_QTY_TP_1_2와 합치지
+# 말 것 — 키 집합이 같아 합쳐도 조용히 통과하고, 극성만 뒤집힌 값이 나간다.
+#
+# *** 이 상수는 api_id 2개가 공유한다. 한쪽 스펙만 바뀌면 이 상수를 제자리에서
+# 고치지 말고 분리할 것 — 제자리 수정은 나머지 하나를 조용히 함께 오염시킨다. ***
 AMT_QTY_TP_0_1 = {"amount": "0", "quantity": "1"}
 
 # ka10131(stock.py) 전용 — dt(기간) 필드. 값이 순수 일수 시퀀스가 아니라
@@ -981,3 +984,43 @@ AFTERHOURS_CHANGE_AMOUNT_CND = {
 # 전부와 값이 동일한 구분 불가 클러스터(2값 yes/no 계열은 전부 이렇다) —
 # 이름 규약이 유일한 방어선이다. 1곳: ka90009.
 FOREIGN_INST_DATE_INCLUDE = {"yes": "1", "no": "0"}
+
+# ── ka10051/ka20001/ka20002/ka20009/ka10101/ka90001(market sector·theme)
+# HumanChoice 전환 (Task 32) ─────────────────────────────────────────
+
+# ka10051(업종별투자자순매수) amt_qty_tp(금액수량구분, 0:금액,1:수량)는
+# AMT_QTY_TP_0_1을 공유한다(위 AMT_QTY_TP_0_1 주석의 커플링 명시 참고) —
+# 별도 상수를 만들지 않는다.
+
+# ka20001(업종현재가)/ka20002(업종별주가)/ka20009(업종현재가일별) 3곳
+# 공용 — mrkt_tp(시장구분, 0:코스피,1:코스닥,2:코스피200). 워크북에서 세
+# 시트 모두 "0:코스피, 1:코스닥, 2:코스피200"으로 character-for-character
+# 동일함을 확인했다. 기존 MARKET_KOSPI_KOSDAQ(kospi:0,kosdaq:1)의 진짜
+# 상위집합이지만(코스피200 값 2가 추가) 그쪽을 재사용하지 않는다 — 그러면
+# kospi200 이름이 없어 BadParameter가 난다. ka10101(sector_codes)의
+# SECTOR_CODES_MARKET(0/1/2/4/7)의 진짜 부분집합이기도 하다 — 절대 그쪽과
+# 합치지 말 것(코스피100/KRX100 이름이 여기선 거부돼야 한다).
+#
+# *** 이 상수는 api_id 3개가 공유한다. 한쪽 스펙만 바뀌면 이 상수를
+# 제자리에서 고치지 말고 분리할 것 — 제자리 수정은 나머지 둘을 조용히
+# 함께 오염시킨다. ***
+SECTOR_PRICE_MARKET = {"kospi": "0", "kosdaq": "1", "kospi200": "2"}
+
+# ka10101(업종코드리스트) 전용 — mrkt_tp(시장구분, 5개 값: 0:코스피(거래소),
+# 1:코스닥,2:KOSPI200,4:KOSPI100,7:KRX100(통합지수)). SECTOR_PRICE_MARKET
+# (ka20001/02/09)의 kospi/kosdaq/kospi200 3개 값을 그대로 포함하는 진짜
+# 상위집합이지만 api_id가 달라 절대 합치지 말 것 — kospi100/krx100 이름은
+# SECTOR_PRICE_MARKET 쪽에서 거부돼야 한다. 1곳: ka10101.
+SECTOR_CODES_MARKET = {
+    "kospi": "0", "kosdaq": "1", "kospi200": "2", "kospi100": "4", "krx100": "7",
+}
+
+# ka90001(테마그룹별) 전용 — qry_tp(검색구분, 0:전체검색,1:테마검색,
+# 2:종목검색). 1곳: ka90001.
+THEME_LOOKUP_KIND = {"all": "0", "theme": "1", "stock": "2"}
+
+# ka90001(테마그룹별) 전용 — flu_pl_amt_tp(등락수익구분, 1:상위기간수익률,
+# 2:하위기간수익률,3:상위등락률,4:하위등락률). 1곳: ka90001.
+THEME_LOOKUP_SORT = {
+    "profit-top": "1", "profit-bottom": "2", "change-top": "3", "change-bottom": "4",
+}

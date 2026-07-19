@@ -321,6 +321,11 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "AFTERHOURS_CHANGE_SORT", "AFTERHOURS_CHANGE_STK_CND",
     "AFTERHOURS_CHANGE_QTY_CND", "AFTERHOURS_CHANGE_CREDIT_CND",
     "AFTERHOURS_CHANGE_AMOUNT_CND", "FOREIGN_INST_DATE_INCLUDE",
+    # Task 32 — market sector·theme (ka10051/ka20001/ka20002/ka20009/
+    # ka10101/ka90001) HumanChoice 전환. AMT_QTY_TP_0_1은 위 목록에 이미
+    # 있음(ka10131과 공유, ka10051이 이번에 이관돼도 새로 추가하지 않음).
+    "SECTOR_PRICE_MARKET", "SECTOR_CODES_MARKET",
+    "THEME_LOOKUP_KIND", "THEME_LOOKUP_SORT",
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -355,6 +360,11 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
         for path, p in _iter_options(root_cli)
         if isinstance(p.type, _constants.HumanChoice)
     ]
+    # 145 = 138(Task 31c까지의 누적치, 아래 옛 주석 참고) + Task 32(market
+    # sector·theme ka10051/ka20001/ka20002/ka20009/ka10101/ka90001)의 7 =
+    # sector investor 1[amt_qty_tp] + sector current/stocks/daily 3[mrkt_tp
+    # 각 1개] + sector codes 1[mrkt_tp] + theme groups 2[qry_tp/flu_pl_amt_tp].
+    #
     # 138 = 122(Task 31b까지의 누적치, 아래 옛 주석 참고) + Task 31c(market
     # rank ka10042/ka10062/ka10065/ka10098/ka90009)의 16 = ka10042 3
     # [qry_dt_tp/pot_tp/sort_base — dt는 I2 규칙으로 raw 유지해 미포함] +
@@ -372,7 +382,7 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # 28 = ka10027 7 + ka10029 5 + ka10031 1 + ka10033 4 + ka10034 2 +
     # ka10035 2 + ka10036 1 + ka10037 3 + ka10039 3.
     # 이 수는 트리 순회로 재도출한 값이지 델타 추정이 아니다.
-    assert len(converted) == 138
+    assert len(converted) == 145
     # 금현물 주문 두 건은 이름으로도 못 박아 둔다. 개수만 맞추면 다른 곳이
     # 늘고 여기가 빠져도 통과하기 때문이다.
     assert ("cli order gold buy", "order_type") in converted

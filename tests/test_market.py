@@ -13,10 +13,15 @@ import pytest
 from click.testing import CliRunner
 
 from kiwoom_cli.commands._constants import (
+    AMT_QTY_TP_0_1,
     EXCHANGE_TWO,
     MARKET_ALL,
     MARKET_KOSPI_KOSDAQ,
     MARKET_TWO,
+    SECTOR_CODES_MARKET,
+    SECTOR_PRICE_MARKET,
+    THEME_LOOKUP_KIND,
+    THEME_LOOKUP_SORT,
 )
 from kiwoom_cli.main import cli
 from tests.fakes import FakeKiwoomClient
@@ -1333,6 +1338,149 @@ def test_rank_net_buyer_pot_type_rejects_name_absent_from_ka10042(runner, fake_c
     result = runner.invoke(cli, [
         "market", "rank", "net-buyer", "005930", "--pot-type", absent,
     ])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+# ============================================================
+#  Task 32 — market sector · theme (ka10051/ka20001/ka20002/ka20009/
+#  ka10101/ka90001) HumanChoice 전환
+#
+#  각 커맨드마다 기본 호출 body를 통째로 고정한 뒤 옵션을 전환한다
+#  (브리프 요구사항). 이번 청크는 순수 표기 전환뿐 — 전송 바이트가
+#  바뀌는 wire-value fix는 없다(기존 raw 기본값이 전부 새 매핑의
+#  values()에 포함됨을 확인했다).
+# ============================================================
+
+
+def test_sector_investor_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "sector", "investor"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10051", {
+        "mrkt_tp": "0", "amt_qty_tp": "0", "base_dt": "", "stex_tp": "1",
+    })
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(AMT_QTY_TP_0_1.items()))
+def test_sector_investor_unit_human_options(runner, fake_client, cli_value, api_value):
+    """AMT_QTY_TP_0_1의 각 이름이 정확한 amt_qty_tp 값으로 매핑되는지 고정.
+
+    quantity가 "1"(0/1 극성)임을 못 박아 둔다 — AMT_QTY_TP_1_2/FOREIGN_BROKER_SORT/
+    SAME_NET_TRADE_SORT(전부 quantity="2")로 바꿔치기해도 기본 body 테스트만으로는
+    안 잡힌다(superset-closure 스크립트: 셋 다 AMT_QTY_TP_0_1과 polarity hazard).
+    """
+    result = runner.invoke(cli, ["market", "sector", "investor", "--unit", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
+def test_sector_current_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "sector", "current", "001"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka20001", {"mrkt_tp": "0", "inds_cd": "001"})
+
+
+def test_sector_stocks_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "sector", "stocks", "001"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == (
+        "ka20002", {"mrkt_tp": "0", "inds_cd": "001", "stex_tp": "1"}
+    )
+
+
+def test_sector_daily_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "sector", "daily", "001"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka20009", {"mrkt_tp": "0", "inds_cd": "001"})
+
+
+@pytest.mark.parametrize(
+    "subcommand,api_id",
+    [("current", "ka20001"), ("stocks", "ka20002"), ("daily", "ka20009")],
+)
+@pytest.mark.parametrize("cli_value,api_value", list(SECTOR_PRICE_MARKET.items()))
+def test_sector_price_family_market_human_options(
+    runner, fake_client, subcommand, api_id, cli_value, api_value
+):
+    """SECTOR_PRICE_MARKET(kospi/kosdaq/kospi200)이 3개 API(ka20001/02/09) 전부에서
+    동일한 mrkt_tp 값으로 매핑되는지 고정. kospi200="2"까지 포함해 기존
+    MARKET_KOSPI_KOSDAQ(kospi/kosdaq 2값)의 진짜 상위집합임을 값으로 못 박는다."""
+    result = runner.invoke(
+        cli, ["market", "sector", subcommand, "001", "--market", cli_value]
+    )
+    assert result.exit_code == 0
+    assert fake_client.calls[0][0] == api_id
+    assert fake_client.calls[0][1]["mrkt_tp"] == api_value
+
+
+def test_sector_codes_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "sector", "codes"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10101", {"mrkt_tp": "0"})
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(SECTOR_CODES_MARKET.items()))
+def test_sector_codes_market_human_options(runner, fake_client, cli_value, api_value):
+    """SECTOR_CODES_MARKET(ka10101)의 5개 값 전부 고정 — kospi100(4)/krx100(7)까지
+    포함해 SECTOR_PRICE_MARKET(3값)의 진짜 상위집합임을 못 박는다."""
+    result = runner.invoke(cli, ["market", "sector", "codes", "--market", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mrkt_tp"] == api_value
+
+
+def test_theme_groups_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "theme", "groups"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka90001", {
+        "qry_tp": "0", "stk_cd": "", "date_tp": "1",
+        "thema_nm": "", "flu_pl_amt_tp": "1", "stex_tp": "1",
+    })
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(THEME_LOOKUP_KIND.items()))
+def test_theme_groups_type_human_options(runner, fake_client, cli_value, api_value):
+    """THEME_LOOKUP_KIND의 각 이름이 정확한 qry_tp 값으로 매핑되는지 고정.
+
+    stock="2"임을 못 박아 둔다 — ALL_STOCK_QRY/PRODUCT_TYPE(둘 다 stock="1")로
+    바꿔치기해도 all="0"이 겹쳐 기본 body 테스트만으로는 안 잡힌다
+    (superset-closure 스크립트: 둘 다 THEME_LOOKUP_KIND와 polarity hazard).
+    """
+    result = runner.invoke(cli, ["market", "theme", "groups", "--type", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["qry_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(THEME_LOOKUP_SORT.items()))
+def test_theme_groups_sort_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "theme", "groups", "--sort", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["flu_pl_amt_tp"] == api_value
+
+
+def test_sector_investor_legacy_numeric_code_still_accepted(runner, fake_client):
+    """HumanChoice의 하위호환: raw API 코드도 그대로 통과해야 한다."""
+    result = runner.invoke(cli, ["market", "sector", "investor", "--unit", "1"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == "1"
+
+
+# ── Task 32: 형제 상수 이름 거부(상위집합 오염 방지) ────────────────
+#
+#  값 집합이 실제로 다른 상수 쌍만, 상대 API에는 있고 이 API에는 없는
+#  이름을 거부하는지로 구분할 수 있다.
+
+
+@pytest.mark.parametrize("absent", ["kospi100", "krx100"])
+@pytest.mark.parametrize("subcommand", ["current", "stocks", "daily"])
+def test_sector_price_family_rejects_name_absent_from_sector_price_market(
+    runner, fake_client, subcommand, absent
+):
+    """kospi100/krx100은 ka10101 SECTOR_CODES_MARKET엔 있지만 ka20001/02/09가 쓰는
+    SECTOR_PRICE_MARKET엔 없다(superset-closure 스크립트: SECTOR_PRICE_MARKET은
+    SECTOR_CODES_MARKET의 진짜 부분집합)."""
+    result = runner.invoke(
+        cli, ["market", "sector", subcommand, "001", "--market", absent]
+    )
     assert result.exit_code != 0
     assert fake_client.calls == []
 
