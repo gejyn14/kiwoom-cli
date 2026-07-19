@@ -425,3 +425,55 @@ def test_send_order_strips_pagination_flags(runner, isolated_env):
     assert result.exit_code == 0
     assert captured["all_pages"] is False
     assert captured["next_key"] is None
+
+
+# ── csv 출력 계약: 실제 CLI를 통한 end-to-end 검증 ────────
+#
+# 그동안의 csv 테스트는 전부 formatters의 함수(print_generic_table 등)를
+# 손으로 만든 context로 직접 호출했다 — 실제 명령의 stdout이 csv.reader로
+# 파싱되는지, envelope 계약대로 stdout에 CSV만 담기는지는 아무도 검증하지
+# 않았다.
+
+
+def test_account_balance_kr_csv_round_trips_through_csv_reader(runner, monkeypatch):
+    """`-f csv account balance --market kr`의 실제 stdout을 csv.reader로
+    되읽어 계좌 요약(스칼라)과 보유종목(리스트) 두 블록이 모두 파싱 가능한
+    레코드로 담겨 있는지 확인한다."""
+    import csv
+    import io
+
+    fake = FakeKiwoomClient()
+    fake.set_response("kt00004", {
+        "return_code": 0,
+        "acnt_nm": "홍길동",
+        "entr": "1000000",
+        "tot_pur_amt": "7000000",
+        "stk_acnt_evlt_prst": [
+            {"stk_cd": "005930", "stk_nm": "삼성전자"},
+        ],
+    })
+    monkeypatch.setattr("kiwoom_cli.commands.account.KiwoomClient", lambda *a, **k: fake)
+
+    result = runner.invoke(cli, ["-f", "csv", "account", "balance", "--market", "kr"])
+
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""  # csv 모드 stdout에는 CSV만, 잡음은 stderr에도 없어야 함
+
+    rows = list(csv.reader(io.StringIO(result.stdout)))
+    # 블록 사이 빈 줄은 csv.reader가 빈 리스트([])로 돌려준다.
+    blank_indices = [i for i, r in enumerate(rows) if r == []]
+    assert len(blank_indices) == 1, f"블록 구분 빈 줄이 정확히 하나가 아님: {rows}"
+
+    summary_rows = rows[: blank_indices[0]]
+    holdings_rows = rows[blank_indices[0] + 1 :]
+
+    summary_header, summary_values = summary_rows[0], summary_rows[1]
+    summary = dict(zip(summary_header, summary_values))
+    assert summary["acnt_nm"] == "홍길동"
+    assert summary["entr"] == "1000000"
+    assert summary["tot_pur_amt"] == "7000000"
+
+    holdings_header, holdings_values = holdings_rows[0], holdings_rows[1]
+    holding = dict(zip(holdings_header, holdings_values))
+    assert holding["stk_cd"] == "005930"
+    assert holding["stk_nm"] == "삼성전자"

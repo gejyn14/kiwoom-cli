@@ -122,22 +122,17 @@ def _flat_dict(data: dict) -> list[dict]:
 def _emit_csv_summary_then_blocks(summary_rows: list[dict], list_blocks: list[list[dict]]) -> None:
     """csv 모드 공용 출력 순서: 스칼라 요약 블록 먼저, 그 다음 리스트 블록(들).
 
-    두 종류의 블록이 모두 있을 때만 사이에 빈 줄 하나를 둔다 (한 스트림에 여러
-    CSV 테이블을 이어 붙일 때 헤더 행이 서로 뒤섞이지 않도록 구분). `list_blocks`
-    자체가 비어 있지 않으면(원소인 개별 블록이 빈 리스트여도) "리스트 블록이
-    존재한다"로 취급한다 — `print_generic_table`(리스트 타입 키가 있는지)과
-    `print_account_eval`(보유종목이 있는지)가 이 "존재" 판정을 각자 다른 값으로
-    미리 계산해 넘겨주므로, 호출부가 list_blocks를 어떻게 구성하느냐로 두 곳의
-    기존 동작이 그대로 재현된다. `print_generic_table`의 table 모드 dict 분기
-    (스칼라 요약 먼저, 리스트는 그 다음)와 순서를 맞춘다.
+    빈 블록(빈 리스트)은 아무것도 출력하지 않으므로 애초에 건너뛴다 — 그러지
+    않으면 데이터가 없는 블록도 구분용 빈 줄을 하나 남겨, 성공한 호출인데도
+    EOF 바로 앞에 빈 레코드가 남는다. 실제로 출력되는(비어 있지 않은) 블록들
+    사이에만 빈 줄 하나를 두고, 마지막 블록 뒤에는 두지 않는다. `print_generic_table`의
+    table 모드 dict 분기(스칼라 요약 먼저, 리스트는 그 다음)와 순서를 맞춘다.
     """
-    if summary_rows:
-        _output_csv(summary_rows)
-    if list_blocks:
-        if summary_rows:
-            print()  # 두 CSV 블록을 빈 줄로 구분
-        for block in list_blocks:
-            _output_csv(block)
+    blocks = ([summary_rows] if summary_rows else []) + [b for b in list_blocks if b]
+    for i, block in enumerate(blocks):
+        if i:
+            sys.stdout.write("\r\n")  # csv.DictWriter도 \r\n을 쓰므로 줄바꿈을 통일
+        _output_csv(block)
 
 
 def _sign_color(value: str) -> str:
@@ -564,7 +559,7 @@ def print_account_eval(data: dict[str, Any]) -> None:
         return
     if fmt == "csv":
         holdings = data.get("stk_acnt_evlt_prst", [])
-        _emit_csv_summary_then_blocks(_flat_dict(data), [holdings] if holdings else [])
+        _emit_csv_summary_then_blocks(_flat_dict(data), [holdings])
         return
     summary = Table(title="💰 계좌평가현황", show_header=False, border_style="dim")
     summary.add_column("항목", style="cyan", width=20)

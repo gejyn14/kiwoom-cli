@@ -570,3 +570,29 @@ class TestAccountEvalCsvScalarSummary:
         out = capsys.readouterr().out
         assert "홍길동" in out
         assert "1000000" in out
+
+
+class TestCsvEmptyBlockSeparator:
+    """IMPORTANT 4: 빈 리스트 블록은 아무 것도 안 담고 있어도 구분용 빈 줄을
+    하나 남겼다 — 성공 호출인데도 EOF 직전에 빈 레코드가 남는 문제. 또한 두 개
+    이상의 비어있지 않은 리스트 블록은 서로 붙어 나왔다 — 헤더 행이 뒤섞인다."""
+
+    def test_empty_list_produces_no_trailing_blank_line(self, capsys):
+        """{"a": 1, "items": []}: 요약 뒤에 빈 리스트 때문에 남는 빈 줄이 없어야 한다."""
+        data = {"a": 1, "items": []}
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        assert out == "a\r\n1\r\n", f"빈 리스트 블록이 dangling blank line을 남김: {out!r}"
+
+    def test_two_non_empty_lists_separated_by_exactly_one_blank_line(self, capsys):
+        """리스트 타입 키가 2개 이상이고 모두 비어있지 않으면, 두 블록 사이에
+        빈 줄이 정확히 하나 있어야 한다 (이전엔 이어 붙어 나왔다)."""
+        data = {
+            "xs": [{"p": 1}],
+            "ys": [{"q": 2}],
+        }
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        assert out == "p\r\n1\r\n\r\nq\r\n2\r\n", f"블록 사이 구분이 예상과 다름: {out!r}"

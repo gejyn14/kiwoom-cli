@@ -142,6 +142,16 @@ def test_project_fields_selects_dict_valued_key():
     assert project_fields(data, ["body"]) == {"body": {"x": 1}}
 
 
+def test_plain_empty_list_dropped_regression_lock():
+    """회귀 고정용 — 빈 리스트는 dict를 하나도 담지 못하므로(빈 리스트라
+    담을 수조차 없음) 이름으로 요청되지 않는 한 항상 버려진다. 이건 새 보존
+    규칙의 경계 케이스를 고정해두는 것일 뿐, 버그를 재현/반증하는 테스트가
+    아니다(falsification 테스트 아님)."""
+    from kiwoom_cli.envelope import project_fields
+
+    assert project_fields({"a": 1, "xs": []}, ["a"]) == {"a": 1}
+
+
 # ── project_fields: 컨테이너 보존 규칙 교정 (Fix round 1) ─────
 #
 # any(projected)는 값 진위(0/""/False 등)를 테스트하므로, 거래 데이터에서
