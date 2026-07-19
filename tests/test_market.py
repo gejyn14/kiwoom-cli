@@ -416,6 +416,33 @@ def test_elw_broker_top_side_net_buy_net_sell(runner, fake_client):
     assert fake_client.calls[0][1]["trde_tp"] == "2"
 
 
+@pytest.mark.parametrize("human,code", [("200k", "200"), ("300k", "300")])
+def test_rank_volume_vol_type_has_200k_300k(runner, fake_client, human, code):
+    """ka10030의 trde_qty_tp에만 있는 200/300 — ELW_BROKER_QTY_TYPE에는 없다."""
+    result = runner.invoke(
+        cli, ["market", "rank", "volume", "--vol-type", human]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_qty_tp"] == code
+
+
+@pytest.mark.parametrize("human", ["200k", "300k"])
+def test_elw_broker_top_vol_type_rejects_200k_300k(runner, fake_client, human):
+    """ka30002에 VOLUME_RANK_QTY_TYPE를 잘못 물리면 통과해 버리는 것을 막는다.
+
+    두 맵은 공유 키의 전송값이 전부 같아서 서로 바꿔 끼워도 잘못된 값이
+    나가지는 않는다 — 유일하게 드러나는 차이가 ka10030에만 있는 200/300이다.
+    그래서 이 두 값으로만 분리를 고정할 수 있다.
+    """
+    result = runner.invoke(cli, [
+        "market", "elw", "broker-top", "--issuer", "001", "--vol-type", human,
+    ])
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
 def test_elw_broker_top_period_not_off_by_one(runner, fake_client):
     """ka30002's dt is 5d=5 (NOT the ka10038 off-by-one codebook)."""
     result = runner.invoke(cli, [
