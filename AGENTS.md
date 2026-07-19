@@ -164,15 +164,19 @@ API 등) 응답은 **`meta.cont`를 절대 포함하지 않습니다** — 업�
 거부하지 않으므로, 스크립트에 남아 있는 전역 플래그가 있어도 안전합니다.
 
 미국 심볼 거래소 자동판별 보조 호출(usa10098)과 주문 `--dry-run`의 시세 조회
-보조 호출(`_quote_price_kr`/`_quote_price_us`/`_quote_price_gold`)은 내부
-(`internal`) 호출로 표시되어 전역 `--next-key`/`--all-pages`가 적용되지 않고
-`meta.cont`도 기록하지 않습니다 — 커서는 항상 명령의 본 조회가 소비/기록합니다.
-`_quote_price_gold`(금현물, kt50000/kt50001 dry-run)는 ka10001이 아니라 금현물
-전용 시세 API(ka50010)로 조회합니다 — ka10001은 금현물 코드(M04020000 등)를
-받지 않습니다. 이 시세 조회 결과(cur_prc/cntr_pric)를 숫자로 해석할 수 없으면
-(빈 값/0 이하/NaN/Inf 포함) `price`/`est_cost`를 0으로 조용히 채운 미리보기 대신
-`QUOTE_UNAVAILABLE`(exit 2)로 실패합니다 — `price_source: "market_quote"`가
-실제로는 실패한 조회에 붙는 것을 막기 위함입니다.
+보조 호출(`_quote_price_kr`/`_quote_price_us`)은 내부(`internal`) 호출로
+표시되어 전역 `--next-key`/`--all-pages`가 적용되지 않고 `meta.cont`도
+기록하지 않습니다 — 커서는 항상 명령의 본 조회가 소비/기록합니다. 이 시세
+조회 결과(cur_prc)를 숫자로 해석할 수 없으면(빈 값/0 이하/NaN/Inf 포함)
+`price`/`est_cost`를 0으로 조용히 채운 미리보기 대신 `QUOTE_UNAVAILABLE`
+(exit 2)로 실패합니다 — `price_source: "market_quote"`가 실제로는 실패한
+조회에 붙는 것을 막기 위함입니다.
+
+금현물(`order gold buy`/`sell`, kt50000/kt50001)은 시장가가 없고 전체
+유형이 지정가 계열(`limit`/`ioc`/`fok`)이라 `--price`가 항상 필수입니다 —
+생략하면 시세를 조회해 채우지 않고 `INVALID_INPUT`(exit 1)으로 즉시
+실패합니다. (과거엔 ka50010 기반 시세 조회로 금현물 시장가를 흉내 냈으나,
+존재하지 않는 기능이었으므로 제거했습니다 — Task 7b.)
 
 `order validate`도 같은 시세 파서를 씁니다: `--price`를 생략하면 현재가(cur_prc)로
 예상비용을 계산하는데, 이 조회가 실패/해석불가면 (validate는 dry-run과 달리
