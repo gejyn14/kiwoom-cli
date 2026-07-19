@@ -312,6 +312,15 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "FOREIGN_CONSECUTIVE_SIDE", "FOREIGN_CONSECUTIVE_BASE_DATE",
     "FOREIGN_BROKER_SIDE", "FOREIGN_BROKER_SORT",
     "BROKER_TOP_QTY_TYPE", "BROKER_TOP_SIDE", "BROKER_TOP_PERIOD",
+    # Task 31c — market rank ka10042/ka10062/ka10065/ka10098/ka90009
+    # HumanChoice 전환. ka10042는 새 상수 없이 TRADER_ANALYSIS_DATE_MODE/
+    # TRADER_ANALYSIS_POSITION/TRADER_ANALYSIS_SORT(위 목록에 이미 있음,
+    # ka10043과 공유)를 재사용해 이 목록에 새로 추가하지 않았다.
+    "SAME_NET_TRADE_SIDE", "SAME_NET_TRADE_SORT", "SAME_NET_TRADE_UNIT",
+    "INVESTOR_TOP_SIDE", "INVESTOR_TOP_ORGN",
+    "AFTERHOURS_CHANGE_SORT", "AFTERHOURS_CHANGE_STK_CND",
+    "AFTERHOURS_CHANGE_QTY_CND", "AFTERHOURS_CHANGE_CREDIT_CND",
+    "AFTERHOURS_CHANGE_AMOUNT_CND", "FOREIGN_INST_DATE_INCLUDE",
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -346,6 +355,13 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
         for path, p in _iter_options(root_cli)
         if isinstance(p.type, _constants.HumanChoice)
     ]
+    # 138 = 122(Task 31b까지의 누적치, 아래 옛 주석 참고) + Task 31c(market
+    # rank ka10042/ka10062/ka10065/ka10098/ka90009)의 16 = ka10042 3
+    # [qry_dt_tp/pot_tp/sort_base — dt는 I2 규칙으로 raw 유지해 미포함] +
+    # ka10062 3[trde_tp/sort_cnd/unit_tp] + ka10065 3[trde_tp/orgn_tp/
+    # amt_qty_tp] + ka10098 5[sort_base/stk_cnd/trde_qty_cnd/crd_cnd/
+    # trde_prica] + ka90009 2[amt_qty_tp/qry_dt_tp].
+    #
     # 122 = 94(account/market/stock를 훑던 시절의 53 + order 그룹의 2
     # [order gold buy/sell --order-type, GOLD_ORDER_TYPES] + Task 31a(market
     # rank ka10016~ka10023)의 31 + Task 31a-fix의 8[같은 8개 커맨드의
@@ -356,7 +372,7 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # 28 = ka10027 7 + ka10029 5 + ka10031 1 + ka10033 4 + ka10034 2 +
     # ka10035 2 + ka10036 1 + ka10037 3 + ka10039 3.
     # 이 수는 트리 순회로 재도출한 값이지 델타 추정이 아니다.
-    assert len(converted) == 122
+    assert len(converted) == 138
     # 금현물 주문 두 건은 이름으로도 못 박아 둔다. 개수만 맞추면 다른 곳이
     # 늘고 여기가 빠져도 통과하기 때문이다.
     assert ("cli order gold buy", "order_type") in converted
@@ -372,6 +388,16 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # 값 집합이 달라(buy/sell 단독값 없음) 이름으로 못 박아 둔다.
     assert ("cli market rank change", "trde_qty_cnd") in converted
     assert ("cli market rank broker-top", "trde_tp") in converted
+    # Task 31c: ka10042 --sort는 TRADER_ANALYSIS_SORT(ka10043과 공유)를
+    # 재사용해 새 상수 없이 전환됐다는 것을 이름으로 못 박는다 — 개수만
+    # 맞추면 이 커플링이 깨져도(예: ka10042가 별도 raw 텍스트로 되돌아가도)
+    # 통과하기 때문이다.
+    assert ("cli market rank net-buyer", "sort_base") in converted
+    assert ("cli market rank net-buyer", "dt") not in converted
+    assert ("cli market rank same-net-trade", "trde_tp") in converted
+    assert ("cli market rank investor-top", "orgn_tp") in converted
+    assert ("cli market rank afterhours-change", "trde_prica") in converted
+    assert ("cli market rank foreign-inst", "qry_dt_tp") in converted
 
 
 # ── Task 8: both-fail envelope (fail_api) ────────────────

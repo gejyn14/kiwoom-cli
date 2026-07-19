@@ -69,9 +69,16 @@ TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 # ka10051/ka10131의 0:금액,1:수량) — 그런데 두 코드북의 키 집합(amount/
 # quantity)이 완전히 같아서, trde_tp와 달리 이름만 봐서는 극성을 구분할
 # 수 없다. 그래서 이름 자체에 코드 값을 새긴다: 이 상수는 1:금액,2:수량
-# 전용(13곳, ka10066 포함)이며, 0:금액,1:수량 짝은 별도로
+# 전용(13곳 예정, ka10066 포함)이며, 0:금액,1:수량 짝은 별도로
 # `AMT_QTY_TP_0_1`이라는 이름을 예약해 둔다(ka10051/ka10131 이관 시 이
 # 이름으로 추가할 것 — 절대 이 상수를 재사용하지 말 것).
+# Task 31c(market.py ka10065/ka90009)에서 워크북·kwcli 이중 확인 후 이 상수를
+# 공유하도록 결정했다 — **이 상수는 지금 2개 api_id(ka10065 amt_qty_tp,
+# ka90009 amt_qty_tp)가 공유한다.** 두 시트 모두 "1:금액,2:수량"으로
+# character-for-character 동일하다(ka10065는 Required=N, ka90009는
+# Required=Y — required 여부는 다르지만 값 자체는 같다). 나중에 한쪽 스펙만
+# 바뀌면 이 상수를 제자리에서 고치지 말고 분리할 것 — 제자리 수정은 나머지
+# 하나를 조용히 함께 오염시킨다.
 AMT_QTY_TP_1_2 = {"amount": "1", "quantity": "2"}
 
 # AMT_QTY_TP_1_2와 키 집합(amount/quantity)은 같지만 극성이 다른 짝(0:금액,
@@ -275,20 +282,28 @@ ELW_BROKER_PERIOD = {"previous": "1", "5d": "5", "10d": "10", "40d": "40", "60d"
 # ── ka10043(trader-analysis, 거래원매물대분석)
 # qry_dt_tp/pot_tp/sort_base/dt 파라미터 교정 ─────────────────────────────
 
-# ka10043 전용 — qry_dt_tp(조회기간구분). market.py의 ka10042(rank net-buyer)도
-# 같은 필드명·값 집합(0:기간,1:일자)을 쓰는 것으로 보이나 아직 이관 전이라
-# 이 상수를 쓰지 않는다(별도 작업 대상, market.py는 이번 태스크 범위 밖).
-# 1곳: ka10043.
+# qry_dt_tp(조회기간구분). Task 31c에서 market.py의 ka10042(rank net-buyer)도
+# 워크북으로 character-for-character 동일함을 확인해 이 상수를 공유하도록
+# 전환했다 — **이 상수는 지금 2개 api_id(ka10043 stock.py, ka10042
+# market.py)가 공유한다.** 나중에 한쪽 스펙만 바뀌면 이 상수를 제자리에서
+# 고치지 말고 분리할 것 — 제자리 수정은 나머지 하나를 조용히 함께 오염시킨다.
 TRADER_ANALYSIS_DATE_MODE = {"period": "0", "start-end": "1"}
 
-# ka10043 전용 — pot_tp(시점구분, 0:당일,1:전일). market.py의 ka10042도 같은
-# 필드명·값 집합을 쓰는 것으로 보이나 아직 이관 전이라 이 상수를 쓰지 않는다.
-# 1곳: ka10043.
+# pot_tp(시점구분, 0:당일,1:전일). Task 31c에서 market.py의 ka10042도 워크북
+# 확인 후 공유하도록 전환했다 — **이 상수는 지금 2개 api_id(ka10043, ka10042)가
+# 공유한다.** 분리 원칙은 TRADER_ANALYSIS_DATE_MODE와 동일.
+#
+# **cross-field 해저드**: 값 집합(today:0, previous:1)이 PERIOD_TODAY_PREV_5_60
+# (ka10034/36/37의 dt)과 BROKER_TOP_PERIOD(ka10039의 dt) 양쪽 모두의 진짜
+# 부분집합이다(superset-closure 스크립트로 확인, FOREIGN_CONSECUTIVE_BASE_DATE와
+# 동일한 해저드 패턴) — 필드 자체가 다른데(pot_tp vs dt) 흔한 today/previous
+# 키 이름 때문에 "today/previous 상수 통합" 리팩터가 이 상수를 그 두 상수 중
+# 하나로 잘못 흡수하기 쉽다. 절대 합치지 말 것.
 TRADER_ANALYSIS_POSITION = {"today": "0", "previous": "1"}
 
-# ka10043 전용 — sort_base(정렬기준, 1:종가순,2:날짜순). market.py의 ka10042도
-# 같은 필드명·값 집합을 쓰는 것으로 보이나 아직 이관 전이라 이 상수를 쓰지 않는다.
-# 1곳: ka10043.
+# sort_base(정렬기준, 1:종가순,2:날짜순). Task 31c에서 market.py의 ka10042도
+# 워크북 확인 후 공유하도록 전환했다 — **이 상수는 지금 2개 api_id(ka10043,
+# ka10042)가 공유한다.** 분리 원칙은 TRADER_ANALYSIS_DATE_MODE와 동일.
 TRADER_ANALYSIS_SORT = {"close": "1", "date": "2"}
 
 # ka10043 전용 — dt(기간). 이 API는 5일=5로 코드가 일수와 그대로 일치한다
@@ -823,3 +838,141 @@ BROKER_TOP_SIDE = {"net-buy": "1", "net-sell": "2"}
 BROKER_TOP_PERIOD = {
     "today": "0", "previous": "1", "5d": "5", "10d": "10", "60d": "60",
 }
+
+# ── ka10042~ka90009(market rank 순매수거래원순위~외국인기관매매상위)
+# HumanChoice 전환 (Task 31c) ────────────────────────────────────────
+#
+# ka10042(net-buyer)의 qry_dt_tp/pot_tp/sort_base는 워크북으로
+# character-for-character 동일함을 확인해 TRADER_ANALYSIS_DATE_MODE/
+# TRADER_ANALYSIS_POSITION/TRADER_ANALYSIS_SORT(위 ka10043 섹션)를
+# 공유하도록 전환했다 — 새 상수를 추가하지 않았다. ka10042의 dt(기간)는
+# I2 규칙(값→라벨이 단위접미사 부착만으로 유도되는 폐쇄집합은 수량 유지)에
+# 따라 이번 태스크에서 전환하지 않고 raw 텍스트로 남긴다(브리프 판정 그대로).
+
+# ka10062(동일순매매순위) 전용 — trde_tp(매매구분, 1:순매수,2:순매도).
+# 값은 BROKER_TOP_SIDE(ka10039)/ELW_BROKER_SIDE(ka30002)/INVESTOR_TOP_SIDE
+# (ka10065)와 완전히 동일하다(구분 불가 쌍, superset-closure 스크립트로
+# 확인) — api_id가 달라 이름은 반드시 분리 유지. FOREIGN_BROKER_SIDE
+# (ka10037, buy/sell 단독값 포함)의 진짜 부분집합이기도 하니 그쪽과 절대
+# 합치지 말 것. 1곳: ka10062.
+SAME_NET_TRADE_SIDE = {"net-buy": "1", "net-sell": "2"}
+
+# ka10062(동일순매매순위) 전용 — sort_cnd(정렬조건, 1:수량,2:금액). 극성
+# 주의: AMT_QTY_TP_1_2(1:금액,2:수량)와 키 집합(amount/quantity)은 같지만
+# 코드가 정반대다 — 절대 그쪽과 합치지 말 것. 1곳: ka10062.
+SAME_NET_TRADE_SORT = {"quantity": "1", "amount": "2"}
+
+# ka10062(동일순매매순위) 전용 — unit_tp(단위구분, 1:단주,1000:천주). 1곳:
+# ka10062.
+SAME_NET_TRADE_UNIT = {"share": "1", "thousand": "1000"}
+
+# ka10065(장중투자자별매매상위) 전용 — trde_tp(매매구분, 1:순매수,2:순매도).
+# SAME_NET_TRADE_SIDE(ka10062)/BROKER_TOP_SIDE(ka10039)/ELW_BROKER_SIDE
+# (ka30002)와 값이 완전히 동일하다(구분 불가 쌍, superset-closure 스크립트로
+# 확인) — api_id별 이름 분리 유지. FOREIGN_BROKER_SIDE(ka10037)의 진짜
+# 부분집합이기도 하니 그쪽과 절대 합치지 말 것. 1곳: ka10065.
+INVESTOR_TOP_SIDE = {"net-buy": "1", "net-sell": "2"}
+
+# ka10065(장중투자자별매매상위) 전용 — orgn_tp(기관구분, 11개 값, 4자리).
+# 개념은 "투자자구분"이지만 와이어 코드가 invsr_tp(ka10058)/invsr(ka10063)와
+# 전혀 다르다 — 절대 그쪽과 합치지 말 것(브리프 "투자자구분 3계통" 해저드
+# 참고). 1곳: ka10065.
+INVESTOR_TOP_ORGN = {
+    "foreign": "9000", "foreign-broker": "9100", "financial-investment": "1000",
+    "investment-trust": "3000", "other-financial": "5000", "bank": "4000",
+    "insurance": "2000", "pension": "6000", "state": "7000",
+    "other-corporate": "7100", "institution": "9999",
+}
+
+# ka10065(장중투자자별매매상위) amt_qty_tp(금액수량구분, N=선택, 1:금액,
+# 2:수량)는 AMT_QTY_TP_1_2를 공유한다(위 AMT_QTY_TP_1_2 주석의 커플링
+# 명시 참고) — 별도 상수를 만들지 않는다.
+
+# ka10098(시간외단일가등락율순위) 전용 — sort_base(정렬기준, 5개 값).
+# RANK_CHANGE_SORT(ka10027, 필드명 sort_tp)와 값이 완전히 동일하다(구분
+# 불가 쌍, superset-closure 스크립트로 확인) — 필드명 자체가 다르고 api_id도
+# 달라 절대 합치지 말 것. 1곳: ka10098.
+AFTERHOURS_CHANGE_SORT = {
+    "rise-rate": "1", "rise-price": "2", "fall-rate": "3",
+    "fall-price": "4", "flat": "5",
+}
+
+# ka10098(시간외단일가등락율순위) 전용 — stk_cnd(종목조건, 16개 값, 2자리).
+# 코드 "2"(정리매매종목제외)가 이 API 고유값이다 — RANK_CHANGE_STK_CND/
+# EXPECTED_CHANGE_STK_CND는 정리매매종목제외를 코드 "11"로 쓰고(값 자체가
+# 다름), VOLUME_SURGE_STK_CND는 exclude-etf-etn을 코드 "18"로 쓴다(이쪽은
+# "16") — 겉보기엔 비슷해도 (key,value) 쌍이 일치하지 않아 다른 stk_cnd
+# 상수 어느 것과도 절대 합치지 말 것. superset-closure 스크립트 확인 결과
+# 이 상수는 NEW_HIGH_LOW_STK_CND/NEAR_HIGHLOW_STK_CND/SURGE_STK_CND/
+# ORDERBOOK_TOP_STK_CND/ORDERBOOK_SURGE_STK_CND/BALANCE_RATE_STK_CND/
+# CREDIT_RATIO_STK_CND(7개, 전부 7-값 부분집합류)의 진짜 상위집합이다 —
+# 이 방향(작은 것 → 이 상수로 바꿔치기)의 위험은 그 7개 상수들 각자의 기존
+# 테스트가 이미 방어한다(exclude-preferred 등 이 상수에도 포함된 이름으로
+# 거부 테스트가 걸려 있음). 1곳: ka10098.
+AFTERHOURS_CHANGE_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-liquidation": "2",
+    "exclude-preferred": "3", "exclude-managed-preferred": "4",
+    "exclude-margin-100": "5", "only-margin-100": "6", "only-margin-50": "12",
+    "only-margin-60": "13", "only-margin-40": "7", "only-margin-30": "8",
+    "only-margin-20": "9", "exclude-etf": "14", "exclude-spac": "15",
+    "exclude-etf-etn": "16", "exclude-etn": "17",
+}
+
+# ka10098(시간외단일가등락율순위) 전용 — trde_qty_cnd(거래량조건, 8개 값,
+# 5자리). 스펙 원문이 "100;천주이상"(세미콜론 오타)라 "100"=1천주이상을
+# 빠뜨리기 쉽다 — 워크북·kwcli 이중 확인으로 포함시켰다. kwcli는 이 자리를
+# `100`/`500`/`1000`처럼 코드값 그대로 이름으로 쓰지만(all=0;100=10;500=50;
+# 1000=100;5k=500;10k=1000;50k=5000;100k=10000), 값이 우리 쪽 다른
+# trde_qty_cnd류와 헷갈리는 것을 피하려고 여기서는 `100+`/`500+`/`1k+`처럼
+# 하한을 명시하는 이름을 쓴다(값은 kwcli와 완전히 동일, 이름만 다름).
+# 다른 trde_qty_cnd 사이트(RANK_CHANGE_QTY_CND는 4자리 zero-pad, 값 집합도
+# 다름)와 절대 합치지 말 것. superset-closure 스크립트 확인 결과 다른
+# 어떤 상수와도 (key,value) 관계가 없다. 1곳: ka10098.
+AFTERHOURS_CHANGE_QTY_CND = {
+    "all": "0", "100+": "10", "500+": "50", "1k+": "100", "5k+": "500",
+    "10k+": "1000", "50k+": "5000", "100k+": "10000",
+}
+
+# ka10098(시간외단일가등락율순위) 전용 — crd_cnd(신용조건, 9개 값).
+# EXPECTED_CHANGE_CREDIT_CND(ka10029)와 값이 완전히 동일하다(구분 불가
+# 쌍, superset-closure 스크립트로 확인). RANK_CHANGE_CREDIT_CND(ka10027)/
+# CREDIT_RATIO_CREDIT_CND(ka10033)를 포함해 총 8개 7값짜리 crd_cnd 상수의
+# 진짜 상위집합이기도 하니 그쪽들과 절대 합치지 말 것(이 방향의 위험은 그
+# 상수들 각자의 기존 테스트가 이미 방어한다). 1곳: ka10098.
+AFTERHOURS_CHANGE_CREDIT_CND = {
+    "all": "0", "a": "1", "b": "2", "c": "3", "d": "4",
+    "exclude-overlimit": "5", "e": "7", "short": "8", "all-financing": "9",
+}
+
+# ka10098(시간외단일가등락율순위) 전용 — trde_prica(거래대금, 12개 값,
+# 5자리). **와이어 값 함정**: RANK_CHANGE_AMOUNT_CND(ka10027,
+# trde_prica_cnd 필드)와 라벨 형태(all/30m/50m/.../50b)가 비슷해 보이지만
+# 스케일이 한 자리 다르다 — 예를 들어 코드 "10"은 RANK_CHANGE_AMOUNT_CND에서
+# "100m"(1억원)을 뜻하지만 여기서는 "10m"(1천만원)을 뜻한다. 워크북 원문
+# 라벨(0:전체조회,5:5백만원이상,10:1천만원이상,...,10000:100억원이상)과
+# kwcli(all=0;5m=5;10m=10;30m=30;50m=50;100m=100;300m=300;500m=500;
+# 1b=1000;3b=3000;5b=5000;10b=10000)로 이중 확인했다. 필드명 자체도
+# trde_prica(여기) vs trde_prica_cnd(ka10027)로 달라 혼동 위험은 낮지만,
+# 라벨 유사성만으로 RANK_CHANGE_AMOUNT_CND와 절대 합치지 말 것.
+# superset-closure 스크립트 확인 결과 다른 어떤 상수와도 (key,value) 관계가
+# 없다. 1곳: ka10098.
+AFTERHOURS_CHANGE_AMOUNT_CND = {
+    "all": "0", "5m": "5", "10m": "10", "30m": "30", "50m": "50",
+    "100m": "100", "300m": "300", "500m": "500", "1b": "1000",
+    "3b": "3000", "5b": "5000", "10b": "10000",
+}
+
+# ka90009(외국인기관매매상위) amt_qty_tp(금액수량구분, Required=Y, 1:금액,
+# 2:수량)는 AMT_QTY_TP_1_2를 공유한다(위 AMT_QTY_TP_1_2 주석의 커플링
+# 명시 참고) — 별도 상수를 만들지 않는다.
+
+# ka90009(외국인기관매매상위) 전용 — qry_dt_tp(조회일자구분, 0:조회일자
+# 미포함, 1:조회일자 포함). 값은 CHECK_YES_1_NO_0(yes:1,no:0)과 완전히
+# 동일하지만, CHECK_YES_1_NO_0의 주석이 "stock.py의 qry_dt_tp/pot_tp 등과
+# 절대 합치지 말 것"이라고 이미 명시적으로 예약해 둔 이름이라 재사용하지
+# 않는다 — 이 API 전용 이름을 새로 쓴다. superset-closure 스크립트 확인
+# 결과 CHECK_YES_1_NO_0/MANAGED_STOCK_INCLUDE/NEW_HIGH_LOW_INCLUDE_LIMIT/
+# SURGE_INCLUDE_LIMIT/RANK_CHANGE_INCLUDE_LIMIT/CREDIT_RATIO_INCLUDE_LIMIT
+# 전부와 값이 동일한 구분 불가 클러스터(2값 yes/no 계열은 전부 이렇다) —
+# 이름 규약이 유일한 방어선이다. 1곳: ka90009.
+FOREIGN_INST_DATE_INCLUDE = {"yes": "1", "no": "0"}

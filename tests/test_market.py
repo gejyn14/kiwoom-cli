@@ -1164,3 +1164,176 @@ def test_rank_change_sort_rejects_name_absent_from_ka10027(runner, fake_client, 
     result = runner.invoke(cli, ["market", "rank", "change", "--sort", absent])
     assert result.exit_code != 0
     assert fake_client.calls == []
+
+
+# ============================================================
+#  Task 31c — market rank ka10042/ka10062/ka10065/ka10098/ka90009
+#  HumanChoice 전환
+#
+#  각 커맨드마다 기본 호출 body를 통째로 고정한 뒤 옵션을 전환한다
+#  (브리프 요구사항). 이번 청크는 순수 표기 전환뿐 — 전송 바이트가
+#  바뀌는 wire-value fix는 없다.
+# ============================================================
+
+
+def test_rank_net_buyer_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "net-buyer", "005930"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10042", {
+        "stk_cd": "005930", "strt_dt": "", "end_dt": "",
+        "qry_dt_tp": "0", "pot_tp": "0", "dt": "5", "sort_base": "1",
+    })
+
+
+def test_rank_net_buyer_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "net-buyer", "005930",
+        "--date-type", "start-end", "--pot-type", "previous", "--sort", "date",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["qry_dt_tp"] == "1"
+    assert body["pot_tp"] == "1"
+    assert body["sort_base"] == "2"
+
+
+def test_rank_net_buyer_period_stays_raw_numeric(runner, fake_client):
+    """dt(--period)는 I2 규칙(단위접미사만으로 라벨 유도 가능)에 따라 전환하지 않는다."""
+    result = runner.invoke(cli, ["market", "rank", "net-buyer", "005930", "--period", "120"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == "120"
+
+
+def test_rank_same_net_trade_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "same-net-trade", "--from", "20241106"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10062", {
+        "strt_dt": "20241106", "end_dt": "", "mrkt_tp": "000",
+        "trde_tp": "1", "sort_cnd": "1", "unit_tp": "1", "stex_tp": "1",
+    })
+
+
+def test_rank_same_net_trade_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "same-net-trade", "--from", "20241106",
+        "--type", "net-sell", "--sort", "amount", "--unit", "thousand",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["trde_tp"] == "2"
+    assert body["sort_cnd"] == "2"
+    assert body["unit_tp"] == "1000"
+
+
+def test_rank_investor_top_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "investor-top"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10065", {
+        "trde_tp": "1", "mrkt_tp": "000", "orgn_tp": "9000", "amt_qty_tp": "1",
+    })
+
+
+def test_rank_investor_top_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "investor-top", "--type", "net-sell",
+        "--investor", "pension", "--unit", "quantity",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["trde_tp"] == "2"
+    assert body["orgn_tp"] == "6000"
+    assert body["amt_qty_tp"] == "2"
+
+
+def test_rank_afterhours_change_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "afterhours-change"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10098", {
+        "mrkt_tp": "000", "sort_base": "1", "stk_cnd": "0",
+        "trde_qty_cnd": "0", "crd_cnd": "0", "trde_prica": "0",
+    })
+
+
+def test_rank_afterhours_change_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "afterhours-change", "--sort", "fall-price",
+        "--stk-cnd", "exclude-liquidation", "--vol-cnd", "5k+",
+        "--credit", "short", "--amount", "1b",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["sort_base"] == "4"
+    assert body["stk_cnd"] == "2"
+    assert body["trde_qty_cnd"] == "500"
+    assert body["crd_cnd"] == "8"
+    assert body["trde_prica"] == "1000"
+
+
+def test_rank_foreign_inst_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "foreign-inst"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka90009", {
+        "mrkt_tp": "000", "amt_qty_tp": "1", "qry_dt_tp": "0",
+        "date": "", "stex_tp": "1",
+    })
+
+
+def test_rank_foreign_inst_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "foreign-inst", "--unit", "quantity", "--date-type", "yes",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["amt_qty_tp"] == "2"
+    assert body["qry_dt_tp"] == "1"
+
+
+def test_rank_net_buyer_legacy_numeric_code_still_accepted(runner, fake_client):
+    """HumanChoice의 하위호환: raw API 코드도 그대로 통과해야 한다."""
+    result = runner.invoke(cli, ["market", "rank", "net-buyer", "005930", "--sort", "2"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["sort_base"] == "2"
+
+
+# ── Task 31c: 형제 상수 이름 거부(상위집합 오염 방지) ───────────────
+#
+#  값 집합이 실제로 다른 상수 쌍만, 상대 API에는 있고 이 API에는 없는
+#  이름을 거부하는지로 구분할 수 있다. byte-identical 쌍(구분 불가)은
+#  아래 목록에 없다 — 보고서 "구분 불가" 절 참고.
+
+
+@pytest.mark.parametrize("absent", ["buy", "sell"])
+def test_rank_same_net_trade_type_rejects_name_absent_from_ka10062(runner, fake_client, absent):
+    """buy/sell(단독값)은 ka10037 FOREIGN_BROKER_SIDE엔 있지만 ka10062 SAME_NET_TRADE_SIDE엔 없다.
+    (superset-closure 스크립트: SAME_NET_TRADE_SIDE는 FOREIGN_BROKER_SIDE의 진짜 부분집합)"""
+    result = runner.invoke(cli, [
+        "market", "rank", "same-net-trade", "--from", "20241106", "--type", absent,
+    ])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("absent", ["buy", "sell"])
+def test_rank_investor_top_type_rejects_name_absent_from_ka10065(runner, fake_client, absent):
+    """buy/sell(단독값)은 ka10037 FOREIGN_BROKER_SIDE엔 있지만 ka10065 INVESTOR_TOP_SIDE엔 없다.
+    (superset-closure 스크립트: INVESTOR_TOP_SIDE는 FOREIGN_BROKER_SIDE의 진짜 부분집합)"""
+    result = runner.invoke(cli, ["market", "rank", "investor-top", "--type", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("absent", ["5d", "20d"])
+def test_rank_net_buyer_pot_type_rejects_name_absent_from_ka10042(runner, fake_client, absent):
+    """5d/20d는 PERIOD_TODAY_PREV_5_60(ka10034/36/37)·BROKER_TOP_PERIOD(ka10039)엔 있지만
+    ka10042의 --pot-type이 쓰는 TRADER_ANALYSIS_POSITION(today/previous만)엔 없다.
+    cross-field 해저드: pot_tp(시점구분) 필드가 dt(기간) 필드의 today/previous 키와
+    이름이 겹쳐 "today/previous 통합" 리팩터가 잘못 흡수하기 쉬운 자리
+    (FOREIGN_CONSECUTIVE_BASE_DATE와 동일한 해저드 패턴, superset-closure 스크립트로 확인).
+    """
+    result = runner.invoke(cli, [
+        "market", "rank", "net-buyer", "005930", "--pot-type", absent,
+    ])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
