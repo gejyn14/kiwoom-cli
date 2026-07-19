@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.11.0] - 2026-07-19
 
 `market rank volume`(ka10030)의 `--include-managed` help 문구가 스펙과 정반대였고,
 `market rank amount`(ka10032)는 극성이 반대인 동일 이름 옵션을 그대로 쓰고
@@ -146,11 +146,15 @@ human-readable 이름을 추가했습니다(하위호환).
   시장가 계열의 정확한 여집합)에서 `--price` 없이 호출하면 `INVALID_INPUT`으로
   즉시 종료하고, 요청 자체를 전송하지 않습니다(CLI로 직접 확인 — 5종 전부와
   `--type market`/`--type market --price` 회귀 케이스 포함).
-- 국내 주문(`order buy`/`sell`, kt10000/kt10001)은 **의도적으로 그대로
-  두었습니다.** kt10000/kt10001의 `ord_uv` Description은 "단위: 원"이
-  전부이고, 미국 쪽에 있는 "…인 경우 필수 입력" 조건부 필수 문구가 없습니다.
-  근거 없이 가드를 넣으면 정당한 주문을 막는 쪽의 피해가 더 크므로, 국내
-  경로는 이번 수정 대상에서 뺐습니다.
+- 국내 주문(`order buy`/`sell`, `order credit buy`)에는 아직 같은 가드가
+  없습니다. 국내 지정가도 `ord_uv`를 빈 문자열로 전송하고 있어 문제는 그대로
+  남아 있지만, 서버가 이 값을 거부하기 때문에 잘못된 주문이 나가지는 않습니다.
+  CLI가 미리 걸러줬을 `exit 1` 대신 API 오류(`exit 2`)가 돌아오는 차이입니다.
+  가드의 근거는 있습니다 — 키움 공식 CLI(kwcli)가 함께 배포하는
+  `order_price_policies.csv`가 국내 지정가 매수·매도·신용매수에 대해 `--price`를
+  required로 지정합니다. 워크북의 `ord_uv` Description은 "단위: 원"이 전부라
+  이번 검토에서는 근거가 없다고 판단했는데, 확인이 부족했습니다. 다음
+  릴리스에서 국내 경로에도 같은 가드를 넣겠습니다.
 
 **Breaking**
 
