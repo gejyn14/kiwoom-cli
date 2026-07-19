@@ -26,6 +26,11 @@ from .recorder import NdjsonRecorder, data_dir
 EXIT_API = 2   # main.py와 동일 (main import 시 순환 발생하여 별도 정의)
 EXIT_AUTH = 3
 
+# 핸드셰이크에서 ack 전에 건너뛸 수 있는 프레임 수 상한.
+# prod는 LOGIN 응답 앞뒤로 SYSTEM 프레임을 섞어 보내지만(mock은 안 보냄) 그 수는
+# 한 자리다. 상한이 없으면 잡담만 보내는 서버에 영원히 매달린다.
+MAX_HANDSHAKE_SKIP = 10
+
 KST = timezone(timedelta(hours=9))
 
 
@@ -243,6 +248,42 @@ def _emit_line(
     sys.stdout.flush()
 
 
+def print_system_frame(data: dict[str, Any], printer: Any = None) -> None:
+    """SYSTEM 프레임 한 건 출력. code가 0이 아니면 빨간색."""
+    msg = data.get("message", "")
+    code = data.get("code", "")
+    text = f"[red]시스템: {msg}[/]" if code and code != "0" else f"[dim]시스템: {msg}[/]"
+    (printer or human)(text)
+
+
+async def recv_ack(ws: Any, *, on_system: Any = None, max_skip: int = MAX_HANDSHAKE_SKIP):
+    """return_code를 실은 프레임이 나올 때까지 PING/SYSTEM을 건너뛰며 읽는다.
+
+    핸드셰이크를 위치(첫 recv=LOGIN, 둘째 recv=REG)로 가정하면 안 된다.
+    실측상 prod는 LOGIN 응답 뒤에 SYSTEM 프레임을 보내고 mock은 보내지 않아
+    ack의 도착 위치가 환경마다 다르다 (.superpowers/sdd/task-22-login-frame-evidence.md).
+    PING은 수신 루프와 동일하게 되돌려 보낸다. max_skip 안에 ack가 없으면 None.
+    """
+    for _ in range(max_skip):
+        try:
+            frame = json.loads(await ws.recv())
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(frame, dict):
+            continue
+        trnm = frame.get("trnm", "")
+        if trnm == "PING":
+            await ws.send(json.dumps({"trnm": "PING"}))
+            continue
+        if trnm == "SYSTEM":
+            if on_system is not None:
+                on_system(frame)
+            continue
+        if frame.get("return_code") is not None:
+            return frame
+    return None
+
+
 def _print_entry_table(entry: dict[str, Any]) -> None:
     """REAL 항목 한 건을 테이블 모드 한 줄로 출력 (기존 출력 형식 그대로)."""
     type_code = entry.get("type", "")
@@ -324,9 +365,9 @@ def run_stream(
                 "토큰이 없습니다. 'kiwoom auth login'으로 발급하세요.",
                 code="AUTH_REQUIRED", retryable=False,
             ))
-            raise SystemExit(EXIT_AUTH)
-        console.print("[red]토큰이 없습니다. 'kiwoom auth login'으로 발급하세요.[/]")
-        return
+        else:
+            console.print("[red]토큰이 없습니다. 'kiwoom auth login'으로 발급하세요.[/]")
+        raise SystemExit(EXIT_AUTH)
 
     type_names = ", ".join(
         f"{t}({REALTIME_TYPES.get(t, ('?', ''))[0]})" for t in types
@@ -363,20 +404,26 @@ def run_stream(
                 await ws.send(json.dumps(auth_msg))
                 err_console.print("[dim]토큰 인증 요청...[/]")
 
-                # Wait for auth response
-                auth_resp = await ws.recv()
-                try:
-                    auth_data = json.loads(auth_resp)
-                    if auth_data.get("code") and auth_data["code"] != "0":
-                        msg = f"인증 실패: {auth_data.get('message', auth_resp)}"
-                        if json_mode:
-                            return EXIT_AUTH, envelope.error_body(
-                                msg, code="AUTH_REQUIRED", retryable=False)
-                        console.print(f"[red]{msg}[/]")
-                        return 0, None
-                    err_console.print("[green]인증 성공[/]")
-                except json.JSONDecodeError:
-                    pass
+                # 인증 응답 대기.
+                # LOGIN 응답의 키는 return_code/return_msg다 (실측). code/message는
+                # SYSTEM 프레임의 키이므로 LOGIN에서 읽으면 항상 falsy → 실패 미감지.
+                # return_code는 int(805004)라 str()로 감싸 비교한다.
+                auth_data = await recv_ack(ws, on_system=print_system_frame)
+                if auth_data is None:
+                    msg = "인증 응답을 받지 못했습니다 (LOGIN 응답 프레임 없음)."
+                    if json_mode:
+                        return EXIT_AUTH, envelope.error_body(
+                            msg, code="AUTH_REQUIRED", retryable=True)
+                    console.print(f"[red]{msg}[/]")
+                    return EXIT_AUTH, None
+                if str(auth_data.get("return_code")) != "0":
+                    msg = f"인증 실패: {auth_data.get('return_msg', '')}"
+                    if json_mode:
+                        return EXIT_AUTH, envelope.error_body(
+                            msg, code="AUTH_REQUIRED", retryable=False)
+                    console.print(f"[red]{msg}[/]")
+                    return EXIT_AUTH, None
+                err_console.print("[green]인증 성공[/]")
 
                 # Step 2: Send registration
                 reg_msg = _build_register_msg(types, items)
@@ -418,12 +465,7 @@ def run_stream(
 
                     # Handle system messages (login, errors)
                     if trnm == "SYSTEM":
-                        msg = data.get("message", "")
-                        code = data.get("code", "")
-                        if code and code != "0":
-                            human(f"[red]시스템: {msg}[/]")
-                        else:
-                            human(f"[dim]시스템: {msg}[/]")
+                        print_system_frame(data)
                         continue
 
                     # Handle registration response
@@ -432,11 +474,14 @@ def run_stream(
                         if str(rc) == "0":
                             err_console.print("[green]등록 성공[/]")
                         else:
+                            # 등록 실패 후 계속 돌면 구독 없는 소켓이 마감시각까지
+                            # (마감이 없으면 영원히) 매달린다 → 양 모드 모두 즉시 종료.
                             msg = f"등록 실패: {data.get('return_msg', '')}"
                             if json_mode:
                                 return EXIT_API, envelope.error_body(
                                     msg, code="UPSTREAM_ERROR", retryable=False)
-                            console.print(f"[red]오류: {data.get('return_msg', '')}[/]")
+                            console.print(f"[red]{msg}[/]")
+                            return EXIT_API, None
                         continue
 
                     # Handle real-time data
