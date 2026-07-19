@@ -63,7 +63,7 @@ GOLD_ORDER_TYPES = {"limit": "00", "ioc": "10", "fok": "20"}
 # 극성이 전부 다름). "trde_tp니까 하나로 합치자"는 절대 금지 — 이름에 코드
 # 집합을 새겨서 다른 codebook과 절대 재사용되지 않게 한다.
 # 그룹③ (0:순매수, 1:매수, 2:매도) — ka10059/ka10060/ka10064/ka10066.
-# ka10059는 Task 34a에서 실제로 연결됐다(stock.py:1041). ka10060(chart
+# ka10059는 Task 34a에서 실제로 연결됐다(stock.py). ka10060(chart
 # investor)/ka10064(chart intraday-investor)는 Task 34b에서 워크북 확인 후
 # 연결됐다(character-for-character 동일: "0:순매수, 1:매수, 2:매도").
 #
@@ -78,19 +78,20 @@ TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 # 전용이며, 0:금액,1:수량 짝은 별도로 `AMT_QTY_TP_0_1`이라는 이름을 예약해
 # 둔다(ka10051 이관 시 이 이름으로 추가할 것 — 절대 이 상수를 재사용하지 말 것).
 #
-# *** 이 상수는 api_id 12개가 공유한다. 고치기 전에 12곳 전부를 확인할 것. ***
-#   market.py:776   ka10065  amt_qty_tp   (Task 31c에서 추가)
-#   market.py:822   ka90009  amt_qty_tp   (Task 31c에서 추가)
-#   market.py:1666  ka90005  amt_qty_tp
-#   market.py:1713  ka90007  amt_qty_tp   (Task 33에서 추가)
-#   market.py:1731  ka90008  amt_qty_tp   (Task 33에서 추가)
-#   market.py:1740  ka90010  amt_qty_tp
-#   stock.py:1221   ka10066  amt_qty_tp
-#   stock.py:1077   ka10059  amt_qty_tp   (Task 34a에서 추가)
-#   stock.py:1112   ka10061  amt_qty_tp   (Task 34a에서 추가)
-#   stock.py         ka90003  amt_qty_tp   (Task 34b, program-top에서 추가)
-#   stock.py         ka10060  amt_qty_tp   (Task 34b, chart investor에서 추가)
-#   stock.py         ka10064  amt_qty_tp   (Task 34b, chart intraday-investor에서 추가)
+# *** 이 상수는 api_id 12개가 공유한다. 고치기 전에 12곳 전부를 확인할 것.
+# (줄번호는 편집마다 바로 어긋나므로 적지 않는다 — api_id로 grep할 것.) ***
+#   market.py   ka10065  amt_qty_tp   (Task 31c에서 추가)
+#   market.py   ka90009  amt_qty_tp   (Task 31c에서 추가)
+#   market.py   ka90005  amt_qty_tp
+#   market.py   ka90007  amt_qty_tp   (Task 33에서 추가)
+#   market.py   ka90008  amt_qty_tp   (Task 33에서 추가)
+#   market.py   ka90010  amt_qty_tp
+#   stock.py    ka10066  amt_qty_tp
+#   stock.py    ka10059  amt_qty_tp   (Task 34a에서 추가)
+#   stock.py    ka10061  amt_qty_tp   (Task 34a에서 추가)
+#   stock.py    ka90003  amt_qty_tp   (Task 34b, program-top에서 추가)
+#   stock.py    ka10060  amt_qty_tp   (Task 34b, chart investor에서 추가)
+#   stock.py    ka10064  amt_qty_tp   (Task 34b, chart intraday-investor에서 추가)
 # 열두 시트 모두 요청 코드북은 1:금액, 2:수량으로 동일하다. 다만 표기까지 같지는
 # 않다 — ka90009 시트는 "1:금액(천만), 2:수량(천)"으로 적혀 있는데, 괄호 안은
 # 응답 단위 주석이지 요청 코드가 아니다. required 여부도 갈린다(ka10065는
@@ -103,7 +104,7 @@ TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 # 기본값이 "1") — 빈 문자열은 이 2-값 매핑에 없어 그대로 감싸면 기본 호출이
 # BadParameter로 깨진다. 억지로 기본값을 "1"/"2"로 바꾸면 전송 바이트가
 # 바뀌므로(빈 문자열은 스펙상 합법적인 "생략" 값), ka90013의 --unit은 이번
-# 태스크에서 raw 텍스트로 남긴다(market.py:1770 참고).
+# 태스크에서 raw 텍스트로 남긴다(market.py, ka90013 참고).
 AMT_QTY_TP_1_2 = {"amount": "1", "quantity": "2"}
 
 # AMT_QTY_TP_1_2와 키 집합(amount/quantity)은 같지만 극성이 다른 짝(0:금액,
@@ -1180,7 +1181,7 @@ ELW_BALANCE_RANK_SORT = {"buy-balance": "1", "sell-balance": "2"}
 # "0"/"1"로 바꾸면 전송 바이트가 바뀐다(빈 문자열은 스펙상 합법적인 "생략"
 # 값이라 다른 태스크에서 나온 zero-pad 결함과 달리 교정 대상이 아니다).
 # 그래서 ka50080의 --price-type만 이번 태스크에서 raw 텍스트로 남긴다
-# (market.py:1513 참고). ka50091/ka50092/ka50101의 tic_scope는 값과 라벨이
+# (market.py, ka50080 참고). ka50091/ka50092/ka50101의 tic_scope는 값과 라벨이
 # 동일한 자기서술적 수량 프리셋이라 애초에 전환 대상이 아니다(브리프 판정
 # "수량").
 #
@@ -1200,8 +1201,8 @@ GOLD_PRICE_TYPE = {"raw": "0", "adjusted": "1"}
 # (trader-analysis)/kt20016(credit-available)은 이번 태스크 이전에 이미
 # 전환돼 있었다(선행 fix 커밋들) — 손대지 않는다. 단 ka10043의 --days(dt)는
 # I2 규칙(값→라벨이 단위접미사 부착만으로 유도되는 폐쇄집합은 수량 유지)
-# 재적용 대상이라 HumanChoice를 걷어내고 market.py:503(ka10042, 같은
-# 필드·같은 패턴)과 동일하게 raw 텍스트로 되돌린다 — 이 자리에서 쓰던
+# 재적용 대상이라 HumanChoice를 걷어내고 market.py(ka10042, 같은
+# 필드·같은 패턴)와 동일하게 raw 텍스트로 되돌린다 — 이 자리에서 쓰던
 # TRADER_ANALYSIS_PERIOD_5_120은 이제 사용처가 없어 이 파일에서 제거한다.
 
 # ka10086(일별주가) 전용 — indc_tp(표시구분, 0:수량,1:금액). AMT_QTY_TP_0_1
