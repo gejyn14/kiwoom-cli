@@ -354,6 +354,13 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "INVESTOR_BY_STOCK_UNIT", "BY_STOCK_TOTAL_TRADE_SIDE",
     # AMT_QTY_TP_1_2/TRDE_TP_NET_BUY_BUY_SELL은 위 목록에 이미 있음(ka10059/
     # ka10061이 이번에 이관돼도 새로 추가하지 않음, 커플링 주석 참고).
+    # Task 34b — stock program_top/chart_*/lending HumanChoice 전환.
+    # AMT_QTY_TP_1_2/TRDE_TP_NET_BUY_BUY_SELL/INVESTOR_BY_STOCK_UNIT은 위
+    # 목록에 이미 있음(ka90003/ka10060/ka10064가 이번에 이관돼도 새로
+    # 추가하지 않음, 각 상수 정의부 커플링 주석 참고). lending_trend/
+    # lending_by_stock의 --all(all_tp)은 스펙에 값이 하나뿐이라(반대쪽
+    # 불명) 미확인으로 전환하지 않았다 — raw 텍스트로 남아 있다.
+    "PROGRAM_TOP_SIDE", "CHART_ADJUSTED_PRICE",
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -450,7 +457,31 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # 28 = ka10027 7 + ka10029 5 + ka10031 1 + ka10033 4 + ka10034 2 +
     # ka10035 2 + ka10036 1 + ka10037 3 + ka10039 3.
     # 이 수는 트리 순회로 재도출한 값이지 델타 추정이 아니다.
-    assert len(converted) == 202
+    #
+    # 215 = 202(Task 34a 리뷰까지의 누적치, 위 주석 참고) + Task 34b(stock
+    # program_top/chart_*/lending)의 순증 13 = program-top 2[trde_upper_tp/
+    # amt_qty_tp] + chart tick/minute/day/week/month/year 6[upd_stkpc_tp
+    # 각 1개, CHART_ADJUSTED_PRICE 공유] + chart investor 3[amt_qty_tp/
+    # trde_tp/unit_tp] + chart intraday-investor 2[amt_qty_tp/trde_tp].
+    # lending trend/by-stock의 --all(all_tp)은 스펙에 값이 하나뿐이라
+    # (반대쪽 불명) 전환하지 않아 이 델타에 포함되지 않는다. chart
+    # tick/minute의 --range/--interval(tic_scope)도 값=라벨 그대로인
+    # 자기서술적 수량이라(I2 규칙) 전환 대상에서 제외했다.
+    assert len(converted) == 215
+    assert ("cli stock investor program-top", "trde_upper_tp") in converted
+    assert ("cli stock investor program-top", "amt_qty_tp") in converted
+    for command in ("tick", "minute", "day", "week", "month", "year"):
+        assert (f"cli stock chart {command}", "upd_stkpc_tp") in converted
+    assert ("cli stock chart investor", "amt_qty_tp") in converted
+    assert ("cli stock chart investor", "trde_tp") in converted
+    assert ("cli stock chart investor", "unit_tp") in converted
+    assert ("cli stock chart intraday-investor", "amt_qty_tp") in converted
+    assert ("cli stock chart intraday-investor", "trde_tp") in converted
+    # lending trend/by-stock의 --all(all_tp)은 스펙에 값이 하나뿐이라
+    # (반대쪽 불명) 이번 태스크에서 의도적으로 전환하지 않았다 — 이름으로
+    # 못 박아 실수로 전환되어도(또는 실수로 빠져도) 눈에 띄게 한다.
+    assert ("cli stock lending trend", "all_tp") not in converted
+    assert ("cli stock lending by-stock", "all_tp") not in converted
     # 금현물 주문 두 건은 이름으로도 못 박아 둔다. 개수만 맞추면 다른 곳이
     # 늘고 여기가 빠져도 통과하기 때문이다.
     assert ("cli order gold buy", "order_type") in converted
