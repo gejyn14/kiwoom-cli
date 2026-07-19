@@ -2,6 +2,86 @@
 
 ## [Unreleased]
 
+`market rank volume`(ka10030)의 `--include-managed` help 문구가 스펙과 정반대였고,
+`market rank amount`(ka10032)는 극성이 반대인 동일 이름 옵션을 그대로 쓰고
+있었습니다. `market rank broker-by-stock`(ka10038)은 `--period`/`--from`·`--to`를
+함께 줘도 기간(`dt`)이 항상 우선하고 있었고, `market elw broker-top`(ka30002)의
+`--issuer` 기본값은 자릿수부터 틀린 값(12자리, 필드는 3자리)을 매번 전송하고
+있었습니다. 네 곳 모두 교정하고, 이 참에 두 명령의 나머지 자유 텍스트 옵션도
+human-readable 이름으로 전환했습니다.
+
+**Fixed**
+
+- **`market rank volume`(ka10030) `mang_stk_incls`(관리종목포함) help가 스펙과
+  반대였습니다.** 스펙은 `0:관리종목 포함, 1:관리종목 미포함`인데 help 문구는
+  `"(0=미포함, 1=포함)"`이라고 정반대로 적혀 있었습니다. 실제 기본값(`"0"`)
+  전송 자체는 안 바뀌었지만(코드값은 원래도 `"0"`), 사용자가 문구를 믿고
+  값을 뒤집어 지정하면 반대 결과를 받았습니다. 이번에 옵션을
+  `--stock-condition`(`STOCK_CONDITION`, 15개 값)으로 바꾸며 스펙대로 고쳤습니다.
+- **`market elw broker-top`(ka30002) `--issuer`의 기본값이 12자리(`"000000000000"`)
+  였는데 스펙(`isscomp_cd`)은 길이 3입니다.** 형제 ELW 커맨드에서 복붙된
+  값으로, 지정하지 않고 호출하면 매번 무효한 발행사코드를 그대로 전송하고
+  있었습니다. 기본값을 제거하고 필수 옵션으로 바꿨습니다.
+- **`market rank broker-by-stock`(ka10038)에서 `--from`/`--to`(기간 조회)를 줘도
+  `dt`가 항상 함께 전송돼 기간 조회가 무시되고 있었습니다.** 스펙은 "시작일자와
+  종료일자로 조회를 원하는 경우 기간(dt)값은 빈값으로 설정"이라고 명시하는데,
+  기존 코드는 `dt` 기본값(`"1"`)을 항상 보냈습니다. 이제 `--from`/`--to`가
+  주어지면 `dt` 키 자체를 body에서 제외합니다(빈 문자열이 아니라 키 제외 —
+  CLI로 직접 확인).
+
+**Breaking**
+
+- **`market rank volume`에서 `--include-managed`가 제거되고 `--stock-condition`으로
+  대체됩니다.** 필드(`mang_stk_incls`)가 boolean이 아니라 15종 종목필터이기
+  때문입니다(kwcli `rankings today-volume --stock-condition`과 이름을 맞췄습니다).
+  기존 `--include-managed` 호출은 이제 "No such option" 오류로 exit 1이 됩니다.
+- **`market elw broker-top`의 `--issuer`가 이제 필수입니다.** 이전엔 항상
+  무효한 기본값을 전송했으므로, 이는 "동작하던 게 깨지는" 변경이 아니라
+  "항상 실패하던 호출이 이제 명확히 실패"하는 변경입니다. `--issuer` 없이
+  호출하면 exit 1.
+- **자유 텍스트였던 아래 옵션들이 enum으로 좁혀져, 스펙 밖 값을 넘기면
+  exit 1이 됩니다** (모두 `HumanChoice`라 기존에 쓰던 raw 숫자 코드는 계속
+  동작합니다 — 하위호환):
+  - `market rank volume`: `--sort`, `--stock-condition`(신규, 舊 `--include-managed`),
+    `--credit-type`, `--vol-type`, `--price-type`, `--amount-type`, `--session`
+  - `market rank amount`: `--include-managed`
+  - `market rank broker-by-stock`: `--type`, `--period`
+  - `market elw broker-top`: `--vol-type`, `--type`, `--period`, `--exclude-expired`
+- **`market rank broker-by-stock`에서 `--period`와 `--from`/`--to`를 함께 주면
+  이제 `INVALID_INPUT`으로 exit 1입니다.** 스펙상 두 조회 방식은 상호 배타적이라
+  (기간 조회 시 `dt`는 빈값이어야 함) 동시 지정은 의미가 정의되지 않은 조합이었고,
+  전에는 조용히 `dt`가 우선 적용됐습니다.
+
+**Non-breaking (사람이 읽는 이름 추가, 하위호환 / 순수 확장)**
+
+- **`market rank amount`(ka10032)의 `--include-managed`가 이제 `no`/`yes`
+  이름도 받습니다.** 전송값은 그대로입니다: `no`→`mang_stk_incls=0`,
+  `yes`→`mang_stk_incls=1`. `market rank volume`(ka10030)의 동일 이름 필드와
+  **극성이 정반대**임을 두 커맨드 모두 테스트로 고정했습니다
+  (`STOCK_CONDITION`은 `0=포함`, `MANAGED_STOCK_INCLUDE`는 `0=미포함`).
+- **`market rank amount`의 `--exchange`가 이제 `all`(통합, `stex_tp=3`)도
+  받습니다.** 스펙(`stex_tp`)에 `3:통합`이 있었는데 기존 코드는 `KRX`/`NXT`
+  두 값만 허용했습니다. 순수 추가이며 기본값(`KRX`) 호출의 전송 body는
+  변경 전후 동일함을 CLI로 확인했습니다.
+- **`market rank broker-by-stock`(ka10038)의 `--period`가 이제 `previous`/`5d`/
+  `10d`/`20d`/`40d`/`60d`/`120d` 같은 이름도 받습니다.** 이 필드는
+  코드가 하루씩 어긋난 off-by-one 코드북입니다(`5일=4`, `10일=9`, `120일=119`).
+  전송값은 그대로이며(`previous`→`dt=1` 등), kwcli
+  `rankings broker-by-stock --period` 값과 일치를 확인했습니다.
+- **나머지 신규 human-readable 옵션들의 전송값도 전부 전환 전과 동일합니다**
+  (기본 호출의 body를 CLI로 직접 실행해 확인): `rank volume`의
+  `--sort=volume→sort_tp=1`, `--credit-type=all→crd_tp=0`,
+  `--vol-type=all→trde_qty_tp=0`, `--price-type=all→pric_tp=0`,
+  `--amount-type=all→trde_prica_tp=0`, `--session=all→mrkt_open_tp=0`;
+  `elw broker-top`의 `--vol-type=all→trde_qty_tp=0`,
+  `--type=net-buy→trde_tp=1`, `--period=previous→dt=1`,
+  `--exclude-expired=exclude→trde_end_elwskip=1`.
+  - `rank volume`의 `--vol-type`(`trde_qty_tp`) 값 중 `500`은 스펙 원문 설명이
+    "500만주이상"(5,000,000)으로 적혀 있어 다른 항목들의 산술 패턴
+    (코드값×1,000주)과 어긋납니다. 코드값(`"500"`) 자체는 워크북 기준
+    확실하므로 그대로 두되, 사람이 읽는 이름은 패턴을 따라 `500k`로 붙였습니다
+    — 이 이름은 확정된 사실이 아니라 보수적 선택입니다.
+
 `market program time-trend`(ka90005)/`market program daily-trend`(ka90010)의
 `--market`이 스펙에 정의되지 않은 코드를 보내고 있었고, 정정과 함께
 `--unit`/`--tick-type`에 human-readable 이름을 추가했습니다(하위호환).
