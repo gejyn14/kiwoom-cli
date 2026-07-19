@@ -15,9 +15,9 @@ from rich.table import Table
 from rich.text import Text
 
 from ..client import KiwoomClient
-from ..formatters import _fmt_number, _sign_color
+from ..formatters import _fmt_number, _get_format, _sign_color, fail_input
 from ..output import console
-from ..streaming import resolve_ws_target
+from ..streaming import EXIT_API, EXIT_AUTH, print_system_frame, recv_ack, resolve_ws_target
 from .. import auth
 
 
@@ -71,6 +71,14 @@ def watch(codes: tuple[str, ...]):
       kiwoom watch 005930                    # 삼성전자
       kiwoom watch 005930 000660 035420      # 여러 종목
     """
+    # Rich Live TUI라 json/csv의 파싱 가능 출력 계약을 지킬 수 없다.
+    # 조용히 TUI를 띄우면 -f json 소비자가 빈 stdout을 받는다 → 명시적으로 거부.
+    if _get_format() != "table":
+        fail_input(
+            "watch는 table 출력 전용입니다. 'kiwoom stream quote'를 사용하세요.",
+            code="INVALID_INPUT",
+        )
+
     code_list = list(codes)
 
     # Fetch initial stock names via REST
@@ -97,15 +105,23 @@ def watch(codes: tuple[str, ...]):
 
     if not token:
         console.print("[red]토큰이 없습니다. 'kiwoom auth login'으로 발급하세요.[/]")
-        return
+        raise SystemExit(EXIT_AUTH)
+
+    try:
+        import websockets
+    except ImportError:
+        console.print("[red]websockets 패키지가 필요합니다: pip install websockets[/]")
+        raise SystemExit(1) from None
 
     code_str = ", ".join(f"{stock_state[c].get('_name', c)}({c})" for c in code_list)
     console.print(f"[dim]실시간 모니터링: {code_str}[/]")
     console.print("[dim]Ctrl+C로 종료[/]\n")
 
-    async def _live_stream():
-        import websockets
+    def _system(frame: dict[str, str]) -> None:
+        print_system_frame(frame, console.print)
 
+    async def _live_stream() -> int:
+        """종료 코드를 반환한다 (0=정상, EXIT_API=2, EXIT_AUTH=3)."""
         url = f"{ws_url}/api/dostk/websocket"
         try:
             async with websockets.connect(
@@ -114,12 +130,18 @@ def watch(codes: tuple[str, ...]):
                 ping_interval=None,
                 ping_timeout=None,
             ) as ws:
-                # Auth
+                # Auth.
+                # ack를 recv() 순번으로 집지 않는다 — prod는 LOGIN 응답 뒤에 SYSTEM
+                # 프레임을 보내지만 mock은 안 보내서, 위치로 읽으면 환경에 따라
+                # 엉뚱한 프레임을 ack로 오독한다 (return_code 부재 → 사유 공란 실패).
                 await ws.send(json.dumps({"trnm": "LOGIN", "token": token}))
-                auth_resp = json.loads(await ws.recv())
-                if auth_resp.get("return_code", -1) != 0:
+                auth_resp = await recv_ack(ws, on_system=_system)
+                if auth_resp is None:
+                    console.print("[red]인증 응답을 받지 못했습니다 (LOGIN 응답 프레임 없음).[/]")
+                    return EXIT_AUTH
+                if str(auth_resp.get("return_code")) != "0":
                     console.print(f"[red]인증 실패: {auth_resp.get('return_msg', '')}[/]")
-                    return
+                    return EXIT_AUTH
 
                 # Register for 0B (체결)
                 reg = {
@@ -129,10 +151,13 @@ def watch(codes: tuple[str, ...]):
                     "data": [{"item": code_list, "type": ["0B"]}],
                 }
                 await ws.send(json.dumps(reg))
-                reg_resp = json.loads(await ws.recv())
-                if reg_resp.get("return_code", -1) != 0:
+                reg_resp = await recv_ack(ws, on_system=_system)
+                if reg_resp is None:
+                    console.print("[red]등록 응답을 받지 못했습니다.[/]")
+                    return EXIT_API
+                if str(reg_resp.get("return_code")) != "0":
                     console.print(f"[red]등록 실패: {reg_resp.get('return_msg', '')}[/]")
-                    return
+                    return EXIT_API
 
                 tick_count = 0
 
@@ -158,6 +183,11 @@ def watch(codes: tuple[str, ...]):
                                 break
                             continue
 
+                        # 시스템 메시지를 조용히 버리지 않는다 (streaming.py와 동일)
+                        if trnm == "SYSTEM":
+                            _system(data)
+                            continue
+
                         if trnm != "REAL":
                             continue
 
@@ -180,11 +210,22 @@ def watch(codes: tuple[str, ...]):
                         live.update(_build_live_table(stock_state, title=title))
 
         except websockets.exceptions.ConnectionClosed:
+            # 서버가 정상적으로 끊은 스트림의 끝은 실패가 아니다
             console.print("\n[yellow]서버 연결 종료. 재접속하려면 다시 실행하세요.[/]")
+            return 0
         except ConnectionRefusedError:
             console.print("[red]WebSocket 연결 실패. 도메인과 토큰을 확인하세요.[/]")
+            return EXIT_API
+        except Exception as e:
+            # JSONDecodeError 등 나머지가 raw traceback으로 새지 않게 (streaming.py와 동일)
+            console.print(f"[red]오류: {e}[/]")
+            return EXIT_API
+        return 0
 
     try:
-        asyncio.run(_live_stream())
+        exit_code = asyncio.run(_live_stream())
     except KeyboardInterrupt:
         console.print("\n[dim]모니터링 종료[/]")
+        exit_code = 0
+    if exit_code:
+        raise SystemExit(exit_code)
