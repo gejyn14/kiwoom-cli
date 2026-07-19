@@ -101,6 +101,37 @@ intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
   됐습니다 — 이미 `click.Choice`였던 자리가 값 집합이 줄어드는 경우라
   Breaking입니다(제약 8 마지막 문단 참고).
 
+이번 트랜치에서 human-readable 이름을 받게 된 옵션을 명령 그룹별로 정리하면
+다음과 같습니다. **raw 숫자코드는 두 구분 모두에서 계속 통과합니다** —
+"Breaking"은 스펙 밖의 값(자유 텍스트로 넘기던 임의 문자열)만 이제 로컬에서
+거부된다는 뜻이지, 기존에 쓰던 정상 코드가 깨진다는 뜻이 아닙니다.
+
+| 그룹 | 옵션 수 | 구분 |
+| --- | ---: | --- |
+| `market rank` 신고저가~거래량급증(ka10016~23, 8개 커맨드) | 39 | Breaking(자유 텍스트 이력) |
+| `market rank` 등락률~상위거래원(ka10027/29/31/33/34/35/36/37/39, 9개 커맨드) | 28 | Breaking(자유 텍스트 이력) |
+| `market rank` 순매수~외국계기관(ka10042/62/65/98, ka90009, 5개 커맨드) | 16 | Breaking(자유 텍스트 이력) |
+| `market sector`(5개 커맨드) | 5 | Breaking(자유 텍스트 이력) |
+| `market theme`(1개 커맨드) | 2 | Breaking(자유 텍스트 이력) |
+| `market etf`(2개 커맨드) | 4 | Breaking(자유 텍스트 이력) |
+| `market elw`(5개 커맨드) | 15 | Breaking(자유 텍스트 이력) |
+| `market gold`(4개 커맨드) | 4 | Breaking(자유 텍스트 이력) |
+| `market program`(2개 커맨드) | 2 | Breaking(자유 텍스트 이력) |
+| **`market` 소계(41개 커맨드)** | **115** | **전부 Breaking(자유 텍스트 이력)** |
+| `stock`(13개 커맨드 중 전환 전 자유 텍스트였던 자리) | 8 | Breaking(자유 텍스트 이력) |
+| `stock`(같은 13개 커맨드 중 전환 전에 이미 `click.Choice`였던 자리) | 23 | Non-breaking(순수 확장) |
+| **`stock` 소계(13개 커맨드)** | **31** | **Breaking 8 / Non-breaking 23** |
+| **합계** | **146** | **Breaking 123 / Non-breaking 23** |
+
+`market`의 115개는 전부 자유 텍스트에서 전환된 자리라 예외 없이 Breaking이고,
+`stock`의 31개만 두 구분이 섞여 있습니다 — 어느 쪽이었는지는 위 Breaking
+섹션(자유 텍스트 8개는 목록으로 명시)과 아래 Non-breaking 섹션(나머지 23개)
+본문에서 커맨드·옵션 단위로 확인할 수 있습니다. 이 표에 넣지 않은 항목:
+`--exchange`를 `3:통합`까지 넓힌 4개 커맨드와 `stock chart
+intraday-investor`의 `--market` 확대는 값 집합을 넓힌 것이지 raw 코드를
+human 이름으로 바꾼 게 아니라 별도로 아래에 적었고, `--vol-type`/`--vol-cnd`
+기본값 교정 10곳은 위 Fixed에 있습니다.
+
 **Non-breaking (사람이 읽는 이름 추가, 하위호환)**
 
 - `market rank`의 신고저가~거래량급증 8개 커맨드(ka10016~ka10023) 옵션 39개가
