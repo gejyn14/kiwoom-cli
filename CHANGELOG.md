@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.12.0] - 2026-07-20
 
 `market`의 rank·sector·theme·etf·elw·gold·program 41개 커맨드에서 숫자코드
 옵션 115개를 human-readable 이름으로 전환했습니다(`--sort rise-rate`,
