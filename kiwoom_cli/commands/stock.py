@@ -121,21 +121,17 @@ def orderbook(code: str, exchange: str | None):
 
 @stock.command("daily")
 @click.argument("code")
-@click.option(
-    "--type", "qry_type",
-    type=click.Choice(["day", "week", "month"]),
-    default="day",
-    help="조회 구분 (day/week/month)",
-)
-def daily(code: str, qry_type: str):
-    """일/주/월별 시세 조회. (ka10005)"""
-    tp_map = {"day": "1", "week": "2", "month": "3"}
+def daily(code: str):
+    """일별 시세 조회. (ka10005)
+
+    ka10005는 종목코드만 받으며 기간을 고르는 파라미터가 없다.
+    주/월별 시세는 `stock chart week`/`stock chart month`(ka10082/ka10083)를 사용할 것.
+    """
     with KiwoomClient() as c:
-        data, _ = c.request("ka10005", {"stk_cd": code, "qry_tp": tp_map[qry_type]})
+        data, _ = c.request("ka10005", {"stk_cd": code})
         items = _find_list(data)
-        title = {"day": "일별", "week": "주별", "month": "월별"}[qry_type]
         if items:
-            print_chart_data(items, title=f"{code} {title} 시세")
+            print_chart_data(items, title=f"{code} 일별 시세")
         else:
             print_generic_table(data, title="시세")
 

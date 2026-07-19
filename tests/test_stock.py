@@ -96,22 +96,24 @@ def test_orderbook_sends_to_ka10004(runner, fake_client):
     assert fake_client.calls == [("ka10004", {"stk_cd": "005930"})]
 
 
-@pytest.mark.parametrize(
-    "cli_value,api_value",
-    [("day", "1"), ("week", "2"), ("month", "3")],
-)
-def test_daily_qry_type_enum_parametrized(
-    runner, fake_client, cli_value, api_value
-):
-    """daily --type day/week/month maps to qry_tp 1/2/3."""
-    result = runner.invoke(
-        cli, ["stock", "daily", "005930", "--type", cli_value]
-    )
+def test_daily_sends_only_stk_cd(runner, fake_client):
+    """daily는 ka10005에 stk_cd만 보낸다 (qry_tp는 스펙에 없는 지어낸 필드였음)."""
+    result = runner.invoke(cli, ["stock", "daily", "005930"])
 
     assert result.exit_code == 0
-    assert fake_client.calls == [
-        ("ka10005", {"stk_cd": "005930", "qry_tp": api_value})
-    ]
+    assert fake_client.calls == [("ka10005", {"stk_cd": "005930"})]
+    body = fake_client.calls[0][1]
+    assert "qry_tp" not in body
+
+
+def test_daily_type_option_removed(runner, fake_client):
+    """--type은 ka10005에 존재하지 않는 파라미터였으므로 제거됐다. 이제 거부된다."""
+    result = runner.invoke(
+        cli, ["stock", "daily", "005930", "--type", "week"]
+    )
+
+    assert result.exit_code != 0
+    assert fake_client.calls == []
 
 
 def test_watchlist_passes_pipe_delimited_codes(runner, fake_client):
