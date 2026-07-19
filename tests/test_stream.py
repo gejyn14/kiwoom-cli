@@ -336,9 +336,11 @@ def ws_env(monkeypatch):
 
     from tests.fakes import FakeWebsocketsModule, FakeWebSocket
 
-    def _install(frames):
-        ws = FakeWebSocket(frames)
-        monkeypatch.setitem(sys.modules, "websockets", FakeWebsocketsModule(ws))
+    def _install(frames, *, connect_exc=None, **ws_kwargs):
+        ws = FakeWebSocket(frames, **ws_kwargs)
+        monkeypatch.setitem(
+            sys.modules, "websockets", FakeWebsocketsModule(ws, connect_exc=connect_exc)
+        )
         return ws
 
     monkeypatch.setattr(
@@ -447,3 +449,152 @@ class TestStreamMissingToken:
         monkeypatch.setattr("kiwoom_cli.streaming.auth.load_token", lambda profile=None: None)
         result = runner.invoke(cli, ["-f", "json", "stream", "quote", "005930"])
         assert result.exit_code == 3, result.output
+
+
+# ============================================================
+#  Chunk D1 리뷰 수정 — 바깥 예외 핸들러의 종료 코드 (F1/F2/F3/F5)
+#
+#  이전에는 table 모드가 ConnectionClosed / ConnectionRefusedError / 일반 예외
+#  모두에서 (0, None)을 반환했다. json 모드만 2를 내서 $?로 분기하는 쪽에는
+#  거부된 연결과 예기치 못한 오류가 '성공한 스트림'으로 보였다.
+# ============================================================
+
+
+class TestStreamOuterExceptionExitCodes:
+    def test_connection_refused_exits_api_table(self, runner, ws_env):
+        """거부된 연결은 table 모드에서도 exit 2 (기존: 메시지만 찍고 exit 0)."""
+        ws_env([], connect_exc=ConnectionRefusedError("refused"))
+        result = runner.invoke(cli, ["stream", "quote", "005930"])
+        assert result.exit_code == 2, result.output
+        assert "WebSocket 연결 실패" in result.output
+
+    def test_connection_refused_exits_api_json(self, runner, ws_env):
+        ws_env([], connect_exc=ConnectionRefusedError("refused"))
+        result = runner.invoke(cli, ["-f", "json", "stream", "quote", "005930"])
+        assert result.exit_code == 2, result.output
+        docs = [json.loads(ln) for ln in result.output.splitlines() if ln.startswith("{")]
+        assert docs[-1]["error"]["code"] == "NETWORK_ERROR"
+
+    def test_unexpected_exception_exits_api_table(self, runner, ws_env):
+        """예기치 못한 예외도 table 모드에서 exit 2 (기존: exit 0)."""
+        result = _run(runner, ws_env, [LOGIN_OK, REG_OK, ValueError("깨진 소켓")])
+        assert result.exit_code == 2, result.output
+        assert "깨진 소켓" in result.output
+
+    def test_unexpected_exception_exits_api_json(self, runner, ws_env):
+        result = _run(runner, ws_env, [LOGIN_OK, REG_OK, ValueError("깨진 소켓")], fmt="json")
+        assert result.exit_code == 2, result.output
+        docs = [json.loads(ln) for ln in result.output.splitlines() if ln.startswith("{")]
+        assert docs[-1]["error"]["code"] == "UPSTREAM_ERROR"
+
+    def test_abnormal_close_exits_api_table(self, runner, ws_env):
+        """1006 같은 비정상 종료는 정상 종료와 달리 실패다 (ConnectionClosedError)."""
+        from tests.fakes import FakeConnectionClosedError
+
+        result = _run(
+            runner, ws_env,
+            [LOGIN_OK, REG_OK, _real_msg(), FakeConnectionClosedError("1006 abnormal")],
+        )
+        assert result.exit_code == 2, result.output
+        assert "비정상" in result.output or "연결 종료" in result.output
+
+    def test_abnormal_close_exits_api_json(self, runner, ws_env):
+        from tests.fakes import FakeConnectionClosedError
+
+        result = _run(
+            runner, ws_env,
+            [LOGIN_OK, REG_OK, FakeConnectionClosedError("1006 abnormal")],
+            fmt="json",
+        )
+        assert result.exit_code == 2, result.output
+        docs = [json.loads(ln) for ln in result.output.splitlines() if ln.startswith("{")]
+        assert docs[-1]["error"]["code"] == "UPSTREAM_ERROR"
+
+    def test_normal_close_in_recv_loop_exits_zero(self, runner, ws_env):
+        """F5 대조군: 서버의 정상 종료는 수신 루프가 직접 처리해 exit 0으로 끝난다.
+
+        이게 통과해야 위 EXIT_API 갈래들이 '정상 종료까지 실패로 만든 것'이 아님이
+        증명된다. (구현자가 바깥 핸들러 수정을 미룬 근거가 바로 이 경로였는데,
+        수신 루프가 ConnectionClosedOK를 이미 잡고 break하므로 근거가 성립하지 않는다.)
+        """
+        result = _run(runner, ws_env, [LOGIN_OK, REG_OK, _real_msg()])
+        assert result.exit_code == 0, result.output
+
+    def test_normal_close_on_ping_echo_exits_zero(self, runner, ws_env):
+        """수신 루프 밖(PING 에코 send)의 정상 종료는 바깥 OK 갈래가 0으로 처리한다."""
+        from tests.fakes import FakeConnectionClosedOK
+
+        ws_env(
+            [LOGIN_OK, REG_OK, {"trnm": "PING"}],
+            send_exc=FakeConnectionClosedOK("1000 bye"),
+            fail_send_after=2,  # LOGIN·REG 전송은 성공, PING 에코에서 닫힘
+        )
+        result = runner.invoke(cli, ["stream", "quote", "005930"])
+        assert result.exit_code == 0, result.output
+
+    def test_abnormal_close_on_ping_echo_exits_api(self, runner, ws_env):
+        """같은 자리라도 비정상 종료면 2. OK/Error를 한 갈래로 합치면 위 테스트와 충돌한다."""
+        from tests.fakes import FakeConnectionClosedError
+
+        ws_env(
+            [LOGIN_OK, REG_OK, {"trnm": "PING"}],
+            send_exc=FakeConnectionClosedError("1006 abnormal"),
+            fail_send_after=2,
+        )
+        result = runner.invoke(cli, ["stream", "quote", "005930"])
+        assert result.exit_code == 2, result.output
+
+
+class TestStreamHandshakeClose:
+    """F2: 서버가 LOGIN에 답하지 않고 끊으면 인증되지 않은 세션이다 → 절대 exit 0 금지."""
+
+    def test_handshake_close_exits_auth_table(self, runner, ws_env):
+        result = _run(runner, ws_env, [])  # 첫 recv부터 ConnectionClosedOK
+        assert result.exit_code == 3, result.output
+        assert "인증 응답을 받기 전에 연결이 끊겼습니다" in result.output
+        assert "인증 성공" not in result.output
+
+    def test_handshake_close_exits_auth_json(self, runner, ws_env):
+        result = _run(runner, ws_env, [], fmt="json")
+        assert result.exit_code == 3, result.output
+        docs = [json.loads(ln) for ln in result.output.splitlines() if ln.startswith("{")]
+        assert docs[-1]["error"]["code"] == "AUTH_REQUIRED"
+
+    def test_handshake_close_after_system_frame_still_auth(self, runner, ws_env):
+        """SYSTEM만 한 줄 던지고 끊는 실제 prod 거절 패턴."""
+        result = _run(runner, ws_env, [SYSTEM_FRAME])
+        assert result.exit_code == 3, result.output
+
+
+class TestStreamHandshakeBuffering:
+    """F4: ack 전에 도착한 데이터 프레임을 버리지 않는다."""
+
+    def test_real_frame_before_login_ack_is_not_lost(self, runner, ws_env):
+        result = _run(
+            runner, ws_env,
+            [_real_msg({"10": "+99999"}), LOGIN_OK, REG_OK],
+            fmt="json",
+        )
+        assert result.exit_code == 0, result.output
+        docs = [json.loads(ln) for ln in result.output.splitlines() if ln.startswith("{")]
+        prices = [d["data"]["price"] for d in docs if d.get("data")]
+        assert 99999 in prices, "핸드셰이크 중 도착한 REAL 프레임이 버려졌다"
+
+    def test_ping_budget_is_separate_from_chatter_budget(self, runner, ws_env):
+        """F8: 킵얼라이브 PING 10번이 잡담 예산을 소진해 인증 실패가 나면 안 된다."""
+        ws = ws_env([{"trnm": "PING"}] * 10 + [LOGIN_OK, REG_OK])
+        result = runner.invoke(cli, ["stream", "quote", "005930"])
+        assert result.exit_code == 0, result.output
+        assert "인증 성공" in result.output
+        assert ws.sent_trnms().count("PING") == 10
+
+
+class TestStreamAckSlotDiscipline:
+    """F7: 다른 자리의 ack를 이 자리 ack로 소비하지 않는다."""
+
+    def test_reg_ack_is_not_consumed_as_login_ack(self, runner, ws_env):
+        """REG 응답이 LOGIN 자리에 오면 그걸 인증 결과로 읽지 않고 진짜 LOGIN을 기다린다."""
+        result = _run(runner, ws_env, [REG_FAIL, LOGIN_FAIL])
+        assert result.exit_code == 3, result.output
+        assert "8005" in result.output, "REG 프레임을 LOGIN ack로 오독했다"
+        assert "인증 실패: 등록 종목수 초과" not in result.output

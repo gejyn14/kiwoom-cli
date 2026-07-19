@@ -26,10 +26,16 @@ from .recorder import NdjsonRecorder, data_dir
 EXIT_API = 2   # main.py와 동일 (main import 시 순환 발생하여 별도 정의)
 EXIT_AUTH = 3
 
-# 핸드셰이크에서 ack 전에 건너뛸 수 있는 프레임 수 상한.
+# 핸드셰이크에서 ack 전에 **버려도 되는** 프레임 수 상한 (SYSTEM·파싱 불가 프레임).
 # prod는 LOGIN 응답 앞뒤로 SYSTEM 프레임을 섞어 보내지만(mock은 안 보냄) 그 수는
 # 한 자리다. 상한이 없으면 잡담만 보내는 서버에 영원히 매달린다.
 MAX_HANDSHAKE_SKIP = 10
+
+# PING(킵얼라이브)과 ack보다 먼저 도착한 데이터 프레임은 서버의 정상 동작이고
+# 버려지지도 않는다(PING은 에코, 데이터는 buffer로 넘김). 잡담 예산에 함께
+# 청구하면 킵얼라이브 10번만으로 인증 실패가 나므로 별도 상한을 둔다.
+# 그래도 ack를 영영 주지 않는 서버에 매달리지 않도록 상한 자체는 필요하다.
+MAX_HANDSHAKE_TRAFFIC = 100
 
 KST = timezone(timedelta(hours=9))
 
@@ -256,31 +262,59 @@ def print_system_frame(data: dict[str, Any], printer: Any = None) -> None:
     (printer or human)(text)
 
 
-async def recv_ack(ws: Any, *, on_system: Any = None, max_skip: int = MAX_HANDSHAKE_SKIP):
+async def recv_ack(
+    ws: Any,
+    *,
+    on_system: Any = None,
+    buffer: list[dict[str, Any]] | None = None,
+    reject_trnm: tuple[str, ...] = (),
+    max_skip: int = MAX_HANDSHAKE_SKIP,
+    max_traffic: int = MAX_HANDSHAKE_TRAFFIC,
+):
     """return_code를 실은 프레임이 나올 때까지 PING/SYSTEM을 건너뛰며 읽는다.
 
     핸드셰이크를 위치(첫 recv=LOGIN, 둘째 recv=REG)로 가정하면 안 된다.
     실측상 prod는 LOGIN 응답 뒤에 SYSTEM 프레임을 보내고 mock은 보내지 않아
     ack의 도착 위치가 환경마다 다르다 (.superpowers/sdd/task-22-login-frame-evidence.md).
-    PING은 수신 루프와 동일하게 되돌려 보낸다. max_skip 안에 ack가 없으면 None.
+    PING은 수신 루프와 동일하게 되돌려 보낸다. 상한 안에 ack가 없으면 None.
+
+    ack가 아닌 프레임(주로 REAL)은 `buffer`에 쌓아 호출자에게 넘긴다. 그냥 버리면
+    서버가 ack보다 먼저 밀어 넣은 시세가 통째로 사라진다.
+
+    `reject_trnm`은 "이 trnm은 이 자리의 ack가 아니다"를 뜻한다. LOGIN ack가
+    REG 자리에서 소비되면 등록이 안 된 채 '등록 성공'이 나온다. 반대로 ack의
+    trnm을 **완전 일치로 요구하지는 않는다** — 실측 근거가 있는 건 LOGIN 프레임의
+    trnm뿐이라(위 evidence 문서), REG ack의 trnm 문자열을 등록 성공 조건으로 삼으면
+    LOW 등급 오독 문제를 HIGH 등급 가용성 문제로 바꾸게 된다.
     """
-    for _ in range(max_skip):
+    skipped = 0
+    traffic = 0
+    while skipped < max_skip and traffic < max_traffic:
         try:
             frame = json.loads(await ws.recv())
         except json.JSONDecodeError:
+            skipped += 1
             continue
         if not isinstance(frame, dict):
+            skipped += 1
             continue
         trnm = frame.get("trnm", "")
         if trnm == "PING":
             await ws.send(json.dumps({"trnm": "PING"}))
+            traffic += 1
             continue
         if trnm == "SYSTEM":
             if on_system is not None:
                 on_system(frame)
+            skipped += 1
             continue
-        if frame.get("return_code") is not None:
+        if frame.get("return_code") is not None and trnm not in reject_trnm:
             return frame
+        if buffer is not None:
+            buffer.append(frame)
+            traffic += 1
+        else:
+            skipped += 1
     return None
 
 
@@ -401,14 +435,33 @@ def run_stream(
                     "trnm": "LOGIN",
                     "token": token,
                 }
-                await ws.send(json.dumps(auth_msg))
-                err_console.print("[dim]토큰 인증 요청...[/]")
+                # 핸드셰이크 중 ack보다 먼저 도착한 데이터 프레임을 담아 두는 곳.
+                # 아래 수신 루프가 소켓보다 먼저 이걸 비운다.
+                pending: list[dict[str, Any]] = []
+                try:
+                    await ws.send(json.dumps(auth_msg))
+                    err_console.print("[dim]토큰 인증 요청...[/]")
 
-                # 인증 응답 대기.
-                # LOGIN 응답의 키는 return_code/return_msg다 (실측). code/message는
-                # SYSTEM 프레임의 키이므로 LOGIN에서 읽으면 항상 falsy → 실패 미감지.
-                # return_code는 int(805004)라 str()로 감싸 비교한다.
-                auth_data = await recv_ack(ws, on_system=print_system_frame)
+                    # 인증 응답 대기.
+                    # LOGIN 응답의 키는 return_code/return_msg다 (실측). code/message는
+                    # SYSTEM 프레임의 키이므로 LOGIN에서 읽으면 항상 falsy → 실패 미감지.
+                    # return_code는 int(805004)라 str()로 감싸 비교한다.
+                    auth_data = await recv_ack(
+                        ws,
+                        on_system=print_system_frame,
+                        buffer=pending,
+                        reject_trnm=("REG", "REMOVE"),
+                    )
+                except websockets.exceptions.ConnectionClosed as e:
+                    # 서버가 LOGIN에 답하지 않고 끊었다. 정상 종료 코드(1000)로 끊겨도
+                    # 인증되지 않은 세션이므로 성공이 아니다 — 아래 '응답 없음'과 같은
+                    # 상황이라 같은 종료 코드(3)를 쓴다.
+                    msg = f"인증 응답을 받기 전에 연결이 끊겼습니다: {e}"
+                    if json_mode:
+                        return EXIT_AUTH, envelope.error_body(
+                            msg, code="AUTH_REQUIRED", retryable=True)
+                    console.print(f"[red]{msg}[/]")
+                    return EXIT_AUTH, None
                 if auth_data is None:
                     msg = "인증 응답을 받지 못했습니다 (LOGIN 응답 프레임 없음)."
                     if json_mode:
@@ -432,15 +485,19 @@ def run_stream(
 
                 # Receive loop: 타이머(마감시각) 겸용 recv
                 while True:
-                    timeout = _remaining_seconds(state)
-                    if timeout is not None and timeout <= 0:
-                        break
-                    try:
-                        message = await asyncio.wait_for(ws.recv(), timeout=timeout)
-                    except asyncio.TimeoutError:
-                        break  # --duration/--until 도달 (유휴 스트림 포함)
-                    except websockets.exceptions.ConnectionClosedOK:
-                        break
+                    if pending:
+                        # 핸드셰이크 중 도착한 프레임을 소켓보다 먼저 처리
+                        message = json.dumps(pending.pop(0), ensure_ascii=False)
+                    else:
+                        timeout = _remaining_seconds(state)
+                        if timeout is not None and timeout <= 0:
+                            break
+                        try:
+                            message = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                        except asyncio.TimeoutError:
+                            break  # --duration/--until 도달 (유휴 스트림 포함)
+                        except websockets.exceptions.ConnectionClosedOK:
+                            break
 
                     try:
                         data = json.loads(message)
@@ -502,20 +559,31 @@ def run_stream(
                     if should_stop(state, _now_kst()):
                         break
 
+        except websockets.exceptions.ConnectionClosedOK as e:
+            # 정상 종료(1000)는 스트림의 끝이지 실패가 아니다. 수신 루프는 자체적으로
+            # break하므로 여기까지 오는 건 PING 에코 등 send 경로뿐이다.
+            # ConnectionClosedOK는 ConnectionClosed의 하위 클래스라 이 갈래가 먼저
+            # 와야 한다 — 순서를 바꾸면 정상 종료가 아래 EXIT_API로 빨려 들어간다.
+            if not json_mode:  # json 모드 stdout은 NDJSON 전용 (Rich 출력 금지)
+                console.print(f"\n[yellow]연결 종료: {e}[/]")
         except websockets.exceptions.ConnectionClosed as e:
+            # 비정상 종료(ConnectionClosedError, 1006 등)는 실패다.
             if json_mode:
                 return EXIT_API, envelope.error_body(
                     f"연결 종료: {e}", code="UPSTREAM_ERROR", retryable=True)
-            console.print(f"\n[yellow]연결 종료: {e}[/]")
+            console.print(f"\n[red]연결 종료: {e}[/]")
+            return EXIT_API, None
         except ConnectionRefusedError:
             msg = "WebSocket 연결 실패. 도메인과 토큰을 확인하세요."
             if json_mode:
                 return EXIT_API, envelope.error_body(msg, code="NETWORK_ERROR", retryable=True)
             console.print(f"[red]{msg}[/]")
+            return EXIT_API, None
         except Exception as e:
             if json_mode:
                 return EXIT_API, envelope.error_body(f"오류: {e}", code="UPSTREAM_ERROR", retryable=False)
             console.print(f"[red]오류: {e}[/]")
+            return EXIT_API, None
         return 0, None
 
     try:

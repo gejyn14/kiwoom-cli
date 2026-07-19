@@ -50,10 +50,12 @@ def watch_env(monkeypatch):
 
     state: dict = {"rest": fake_rest, "ws": None}
 
-    def _install(frames):
-        ws = FakeWebSocket(frames)
+    def _install(frames, *, connect_exc=None, **ws_kwargs):
+        ws = FakeWebSocket(frames, **ws_kwargs)
         state["ws"] = ws
-        monkeypatch.setitem(sys.modules, "websockets", FakeWebsocketsModule(ws))
+        monkeypatch.setitem(
+            sys.modules, "websockets", FakeWebsocketsModule(ws, connect_exc=connect_exc)
+        )
         return ws
 
     state["install"] = _install
@@ -122,9 +124,16 @@ class TestWatchExitCodes:
         result = _run(runner, watch_env, [SYSTEM_FRAME] * 40)
         assert result.exit_code == 3, result.output
 
-    def test_normal_close_exits_zero(self, runner, watch_env):
+    def test_frame_queue_exhaustion_exits_zero(self, runner, watch_env):
+        """큐 소진 = `async for`가 조용히 끝나는 경로. 바깥 핸들러에 **들어가지 않는다**.
+
+        (이전 이름은 test_normal_close_exits_zero였는데, ConnectionClosed 핸들러를
+        고정하는 것처럼 보이지만 실제로는 StopAsyncIteration으로 끝나 그 핸들러를
+        한 번도 실행하지 않았다. 핸들러 고정은 TestWatchCloseKind로 옮겼다.)
+        """
         result = _run(runner, watch_env, [LOGIN_OK, REG_OK, _real(), _real("+71000")])
         assert result.exit_code == 0, result.output
+        assert "서버 연결 종료" not in result.output, "이 경로는 바깥 핸들러를 타지 않는다"
 
 
 # ── 프레임 순서 (prod는 SYSTEM을 끼워 보낸다) ────────
@@ -189,3 +198,118 @@ class TestWatchErrorHandling:
     def test_invalid_json_frame_does_not_crash(self, runner, watch_env):
         result = _run(runner, watch_env, [LOGIN_OK, REG_OK, "not-json", _real()])
         assert result.exit_code == 0, result.output
+
+
+# ============================================================
+#  Chunk D1 리뷰 수정 (F2/F3/F4/F6/F7/F8/F10)
+# ============================================================
+
+
+class TestWatchCloseKind:
+    """F3/F6: 정상 종료와 비정상 종료를 한 핸들러로 뭉뚱그리지 않는다.
+
+    이전에는 `except ConnectionClosed → return 0`이 "정상 종료는 실패가 아니다"라는
+    주석을 달고 있었지만, 실제 websockets는 정상 종료면 `async for`를 조용히 끝내고
+    비정상일 때만 raise한다. 즉 저 핸들러에 실제로 도달하는 건 비정상 종료 쪽이었다.
+    """
+
+    def test_normal_close_in_handler_exits_zero(self, runner, watch_env):
+        from tests.fakes import FakeConnectionClosedOK
+
+        result = _run(
+            runner, watch_env,
+            [LOGIN_OK, REG_OK, _real(), FakeConnectionClosedOK("1000 bye")],
+        )
+        assert result.exit_code == 0, result.output
+        assert "서버 연결 종료" in result.output, "바깥 정상 종료 갈래를 타지 않았다"
+
+    def test_abnormal_close_exits_api(self, runner, watch_env):
+        from tests.fakes import FakeConnectionClosedError
+
+        result = _run(
+            runner, watch_env,
+            [LOGIN_OK, REG_OK, _real(), FakeConnectionClosedError("1006 abnormal")],
+        )
+        assert result.exit_code == 2, result.output
+        assert "비정상 종료" in result.output
+        assert "재접속하려면" not in result.output
+
+    def test_connection_refused_exits_api(self, runner, watch_env):
+        watch_env["install"]([], connect_exc=ConnectionRefusedError("refused"))
+        result = runner.invoke(cli, ["watch", "005930"])
+        assert result.exit_code == 2, result.output
+        assert "WebSocket 연결 실패" in result.output
+
+
+class TestWatchHandshakeClose:
+    """F2: LOGIN에 답하지 않고 끊긴 세션은 인증되지 않았다 → exit 0 금지."""
+
+    def test_close_before_login_ack_exits_auth(self, runner, watch_env):
+        result = _run(runner, watch_env, [])
+        assert result.exit_code == 3, result.output
+        assert "인증 응답을 받기 전에 연결이 끊겼습니다" in result.output
+        assert "서버 연결 종료. 재접속하려면" not in result.output
+
+    def test_close_before_reg_ack_exits_api(self, runner, watch_env):
+        result = _run(runner, watch_env, [LOGIN_OK])
+        assert result.exit_code == 2, result.output
+        assert "등록 응답을 받기 전에 연결이 끊겼습니다" in result.output
+
+
+class TestWatchHandshakeBuffering:
+    """F4: recv_ack가 ack를 기다리는 동안 도착한 REAL 프레임을 버리지 않는다.
+
+    tick 카운터가 제목에 나타나는지로 본다 — 프레임이 버려지면 tick_count가 0이라
+    '실시간 시세 (tick #1)' 제목 자체가 생기지 않는다.
+    """
+
+    def test_control_real_after_both_acks(self, runner, watch_env):
+        result = _run(runner, watch_env, [LOGIN_OK, REG_OK, _real("+99999")])
+        assert result.exit_code == 0, result.output
+        assert "tick #1" in result.output
+
+    def test_real_between_login_and_reg_ack_is_kept(self, runner, watch_env):
+        result = _run(runner, watch_env, [LOGIN_OK, _real("+99999"), REG_OK])
+        assert result.exit_code == 0, result.output
+        assert "tick #1" in result.output, "REG ack 대기 중 도착한 REAL이 버려졌다"
+
+    def test_real_before_login_ack_is_kept(self, runner, watch_env):
+        result = _run(runner, watch_env, [_real("+99999"), LOGIN_OK, REG_OK])
+        assert result.exit_code == 0, result.output
+        assert "tick #1" in result.output, "LOGIN ack 대기 중 도착한 REAL이 버려졌다"
+
+    def test_many_reals_before_ack_do_not_exhaust_budget(self, runner, watch_env):
+        """잡담 예산(10)에 데이터 프레임을 청구하면 11개째부터 등록 실패가 났다."""
+        result = _run(runner, watch_env, [LOGIN_OK] + [_real("+99999")] * 20 + [REG_OK])
+        assert result.exit_code == 0, result.output
+        assert "tick #20" in result.output
+
+    def test_ping_budget_is_separate(self, runner, watch_env):
+        """F8: 핸드셰이크 중 킵얼라이브 PING 10번이 인증 실패로 이어지면 안 된다."""
+        ws = watch_env["install"]([{"trnm": "PING"}] * 10 + [LOGIN_OK, REG_OK])
+        result = runner.invoke(cli, ["watch", "005930"])
+        assert result.exit_code == 0, result.output
+        assert ws.sent_trnms().count("PING") == 10
+
+
+class TestWatchAckSlotDiscipline:
+    """F7: LOGIN ack가 REG 자리에서 소비되면 등록 없이 조용히 성공한다."""
+
+    def test_duplicate_login_ack_is_not_taken_as_reg_ack(self, runner, watch_env):
+        result = _run(runner, watch_env, [LOGIN_OK, LOGIN_OK])
+        assert result.exit_code == 2, result.output
+        assert "tick #" not in result.output
+
+
+class TestWatchHandshakeSystemDisplay:
+    """F10: 핸드셰이크에서 건너뛴 SYSTEM 프레임을 조용히 삼키지 않는다."""
+
+    def test_system_before_login_ack_is_displayed(self, runner, watch_env):
+        result = _run(runner, watch_env, [SYSTEM_FRAME, LOGIN_FAIL])
+        assert result.exit_code == 3, result.output
+        assert "시스템: 접속허용요청" in result.output, "건너뛴 SYSTEM이 표시되지 않았다"
+
+    def test_system_between_acks_is_displayed(self, runner, watch_env):
+        result = _run(runner, watch_env, [LOGIN_OK, SYSTEM_FRAME, REG_OK, _real()])
+        assert result.exit_code == 0, result.output
+        assert "시스템: 접속허용요청" in result.output

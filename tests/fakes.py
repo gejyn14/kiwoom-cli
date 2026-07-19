@@ -79,17 +79,39 @@ class FakeConnectionClosedOK(FakeConnectionClosed):
     """실제와 동일하게 ConnectionClosed의 하위 클래스여야 한다."""
 
 
+class FakeConnectionClosedError(FakeConnectionClosed):
+    """비정상 종료(1006 등). 실제와 동일하게 ConnectionClosedOK의 하위가 아니다.
+
+    `except ConnectionClosedOK` / `except ConnectionClosed` 두 갈래가 실제로
+    갈리는지 확인하려면 이 구분이 페이크에도 있어야 한다.
+    """
+
+
 class FakeWebSocket:
     """프레임 큐를 순서대로 돌려주는 가짜 소켓.
 
     frames 원소는 dict(자동 json 직렬화), str(그대로), Exception(raise) 중 하나.
     """
 
-    def __init__(self, frames: list[Any] | None = None):
+    def __init__(
+        self,
+        frames: list[Any] | None = None,
+        *,
+        send_exc: Exception | None = None,
+        fail_send_after: int | None = None,
+    ):
         self.frames: list[Any] = list(frames or [])
         self.sent: list[str] = []
+        # send_exc/fail_send_after: n번째 send부터 예외를 던진다. 닫힌 소켓에
+        # PING을 에코하는 상황(실제로 ConnectionClosed가 나오는 자리)을 재현한다.
+        self.send_exc = send_exc
+        self.fail_send_after = fail_send_after
 
     async def send(self, message: str) -> None:
+        if self.send_exc is not None and (
+            self.fail_send_after is None or len(self.sent) >= self.fail_send_after
+        ):
+            raise self.send_exc
         self.sent.append(message)
 
     async def recv(self) -> str:
@@ -106,10 +128,16 @@ class FakeWebSocket:
         return self
 
     async def __anext__(self) -> str:
-        try:
-            return await self.recv()
-        except FakeConnectionClosedOK:
-            raise StopAsyncIteration from None
+        """큐 소진 = 정상 종료 → StopAsyncIteration (실제 websockets의 `async for`와 동일).
+
+        큐에 예외를 **명시적으로 넣은** 경우는 그대로 던진다. 비정상 종료
+        (ConnectionClosedError)가 `async for`에서 raise되는 건 실제 동작이고,
+        ConnectionClosedOK를 명시적으로 넣는 건 바깥 핸들러의 정상/비정상 분기가
+        실제로 갈리는지 확인하기 위한 방어적 경로다.
+        """
+        if not self.frames:
+            raise StopAsyncIteration
+        return await self.recv()
 
     # 전송된 프레임 조회 헬퍼
     def sent_trnms(self) -> list[str]:
@@ -136,12 +164,16 @@ class _FakeConnect:
 class FakeWebsocketsModule:
     """`import websockets` 자리에 끼워 넣는 가짜 모듈."""
 
-    def __init__(self, ws: FakeWebSocket):
+    def __init__(self, ws: FakeWebSocket, connect_exc: Exception | None = None):
         self.ws = ws
+        self.connect_exc = connect_exc
         self.exceptions = SimpleNamespace(
             ConnectionClosed=FakeConnectionClosed,
             ConnectionClosedOK=FakeConnectionClosedOK,
+            ConnectionClosedError=FakeConnectionClosedError,
         )
 
     def connect(self, *args: Any, **kwargs: Any) -> _FakeConnect:
+        if self.connect_exc is not None:
+            raise self.connect_exc
         return _FakeConnect(self.ws)
