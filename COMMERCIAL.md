@@ -1,24 +1,24 @@
-# Commercial Licensing
+# 상업 라이선스
 
-kiwoom-cli is distributed under the **kiwoom-cli Source-Available License, Version 1.0** (see [LICENSE](LICENSE)).
+kiwoom-cli는 **kiwoom-cli Source-Available License, Version 1.0**을 따릅니다 ([LICENSE](LICENSE) 참고).
 
-## Who needs a commercial license?
+## 상업 라이선스가 필요한 경우
 
-You need a commercial license if you are an **Organization** (any legal entity — company, partnership, nonprofit, government body — or a person acting on its behalf) and you use kiwoom-cli **for profit**:
+**기관**(회사, 조합, 비영리단체, 정부기관 등 모든 법인격, 또는 이를 대리하는 개인)이 kiwoom-cli를 **영리 목적**으로 사용한다면 상업 라이선스가 필요합니다.
 
-| Who you are | Use | Commercial license? |
+| 사용 주체 | 사용 방식 | 상업 라이선스 필요? |
 |-------------|-----|---------------------|
-| Individual (own behalf) | Any purpose, including profit | **No** — free, attribution only |
-| Organization | Internal evaluation / testing / non-profit | No |
-| Organization | Unmodified, for profit | **Yes** |
-| Organization | Modified, for profit | **Yes**, or publish your entire codebase under this same license |
+| 개인 (본인 명의) | 영리 목적을 포함한 모든 용도 | **불필요**: 무료, 저작권 표시만 |
+| 기관 | 내부 평가 / 테스트 / 비영리 목적 | 불필요 |
+| 기관 | 무수정, 영리 목적 | **필요** |
+| 기관 | 수정, 영리 목적 | **필요**, 또는 전체 코드베이스를 이 라이선스로 공개 |
 
-In all "modified, for profit" cases you must also deliver the complete modified source to the Licensor, whether or not you have purchased a commercial license.
+"수정, 영리 목적"에 해당하는 모든 경우, 상업 라이선스 구매 여부와 무관하게 수정된 전체 소스를 라이선서에게 전달해야 합니다.
 
-## Contact
+## 문의
 
-To purchase a commercial license, email **ge.jyn14@gmail.com** with your organization name and intended use.
+상업 라이선스 구매를 원하시면 기관명과 사용 목적을 적어 **ge.jyn14@gmail.com**으로 이메일을 보내주세요.
 
 ---
 
-_This document is a summary for convenience. The [LICENSE](LICENSE) file is the governing legal text; where they differ, the LICENSE controls._
+_이 문서는 이해를 돕기 위한 요약이며, 법적 효력을 갖는 원문은 [LICENSE](LICENSE) 파일(영문)입니다. 두 문서의 내용이 다를 경우 LICENSE가 우선합니다._

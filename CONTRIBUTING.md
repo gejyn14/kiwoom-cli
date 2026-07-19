@@ -40,7 +40,7 @@ pip install -e ".[dev]"
 ## Code Style
 
 - Python 3.10+ 타입 힌트 사용 (`X | None`, `list[str]`)
-- `ruff`로 린트 — PR 전에 `ruff check kiwoom_cli/` 통과 필수
+- `ruff`로 린트. PR 전에 `ruff check kiwoom_cli/` 통과 필수
 - 한국어 docstring, 영어 코드
 - Click 기반 CLI 패턴 준수 (CLAUDE.md 참고)
 
