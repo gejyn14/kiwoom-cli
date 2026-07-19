@@ -38,6 +38,43 @@
   기본값으로 매도 데이터를 받던 스크립트는 명시적으로 `--trade sell`을
   추가해야 이전과 같은 데이터를 계속 받습니다.
 
+`stock investor consecutive`(ka10131)의 `--amount-qty` 값이 스펙과 반대였고,
+정정과 함께 세 옵션에 raw 숫자코드와 함께 쓸 수 있는 human-readable 이름을
+추가했습니다(하위호환).
+
+**Fixed**
+
+- **`--amount-qty` 기본값이 실제로는 수량(1) 데이터를 반환하고 있었습니다.**
+  스펙(ka10131 Request Body)은 `amt_qty_tp`를 `0:금액, 1:수량`으로 정의하는데,
+  기존 코드는 `Choice(["1","2"])`에 `default="1"`이었고 help는 `1=금액,
+  2=수량`이라고 적어 실제 동작과 어긋났습니다(전송값 `1`은 스펙상 수량이지
+  help가 말한 금액이 아니었습니다). 스펙에 없는 값 `2`도 Choice 목록에는
+  올라 있었습니다.
+
+**Non-breaking (사람이 읽는 이름 추가, 하위호환)**
+
+- **`--amount-qty`/`--period`/`--stock-sector`가 이제 `amount`/`quantity`,
+  `recent`/`3d`/`5d`/`10d`/`20d`/`120d`/`range`, `stock`/`sector` 같은 사람이
+  읽는 이름도 받습니다.** 기존에 숫자 코드를 직접 넘기던 스크립트는 **그대로
+  동작합니다** — `HumanChoice`가 raw API 코드를 하위호환으로 계속 허용하기
+  때문입니다. 전송값도 이름 추가 전과 동일합니다: `recent`→`dt=1`,
+  `3d`→`dt=3`, `5d`→`dt=5`, `10d`→`dt=10`, `20d`→`dt=20`, `120d`→`dt=120`,
+  `range`→`dt=0`; `stock`→`stk_inds_tp=0`, `sector`→`stk_inds_tp=1`.
+  `--net-type`도 사람이 읽는 이름(`net-buy`)만 노출되도록 바뀌었지만 스펙상
+  값이 `2`(순매수) 하나뿐이라 기존 자유 입력 `--net-type 2`도 계속
+  `netslmt_tp=2`를 보냅니다. `--exchange`는 이미 이전 정리에서 전환되어
+  이번 변경 대상이 아닙니다.
+
+**Breaking**
+
+- **`--amount-qty`의 기본값이 `amt_qty_tp=1`(수량)에서 `amt_qty_tp=0`(금액)로
+  바뀌었습니다.** 이건 이름 체계와 무관한 별개의 변경입니다 — raw 코드를
+  직접 지정하는 호출(`--amount-qty 1`, `--amount-qty quantity` 등)은 위와
+  같이 계속 똑같은 데이터(수량)를 반환하지만, **`--amount-qty`를 아예
+  지정하지 않고 기본값에 의존하던 호출**은 이제 다른 데이터(금액)를
+  받습니다. 이전에 기본값으로 수량 데이터를 받던 스크립트는 명시적으로
+  `--amount-qty quantity`를 추가해야 이전과 같은 데이터를 계속 받습니다.
+
 ## [2.10.1] - 2026-07-19
 
 금현물 주문(`order gold buy`/`sell`, kt50000/kt50001)이 API가 받지 않는 주문타입을

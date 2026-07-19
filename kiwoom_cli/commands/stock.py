@@ -21,12 +21,16 @@ from ..formatters import (
 )
 from ..output import console
 from ._constants import (
+    AMT_QTY_TP_0_1,
     AMT_QTY_TP_1_2,
     EXCHANGE_ALL,
     HumanChoice,
     MARKET_ALL,
     MARKET_PROGRAM,
     MARKET_TWO,
+    NETSLMT_TP_NET_BUY_ONLY,
+    PERIOD_RECENT_OR_RANGE,
+    STK_INDS_TP,
     TRDE_TP_NET_BUY_BUY_SELL,
 )
 from .us import stock_ops as us_stock_ops
@@ -1204,9 +1208,14 @@ def after_close(mrkt_tp: str, amt_qty_tp: str, trde_tp: str, stex_tp: str):
 
 
 @investor.command("consecutive")
-@click.option("--period", "dt", default="5", help="기간 (일수)")
-@click.option("--from", "strt_dt", default="", help="시작일자 (YYYYMMDD, 선택)")
-@click.option("--to", "end_dt", default="", help="종료일자 (YYYYMMDD, 선택)")
+@click.option(
+    "--period", "dt",
+    type=HumanChoice(PERIOD_RECENT_OR_RANGE),
+    default="5d",
+    help="기간 (recent=최근일, 3d/5d/10d/20d/120d, range=시작/종료일자로 조회)",
+)
+@click.option("--from", "strt_dt", default="", help="시작일자 (YYYYMMDD, --period range일 때 사용)")
+@click.option("--to", "end_dt", default="", help="종료일자 (YYYYMMDD, --period range일 때 사용)")
 @click.option(
     "--market", "mrkt_tp",
     type=click.Choice(["kospi", "kosdaq"]),
@@ -1215,20 +1224,21 @@ def after_close(mrkt_tp: str, amt_qty_tp: str, trde_tp: str, stex_tp: str):
 )
 @click.option(
     "--net-type", "netslmt_tp",
-    default="2",
-    help="순매수구분 (2=순매수)",
+    type=HumanChoice(NETSLMT_TP_NET_BUY_ONLY),
+    default="net-buy",
+    help="순매수구분 (net-buy=순매수, 스펙상 고정값)",
 )
 @click.option(
     "--stock-sector", "stk_inds_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="종목/업종 (0=종목, 1=업종)",
+    type=HumanChoice(STK_INDS_TP),
+    default="stock",
+    help="종목/업종구분 (stock=종목, sector=업종)",
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_0_1),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--exchange", "stex_tp",

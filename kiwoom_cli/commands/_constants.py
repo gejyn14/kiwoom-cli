@@ -77,3 +77,27 @@ TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 # docs/superpowers/plans/2026-07-18-humanreadable-inventory.md의 "절대
 # 합치면 안 되는" 절(C4) 참고.
 AMT_QTY_TP_1_2 = {"amount": "1", "quantity": "2"}
+
+# AMT_QTY_TP_1_2와 키 집합(amount/quantity)은 같지만 극성이 다른 짝(0:금액,
+# 1:수량) — ka10131(stock.py, 기관외국인연속매매현황)에서 사용. ka10051
+# (market.py:651, 업종별투자자순매수)도 같은 코드북이나 아직 이관 전이라
+# 이 상수를 쓰지 않는다(별도 작업 대상). 절대 AMT_QTY_TP_1_2와 합치지 말 것 —
+# docs/superpowers/plans/2026-07-18-humanreadable-inventory.md C4 참고.
+AMT_QTY_TP_0_1 = {"amount": "0", "quantity": "1"}
+
+# ka10131(stock.py) 전용 — dt(기간) 필드. 값이 순수 일수 시퀀스가 아니라
+# 1=최근일(문자 그대로 "1일"이 아님), 0=시작일자/종료일자로 조회(기간모드
+# 전환)까지 섞인 코드북. 다른 dt 클러스터(PERIOD_TODAY_PREV_5_60,
+# ka10038의 off-by-1 코드북 등)와 값 집합이 전혀 달라 절대 합치지 말 것.
+PERIOD_RECENT_OR_RANGE = {
+    "recent": "1", "3d": "3", "5d": "5", "10d": "10", "20d": "20",
+    "120d": "120", "range": "0",
+}
+
+# ka10131(stock.py) 전용 — netslmt_tp(순매수구분)는 스펙상 "2:순매수(고정값)"
+# 하나뿐이라 다른 선택지가 없다. 다른 endpoint의 순매수/순매도 계열
+# trde_tp 코드북들과는 완전히 별개 필드이니 혼용 금지.
+NETSLMT_TP_NET_BUY_ONLY = {"net-buy": "2"}
+
+# ka10131(stock.py) 전용 — stk_inds_tp(종목업종구분).
+STK_INDS_TP = {"stock": "0", "sector": "1"}

@@ -308,3 +308,101 @@ def test_investor_after_close_market_kosdaq_supported(runner, fake_client):
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["mrkt_tp"] == "101"
+
+
+# ============================================================
+#  Investor subgroup — consecutive (ka10131)
+# ============================================================
+
+
+def test_investor_consecutive_default_sends_amt_qty_tp_zero(runner, fake_client):
+    """기본 호출은 amt_qty_tp="0"(금액)을 보내야 한다 (ka10131 스펙: 0:금액, 1:수량).
+
+    이전 코드는 --amount-qty Choice(["1","2"])에 default="1"이었다. 스펙상
+    amt_qty_tp는 0:금액,1:수량이라 이전 기본값 "1"은 실제로 수량을 의미했고
+    (help의 "1=금액" 표기는 틀렸다), 2는 스펙에 정의조차 없는 값이었다. 이
+    테스트는 수정 전 코드에서 amt_qty_tp == "1"로 실패해야 한다(폴스화).
+    """
+    result = runner.invoke(cli, ["stock", "investor", "consecutive"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == "0"
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("amount", "0"), ("quantity", "1")],
+)
+def test_investor_consecutive_amount_qty_enum(runner, fake_client, cli_value, api_value):
+    """--amount-qty amount/quantity가 amt_qty_tp 0/1로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "consecutive", "--amount-qty", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [
+        ("recent", "1"), ("3d", "3"), ("5d", "5"), ("10d", "10"),
+        ("20d", "20"), ("120d", "120"), ("range", "0"),
+    ],
+)
+def test_investor_consecutive_period_enum(runner, fake_client, cli_value, api_value):
+    """--period recent/3d/5d/10d/20d/120d/range가 dt 1/3/5/10/20/120/0으로 매핑되어야 한다 (E-only, 값 불변)."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "consecutive", "--period", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == api_value
+
+
+def test_investor_consecutive_period_default_unchanged(runner, fake_client):
+    """--period 기본 호출은 변경 전과 동일하게 dt="5"를 보내야 한다."""
+    result = runner.invoke(cli, ["stock", "investor", "consecutive"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == "5"
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("stock", "0"), ("sector", "1")],
+)
+def test_investor_consecutive_stock_sector_enum(runner, fake_client, cli_value, api_value):
+    """--stock-sector stock/sector가 stk_inds_tp 0/1로 매핑되어야 한다 (E-only, 값 불변)."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "consecutive", "--stock-sector", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stk_inds_tp"] == api_value
+
+
+def test_investor_consecutive_net_type_default_sends_net_buy(runner, fake_client):
+    """--net-type 기본 호출은 netslmt_tp="2"(순매수, 스펙상 고정값)를 보내야 한다 (E-only, 값 불변)."""
+    result = runner.invoke(cli, ["stock", "investor", "consecutive"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["netslmt_tp"] == "2"
+
+
+def test_investor_consecutive_net_type_net_buy_explicit(runner, fake_client):
+    """--net-type net-buy가 netslmt_tp="2"로 매핑되어야 한다 (유일한 값)."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "consecutive", "--net-type", "net-buy"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["netslmt_tp"] == "2"
+
+
+def test_investor_consecutive_exchange_unchanged(runner, fake_client):
+    """--exchange는 이미 EXCHANGE_ALL로 전환되어 있어 이번 작업에서 그대로 둔다."""
+    result = runner.invoke(cli, ["stock", "investor", "consecutive"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stex_tp"] == "3"
