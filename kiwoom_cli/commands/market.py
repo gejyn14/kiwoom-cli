@@ -486,6 +486,8 @@ def rank_foreign_broker(mrkt_tp, dt, trde_tp, sort_tp, stex_tp):
 def rank_broker_by_stock(code, qry_tp, strt_dt, end_dt, dt):
     """종목별 증권사 순위. (ka10038)"""
     has_range = bool(strt_dt or end_dt)
+    if bool(strt_dt) != bool(end_dt):
+        fail_input("날짜 범위로 조회하려면 --from과 --to를 함께 지정해야 합니다.")
     if has_range and dt is not None:
         fail_input("--period와 --from/--to는 함께 지정할 수 없습니다.")
 

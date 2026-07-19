@@ -166,6 +166,17 @@ MIN_TIC_TP = {"tick": "0", "minute": "1"}
 # ka10032의 mang_stk_incls는 진짜 boolean이고 극성도 반대다({0:미포함,
 # 1:포함}). 같은 필드명, 다른 코드북 — 절대 합치지 말 것.
 # 1곳: ka10030(rank volume, 옵션명 --stock-condition). 짝: MANAGED_STOCK_INCLUDE(ka10032).
+#
+# 이름(STOCK_CONDITION=종목조건)에 낚이지 말 것: 종목조건의 진짜 필드명은
+# stk_cnd이고, 이 상수가 담는 값은 stk_cnd가 아니라 mang_stk_incls(관리종목포함)다.
+# stk_cnd는 market.py의 ~10개 커맨드(rank_new_highlow, rank_limit,
+# rank_near_highlow, rank_surge, rank_orderbook_top, rank_orderbook_surge,
+# rank_balance_rate_surge, rank_volume_surge, rank_change, rank_expected_change,
+# rank_credit_ratio, rank_afterhours_change 등)에서 raw 텍스트로 그대로
+# 전달되는 완전히 다른 필드이며, 이 상수의 코드북과 무관하다. 나중에 stk_cnd를
+# HumanChoice로 바꾸는 작업을 하게 되면 이 STOCK_CONDITION을 재사용하지 말고
+# 별도 상수를 새로 정의할 것 — 여기 값(mang_stk_incls 코드)을 stk_cnd에 넣으면
+# 조용히 잘못된 조회 조건이 전송된다.
 STOCK_CONDITION = {
     "include-managed": "0", "exclude-managed": "1", "exclude-preferred": "3",
     "exclude-liquidation": "11", "exclude-managed-preferred": "4",

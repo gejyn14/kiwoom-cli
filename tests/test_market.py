@@ -350,6 +350,24 @@ def test_broker_by_stock_period_and_from_to_conflict_exits_1(runner, fake_client
     assert result.exit_code == 1
 
 
+def test_broker_by_stock_from_without_to_exits_1(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "broker-by-stock", "005930", "--from", "20260101",
+    ])
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+def test_broker_by_stock_to_without_from_exits_1(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "broker-by-stock", "005930", "--to", "20260107",
+    ])
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
 def test_broker_by_stock_side_human_name(runner, fake_client):
     result = runner.invoke(cli, [
         "market", "rank", "broker-by-stock", "005930", "--type", "net-buy",
