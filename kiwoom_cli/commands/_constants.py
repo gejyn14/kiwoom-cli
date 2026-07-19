@@ -310,3 +310,213 @@ TRADER_ANALYSIS_PERIOD_5_120 = {
 # 원시 텍스트로 남아 있다 — 이 상수를 그쪽에 재사용해도 값은 맞겠으나 아직
 # 검증/적용하지 않았으니 별도 작업으로 남긴다. 1곳: ka30002.
 ELW_BROKER_END_SKIP = {"include": "0", "exclude": "1"}
+
+# ── ka10016~ka10023(market rank 신고저가~거래량급증) HumanChoice 전환
+# (Task 31a) ──────────────────────────────────────────────────────────
+#
+# trde_qty_tp(거래량구분)에 대한 중요 발견: 이 8개 커맨드 전부에서 현재
+# --vol-type의 기본값이 raw "0"인데, 8개 API의 trde_qty_tp 스펙 값은 전부
+# "0"을 포함하지 않는다(ka10016/17/18/19는 5자리 zero-pad "00000"이 전체조회,
+# ka10020은 4자리 "0000", ka10021/22/23은 "전체" 개념 자체가 없이 "5"~"1000"
+# 최솟값부터 시작). 즉 현재 기본 호출은 스펙에 없는 코드를 보내고 있는
+# 사전 존재 결함으로 보인다(docs/미국 REST API 문서.xlsx 8개 시트 + kwcli
+# arguments.csv로 이중 확인). HumanChoice로 감싸면 이 "0"이 매핑에 없어
+# 기본 호출 자체가 BadParameter로 깨진다(실측 확인함) — 값을 스펙에 맞는
+# 코드로 바꾸면 전송값이 바뀌므로 규칙 1(표기만 바꾼다) 위반이다. 그래서
+# trde_qty_tp는 8개 커맨드 전부에서 이번 태스크 범위에서 제외하고 raw
+# 텍스트로 남긴다 — 값 자체를 고치는 것은 별도 버그 수정 작업(Tranche B류)
+# 소관이다. 상세는 task-31a-report.md 참고.
+
+# ka10016(신고저가) 전용 — ntl_tp(신고저구분). 1곳: ka10016.
+NEW_HIGH_LOW_KIND = {"new-high": "1", "new-low": "2"}
+
+# ka10016(신고저가) 전용 — high_low_close_tp(고저종구분). 1곳: ka10016.
+NEW_HIGH_LOW_BASIS = {"high-low": "1", "close": "2"}
+
+# ka10016(신고저가) 전용 — stk_cnd(종목조건, 7개 값: all/exclude-managed/
+# exclude-preferred/exclude-margin-100/only-margin-100/only-margin-40/
+# only-margin-30). ka10018/ka10019의 stk_cnd와 값 집합이 동일해 보이나(스펙
+# 상으로도 동일) 이번 태스크는 "값 집합이 같아 보인다고 합치지 마라"는 규칙을
+# 그대로 따라 API별로 분리해 둔다 — 나중에 합치는 것은 별도 판단. 짝:
+# NEAR_HIGHLOW_STK_CND(ka10018), SURGE_STK_CND(ka10019). 절대 자동으로
+# 합치지 말고, 합치려면 재검증부터 할 것.
+NEW_HIGH_LOW_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-preferred": "3",
+    "exclude-margin-100": "5", "only-margin-100": "6",
+    "only-margin-40": "7", "only-margin-30": "8",
+}
+
+# ka10016(신고저가) 전용 — crd_cnd(신용조건, 7개 값). ka10017/18/19/20의
+# crd_cnd와 값 집합이 동일해 보이나 위와 동일한 이유로 API별로 분리.
+# 짝: LIMIT_MOVE_CREDIT_CND(ka10017), NEAR_HIGHLOW_CREDIT_CND(ka10018),
+# SURGE_CREDIT_CND(ka10019), ORDERBOOK_TOP_CREDIT_CND(ka10020).
+NEW_HIGH_LOW_CREDIT_CND = {
+    "all": "0", "a": "1", "b": "2", "c": "3", "d": "4", "e": "7", "all-financing": "9",
+}
+
+# ka10016(신고저가) 전용 — updown_incls(상하한포함, 0:미포함,1:포함).
+# ka10019의 updown_incls와 값 집합이 동일해 보이나 API별로 분리.
+# 짝: SURGE_INCLUDE_LIMIT(ka10019).
+NEW_HIGH_LOW_INCLUDE_LIMIT = {"yes": "1", "no": "0"}
+
+# ka10017(상하한가) 전용 — updown_tp(상하한구분, 7개 값). 1곳: ka10017.
+LIMIT_MOVE_DIRECTION = {
+    "upper": "1", "rise": "2", "flat": "3", "lower": "4",
+    "fall": "5", "prev-upper": "6", "prev-lower": "7",
+}
+
+# ka10017(상하한가) 전용 — sort_tp(정렬구분, 3개 값). 1곳: ka10017.
+LIMIT_MOVE_SORT = {"code": "1", "count": "2", "change-rate": "3"}
+
+# ka10017(상하한가) 전용 — stk_cnd(종목조건, 10개 값: NEW_HIGH_LOW_STK_CND의
+# 7개 값에 exclude-managed-preferred(4)/only-margin-20(9)/
+# exclude-managed-preferred-alert(10)가 추가된 상위집합). 1곳: ka10017.
+LIMIT_MOVE_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-preferred": "3",
+    "exclude-managed-preferred": "4", "exclude-margin-100": "5",
+    "only-margin-100": "6", "only-margin-40": "7", "only-margin-30": "8",
+    "only-margin-20": "9", "exclude-managed-preferred-alert": "10",
+}
+
+# ka10017(상하한가) 전용 — crd_cnd(신용조건, 7개 값). NEW_HIGH_LOW_CREDIT_CND
+# 참고(짝 목록).
+LIMIT_MOVE_CREDIT_CND = {
+    "all": "0", "a": "1", "b": "2", "c": "3", "d": "4", "e": "7", "all-financing": "9",
+}
+
+# ka10017(상하한가) 전용 — trde_gold_tp(매매금구분, 7개 값). ka10019의
+# pric_cnd와 값 집합·라벨이 동일해 보이나 필드명 자체가 다르다
+# (trde_gold_tp vs pric_cnd) — 절대 합치지 말 것. 짝: SURGE_PRICE_CND(ka10019).
+LIMIT_MOVE_PRICE_CND = {
+    "all": "0", "under-1k": "1", "1k-2k": "2", "2k-3k": "3",
+    "5k-10k": "4", "over-10k": "5", "over-1k": "8",
+}
+
+# ka10018(고저가근접) 전용 — high_low_tp(고저구분). 1곳: ka10018.
+NEAR_HIGHLOW_KIND = {"high": "1", "low": "2"}
+
+# ka10018(고저가근접) 전용 — stk_cnd(종목조건, 7개 값). NEW_HIGH_LOW_STK_CND
+# 참고(짝 목록). 1곳: ka10018.
+NEAR_HIGHLOW_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-preferred": "3",
+    "exclude-margin-100": "5", "only-margin-100": "6",
+    "only-margin-40": "7", "only-margin-30": "8",
+}
+
+# ka10018(고저가근접) 전용 — crd_cnd(신용조건, 7개 값). NEW_HIGH_LOW_CREDIT_CND
+# 참고(짝 목록). 1곳: ka10018.
+NEAR_HIGHLOW_CREDIT_CND = {
+    "all": "0", "a": "1", "b": "2", "c": "3", "d": "4", "e": "7", "all-financing": "9",
+}
+
+# ka10019(가격급등락) 전용 — flu_tp(등락구분). 1곳: ka10019.
+SURGE_DIRECTION = {"rise": "1", "fall": "2"}
+
+# ka10019(가격급등락) 전용 — tm_tp(시간구분, 1:분전,2:일전). ka10023의
+# tm_tp(1:분,2:전일)와 필드명은 같지만 라벨 의미가 달라(분전/일전 vs
+# 분/전일) 별도 상수로 유지. 짝: VOLUME_SURGE_TIME_UNIT(ka10023).
+SURGE_TIME_UNIT = {"minute": "1", "day": "2"}
+
+# ka10019(가격급등락) 전용 — stk_cnd(종목조건, 7개 값). NEW_HIGH_LOW_STK_CND
+# 참고(짝 목록). 1곳: ka10019.
+SURGE_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-preferred": "3",
+    "exclude-margin-100": "5", "only-margin-100": "6",
+    "only-margin-40": "7", "only-margin-30": "8",
+}
+
+# ka10019(가격급등락) 전용 — crd_cnd(신용조건, 7개 값). NEW_HIGH_LOW_CREDIT_CND
+# 참고(짝 목록). 1곳: ka10019.
+SURGE_CREDIT_CND = {
+    "all": "0", "a": "1", "b": "2", "c": "3", "d": "4", "e": "7", "all-financing": "9",
+}
+
+# ka10019(가격급등락) 전용 — pric_cnd(가격조건, 7개 값). LIMIT_MOVE_PRICE_CND
+# 참고(짝 — 값·라벨은 같으나 필드명이 다름, 절대 합치지 말 것). 1곳: ka10019.
+SURGE_PRICE_CND = {
+    "all": "0", "under-1k": "1", "1k-2k": "2", "2k-3k": "3",
+    "5k-10k": "4", "over-10k": "5", "over-1k": "8",
+}
+
+# ka10019(가격급등락) 전용 — updown_incls(상하한포함). NEW_HIGH_LOW_INCLUDE_LIMIT
+# 참고(짝 목록). 1곳: ka10019.
+SURGE_INCLUDE_LIMIT = {"yes": "1", "no": "0"}
+
+# ka10020(호가잔량상위) 전용 — sort_tp(정렬구분, 4개 값). 1곳: ka10020.
+ORDERBOOK_TOP_SORT = {
+    "net-buy-balance": "1", "net-sell-balance": "2", "buy-ratio": "3", "sell-ratio": "4",
+}
+
+# ka10020(호가잔량상위) 전용 — stk_cnd(종목조건, 7개 값: NEW_HIGH_LOW_STK_CND와
+# 달리 "3"(exclude-preferred)이 없고 "9"(only-margin-20)이 있다). ka10021/22의
+# stk_cnd와 값 집합이 동일해 보이나 API별로 분리. 짝:
+# ORDERBOOK_SURGE_STK_CND(ka10021), BALANCE_RATE_STK_CND(ka10022).
+ORDERBOOK_TOP_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-margin-100": "5",
+    "only-margin-100": "6", "only-margin-40": "7", "only-margin-30": "8",
+    "only-margin-20": "9",
+}
+
+# ka10020(호가잔량상위) 전용 — crd_cnd(신용조건, 7개 값). NEW_HIGH_LOW_CREDIT_CND
+# 참고(짝 목록). 1곳: ka10020.
+ORDERBOOK_TOP_CREDIT_CND = {
+    "all": "0", "a": "1", "b": "2", "c": "3", "d": "4", "e": "7", "all-financing": "9",
+}
+
+# ka10021(호가잔량급증) 전용 — trde_tp(매매구분, 1:매수잔량,2:매도잔량).
+# 매수/매도 "잔량" 자체를 뜻하며 순매수/순매도 개념이 아니다 — 기존
+# TRDE_TP_* 그룹들과 절대 합치지 말 것(이미 _constants.py 상단 주석에 그룹④로
+# 예약돼 있었으나 실제 상수는 아직 없었음, 이번에 추가). 1곳: ka10021.
+ORDERBOOK_SURGE_SIDE = {"buy-balance": "1", "sell-balance": "2"}
+
+# ka10021(호가잔량급증) 전용 — sort_tp(정렬구분, 1:급증량,2:급증률). 1곳: ka10021.
+ORDERBOOK_SURGE_SORT = {"spike-quantity": "1", "spike-rate": "2"}
+
+# ka10021(호가잔량급증) 전용 — stk_cnd(종목조건, 7개 값). ORDERBOOK_TOP_STK_CND
+# 참고(짝 목록). 1곳: ka10021.
+ORDERBOOK_SURGE_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-margin-100": "5",
+    "only-margin-100": "6", "only-margin-40": "7", "only-margin-30": "8",
+    "only-margin-20": "9",
+}
+
+# ka10022(잔량율급증) 전용 — rt_tp(비율구분, 1:매수/매도비율,2:매도/매수비율).
+# 1곳: ka10022.
+BALANCE_RATE_TYPE = {"buy-to-sell": "1", "sell-to-buy": "2"}
+
+# ka10022(잔량율급증) 전용 — stk_cnd(종목조건, 7개 값). ORDERBOOK_TOP_STK_CND
+# 참고(짝 목록). 1곳: ka10022.
+BALANCE_RATE_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-margin-100": "5",
+    "only-margin-100": "6", "only-margin-40": "7", "only-margin-30": "8",
+    "only-margin-20": "9",
+}
+
+# ka10023(거래량급증) 전용 — sort_tp(정렬구분, 1:급증량,2:급증률,3:급감량,
+# 4:급감률). 1곳: ka10023.
+VOLUME_SURGE_SORT = {
+    "spike-quantity": "1", "spike-rate": "2", "drop-quantity": "3", "drop-rate": "4",
+}
+
+# ka10023(거래량급증) 전용 — tm_tp(시간구분, 1:분,2:전일). SURGE_TIME_UNIT
+# 참고(짝 — 필드명은 같으나 라벨 의미가 달라 절대 합치지 말 것). 1곳: ka10023.
+VOLUME_SURGE_TIME_UNIT = {"minute": "1", "previous-day": "2"}
+
+# ka10023(거래량급증) 전용 — stk_cnd(종목조건, 17개 값 — 이 8개 커맨드 중
+# 가장 큰 사다리, ETF/ETN/스팩 제외 옵션까지 포함). 1곳: ka10023.
+VOLUME_SURGE_STK_CND = {
+    "all": "0", "exclude-managed": "1", "exclude-preferred": "3",
+    "exclude-liquidation": "11", "exclude-managed-preferred": "4",
+    "exclude-margin-100": "5", "only-margin-100": "6", "only-margin-60": "13",
+    "only-margin-50": "12", "only-margin-40": "7", "only-margin-30": "8",
+    "only-margin-20": "9", "exclude-etn": "17", "exclude-etf": "14",
+    "exclude-etf-etn": "18", "exclude-spac": "15", "exclude-etf-etn-spac": "20",
+}
+
+# ka10023(거래량급증) 전용 — pric_tp(가격구분, 6개 값). market.py의 다른
+# pric_tp/pric_cnd 옵션(ka10019/ka10027/ka10029 등, 미확인 또는 다른 값 집합)
+# 과 절대 합치지 말 것. 1곳: ka10023.
+VOLUME_SURGE_PRICE_TYPE = {
+    "all": "0", "over-50k": "2", "over-10k": "5", "over-5k": "6",
+    "over-1k": "8", "over-100k": "9",
+}

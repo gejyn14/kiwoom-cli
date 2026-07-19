@@ -8,6 +8,8 @@ from ..client import KiwoomClient
 from ..formatters import fail_input, print_api_response
 from ._constants import (
     AMT_QTY_TP_1_2,
+    BALANCE_RATE_STK_CND,
+    BALANCE_RATE_TYPE,
     BROKER_BY_STOCK_SIDE,
     ELW_BROKER_END_SKIP,
     ELW_BROKER_PERIOD,
@@ -16,20 +18,49 @@ from ._constants import (
     EXCHANGE_ALL,
     EXCHANGE_TWO,
     HOT_PERIOD,
+    LIMIT_MOVE_CREDIT_CND,
+    LIMIT_MOVE_DIRECTION,
+    LIMIT_MOVE_PRICE_CND,
+    LIMIT_MOVE_SORT,
+    LIMIT_MOVE_STK_CND,
     MANAGED_STOCK_INCLUDE,
     MARKET_ALL,
     MARKET_KOSPI_KOSDAQ,
     MARKET_TWO,
     MIN_TIC_TP,
+    NEAR_HIGHLOW_CREDIT_CND,
+    NEAR_HIGHLOW_KIND,
+    NEAR_HIGHLOW_STK_CND,
+    NEW_HIGH_LOW_BASIS,
+    NEW_HIGH_LOW_CREDIT_CND,
+    NEW_HIGH_LOW_INCLUDE_LIMIT,
+    NEW_HIGH_LOW_KIND,
+    NEW_HIGH_LOW_STK_CND,
+    ORDERBOOK_SURGE_SIDE,
+    ORDERBOOK_SURGE_SORT,
+    ORDERBOOK_SURGE_STK_CND,
+    ORDERBOOK_TOP_CREDIT_CND,
+    ORDERBOOK_TOP_SORT,
+    ORDERBOOK_TOP_STK_CND,
     PERIOD_DAYS_OFF_BY_ONE,
     PROGRAM_MARKET_BY_EXCHANGE,
     STOCK_CONDITION,
+    SURGE_CREDIT_CND,
+    SURGE_DIRECTION,
+    SURGE_INCLUDE_LIMIT,
+    SURGE_PRICE_CND,
+    SURGE_STK_CND,
+    SURGE_TIME_UNIT,
     VOLUME_RANK_AMOUNT_TYPE,
     VOLUME_RANK_CREDIT_TYPE,
     VOLUME_RANK_PRICE_TYPE,
     VOLUME_RANK_QTY_TYPE,
     VOLUME_RANK_SESSION,
     VOLUME_RANK_SORT,
+    VOLUME_SURGE_PRICE_TYPE,
+    VOLUME_SURGE_SORT,
+    VOLUME_SURGE_STK_CND,
+    VOLUME_SURGE_TIME_UNIT,
     HumanChoice,
 )
 
@@ -61,13 +92,19 @@ def rank():
 
 @rank.command("new-highlow")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--type", "ntl_tp", default="1", help="신고저구분 (1=신고가, 2=신저가)")
-@click.option("--basis", "high_low_close_tp", default="1", help="기준 (1=고저기준, 2=종가기준)")
+@click.option("--type", "ntl_tp", type=HumanChoice(NEW_HIGH_LOW_KIND), default="new-high",
+              help="신고저구분 (new-high=신고가, new-low=신저가)")
+@click.option("--basis", "high_low_close_tp", type=HumanChoice(NEW_HIGH_LOW_BASIS), default="high-low",
+              help="기준 (high-low=고저기준, close=종가기준)")
 @click.option("--period", "dt", default="5", help="기간 (5,10,20,60,250)")
-@click.option("--stk-cnd", default="0", help="종목조건 (0=전체)")
+@click.option("--stk-cnd", type=HumanChoice(NEW_HIGH_LOW_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-preferred,exclude-margin-100,"
+                   "only-margin-100,only-margin-40,only-margin-30)")
 @click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--credit", "crd_cnd", default="0", help="신용조건")
-@click.option("--include-limit", "updown_incls", default="0", help="상하한포함 (0=미포함, 1=포함)")
+@click.option("--credit", "crd_cnd", type=HumanChoice(NEW_HIGH_LOW_CREDIT_CND), default="all",
+              help="신용조건 (all,a,b,c,d,e,all-financing)")
+@click.option("--include-limit", "updown_incls", type=HumanChoice(NEW_HIGH_LOW_INCLUDE_LIMIT), default="no",
+              help="상하한포함 (yes,no)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_new_highlow(mrkt_tp, ntl_tp, high_low_close_tp, dt, stk_cnd, trde_qty_tp, crd_cnd, updown_incls, stex_tp):
     """신고저가 순위. (ka10016)"""
@@ -87,12 +124,19 @@ def rank_new_highlow(mrkt_tp, ntl_tp, high_low_close_tp, dt, stk_cnd, trde_qty_t
 
 @rank.command("limit")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--type", "updown_tp", default="1", help="상하한구분 (1=상한,2=상승,3=보합,4=하한,5=하락,6=전일상한,7=전일하한)")
-@click.option("--sort", "sort_tp", default="2", help="정렬 (1=종목코드순,2=연속횟수순,3=등락률순)")
-@click.option("--stk-cnd", default="0", help="종목조건")
+@click.option("--type", "updown_tp", type=HumanChoice(LIMIT_MOVE_DIRECTION), default="upper",
+              help="상하한구분 (upper,rise,flat,lower,fall,prev-upper,prev-lower)")
+@click.option("--sort", "sort_tp", type=HumanChoice(LIMIT_MOVE_SORT), default="count",
+              help="정렬 (code=종목코드순,count=연속횟수순,change-rate=등락률순)")
+@click.option("--stk-cnd", type=HumanChoice(LIMIT_MOVE_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-preferred,exclude-managed-preferred,"
+                   "exclude-margin-100,only-margin-100,only-margin-40,only-margin-30,"
+                   "only-margin-20,exclude-managed-preferred-alert)")
 @click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--credit", "crd_cnd", default="0", help="신용조건")
-@click.option("--trade-gold", "trde_gold_tp", default="0", help="매매금구분")
+@click.option("--credit", "crd_cnd", type=HumanChoice(LIMIT_MOVE_CREDIT_CND), default="all",
+              help="신용조건 (all,a,b,c,d,e,all-financing)")
+@click.option("--trade-gold", "trde_gold_tp", type=HumanChoice(LIMIT_MOVE_PRICE_CND), default="all",
+              help="매매금구분 (all,under-1k,1k-2k,2k-3k,5k-10k,over-10k,over-1k)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_limit(mrkt_tp, updown_tp, sort_tp, stk_cnd, trde_qty_tp, crd_cnd, trde_gold_tp, stex_tp):
     """상하한가 순위. (ka10017)"""
@@ -110,12 +154,16 @@ def rank_limit(mrkt_tp, updown_tp, sort_tp, stk_cnd, trde_qty_tp, crd_cnd, trde_
 
 
 @rank.command("near-highlow")
-@click.option("--type", "high_low_tp", default="1", help="구분 (1=고가, 2=저가)")
+@click.option("--type", "high_low_tp", type=HumanChoice(NEAR_HIGHLOW_KIND), default="high",
+              help="구분 (high=고가, low=저가)")
 @click.option("--rate", "alacc_rt", default="05", help="근접율 (05,10,15,20,25,30)")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
 @click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--stk-cnd", default="0", help="종목조건")
-@click.option("--credit", "crd_cnd", default="0", help="신용조건")
+@click.option("--stk-cnd", type=HumanChoice(NEAR_HIGHLOW_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-preferred,exclude-margin-100,"
+                   "only-margin-100,only-margin-40,only-margin-30)")
+@click.option("--credit", "crd_cnd", type=HumanChoice(NEAR_HIGHLOW_CREDIT_CND), default="all",
+              help="신용조건 (all,a,b,c,d,e,all-financing)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_near_highlow(high_low_tp, alacc_rt, mrkt_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp):
     """고저가근접 순위. (ka10018)"""
@@ -134,14 +182,21 @@ def rank_near_highlow(high_low_tp, alacc_rt, mrkt_tp, trde_qty_tp, stk_cnd, crd_
 
 @rank.command("surge")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--type", "flu_tp", default="1", help="등락구분 (1=급등, 2=급락)")
-@click.option("--time-type", "tm_tp", default="1", help="시간구분 (1=분전, 2=일전)")
+@click.option("--type", "flu_tp", type=HumanChoice(SURGE_DIRECTION), default="rise",
+              help="등락구분 (rise=급등, fall=급락)")
+@click.option("--time-type", "tm_tp", type=HumanChoice(SURGE_TIME_UNIT), default="minute",
+              help="시간구분 (minute=분전, day=일전)")
 @click.option("--time", "tm", default="5", help="시간")
 @click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--stk-cnd", default="0", help="종목조건")
-@click.option("--credit", "crd_cnd", default="0", help="신용조건")
-@click.option("--price-cnd", "pric_cnd", default="0", help="가격조건")
-@click.option("--include-limit", "updown_incls", default="0", help="상하한포함 (0=미포함, 1=포함)")
+@click.option("--stk-cnd", type=HumanChoice(SURGE_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-preferred,exclude-margin-100,"
+                   "only-margin-100,only-margin-40,only-margin-30)")
+@click.option("--credit", "crd_cnd", type=HumanChoice(SURGE_CREDIT_CND), default="all",
+              help="신용조건 (all,a,b,c,d,e,all-financing)")
+@click.option("--price-cnd", "pric_cnd", type=HumanChoice(SURGE_PRICE_CND), default="all",
+              help="가격조건 (all,under-1k,1k-2k,2k-3k,5k-10k,over-10k,over-1k)")
+@click.option("--include-limit", "updown_incls", type=HumanChoice(SURGE_INCLUDE_LIMIT), default="no",
+              help="상하한포함 (yes,no)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_surge(mrkt_tp, flu_tp, tm_tp, tm, trde_qty_tp, stk_cnd, crd_cnd, pric_cnd, updown_incls, stex_tp):
     """가격급등락 순위. (ka10019)"""
@@ -160,10 +215,14 @@ def rank_surge(mrkt_tp, flu_tp, tm_tp, tm, trde_qty_tp, stk_cnd, crd_cnd, pric_c
 
 @rank.command("orderbook-top")
 @click.option("--market", "mrkt_tp", default="kospi", type=click.Choice(["kospi", "kosdaq"]), help="시장구분")
-@click.option("--sort", "sort_tp", default="1", help="정렬 (1=순매수잔량순,2=순매도잔량순,3=매수비율순,4=매도비율순)")
+@click.option("--sort", "sort_tp", type=HumanChoice(ORDERBOOK_TOP_SORT), default="net-buy-balance",
+              help="정렬 (net-buy-balance,net-sell-balance,buy-ratio,sell-ratio)")
 @click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--stk-cnd", default="0", help="종목조건")
-@click.option("--credit", "crd_cnd", default="0", help="신용조건")
+@click.option("--stk-cnd", type=HumanChoice(ORDERBOOK_TOP_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
+                   "only-margin-40,only-margin-30,only-margin-20)")
+@click.option("--credit", "crd_cnd", type=HumanChoice(ORDERBOOK_TOP_CREDIT_CND), default="all",
+              help="신용조건 (all,a,b,c,d,e,all-financing)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_orderbook_top(mrkt_tp, sort_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp):
     """호가잔량 상위. (ka10020)"""
@@ -182,11 +241,15 @@ def rank_orderbook_top(mrkt_tp, sort_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp)
 
 @rank.command("orderbook-surge")
 @click.option("--market", "mrkt_tp", default="kospi", type=click.Choice(["kospi", "kosdaq"]), help="시장구분")
-@click.option("--type", "trde_tp", default="1", help="매매구분 (1=매수잔량, 2=매도잔량)")
-@click.option("--sort", "sort_tp", default="1", help="정렬 (1=급증량, 2=급증률)")
+@click.option("--type", "trde_tp", type=HumanChoice(ORDERBOOK_SURGE_SIDE), default="buy-balance",
+              help="매매구분 (buy-balance=매수잔량, sell-balance=매도잔량)")
+@click.option("--sort", "sort_tp", type=HumanChoice(ORDERBOOK_SURGE_SORT), default="spike-quantity",
+              help="정렬 (spike-quantity=급증량, spike-rate=급증률)")
 @click.option("--minutes", "tm_tp", default="5", help="분 입력")
 @click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--stk-cnd", default="0", help="종목조건")
+@click.option("--stk-cnd", type=HumanChoice(ORDERBOOK_SURGE_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
+                   "only-margin-40,only-margin-30,only-margin-20)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_orderbook_surge(mrkt_tp, trde_tp, sort_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp):
     """호가잔량 급증. (ka10021)"""
@@ -205,10 +268,13 @@ def rank_orderbook_surge(mrkt_tp, trde_tp, sort_tp, tm_tp, trde_qty_tp, stk_cnd,
 
 @rank.command("balance-rate-surge")
 @click.option("--market", "mrkt_tp", default="kospi", type=click.Choice(["kospi", "kosdaq"]), help="시장구분")
-@click.option("--type", "rt_tp", default="1", help="비율구분 (1=매수/매도비율, 2=매도/매수비율)")
+@click.option("--type", "rt_tp", type=HumanChoice(BALANCE_RATE_TYPE), default="buy-to-sell",
+              help="비율구분 (buy-to-sell=매수/매도비율, sell-to-buy=매도/매수비율)")
 @click.option("--minutes", "tm_tp", default="5", help="분 입력")
 @click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
-@click.option("--stk-cnd", default="0", help="종목조건")
+@click.option("--stk-cnd", type=HumanChoice(BALANCE_RATE_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
+                   "only-margin-40,only-margin-30,only-margin-20)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_balance_rate_surge(mrkt_tp, rt_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp):
     """잔량율 급증. (ka10022)"""
@@ -226,12 +292,20 @@ def rank_balance_rate_surge(mrkt_tp, rt_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp
 
 @rank.command("volume-surge")
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
-@click.option("--sort", "sort_tp", default="1", help="정렬 (1=급증량,2=급증률,3=급감량,4=급감률)")
-@click.option("--time-type", "tm_tp", default="1", help="구분 (1=분, 2=전일)")
+@click.option("--sort", "sort_tp", type=HumanChoice(VOLUME_SURGE_SORT), default="spike-quantity",
+              help="정렬 (spike-quantity,spike-rate,drop-quantity,drop-rate)")
+@click.option("--time-type", "tm_tp", type=HumanChoice(VOLUME_SURGE_TIME_UNIT), default="minute",
+              help="구분 (minute=분, previous-day=전일)")
 @click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분")
 @click.option("--time", "tm", default="", help="시간 (선택)")
-@click.option("--stk-cnd", default="0", help="종목조건")
-@click.option("--price-type", "pric_tp", default="0", help="가격구분")
+@click.option("--stk-cnd", type=HumanChoice(VOLUME_SURGE_STK_CND), default="all",
+              help="종목조건 (all,exclude-managed,exclude-preferred,exclude-liquidation,"
+                   "exclude-managed-preferred,exclude-margin-100,only-margin-100,"
+                   "only-margin-60,only-margin-50,only-margin-40,only-margin-30,"
+                   "only-margin-20,exclude-etn,exclude-etf,exclude-etf-etn,exclude-spac,"
+                   "exclude-etf-etn-spac)")
+@click.option("--price-type", "pric_tp", type=HumanChoice(VOLUME_SURGE_PRICE_TYPE), default="all",
+              help="가격구분 (all,over-50k,over-10k,over-5k,over-1k,over-100k)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def rank_volume_surge(mrkt_tp, sort_tp, tm_tp, trde_qty_tp, tm, stk_cnd, pric_tp, stex_tp):
     """거래량 급증. (ka10023)"""

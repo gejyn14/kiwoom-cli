@@ -103,6 +103,204 @@ def test_rank_orderbook_top_market_two_enum(
 
 
 # ============================================================
+#  Rankings (순위정보) — ka10016~ka10023 HumanChoice 전환 (Task 31a)
+#
+#  각 커맨드마다 "기본 호출이 종전과 같은 body를 보낸다"를 먼저 고정한다.
+#  trde_qty_tp(--vol-type)는 8개 커맨드 모두 이번 태스크에서 미전환
+#  (task-31a-report.md 참고 — 기본값 "0"이 스펙 enum에 없어 HumanChoice로
+#  감싸면 기본 호출 자체가 깨진다).
+# ============================================================
+
+
+def test_rank_new_highlow_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "new-highlow"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10016", {
+        "mrkt_tp": "000", "ntl_tp": "1", "high_low_close_tp": "1",
+        "stk_cnd": "0", "trde_qty_tp": "0", "crd_cnd": "0",
+        "updown_incls": "0", "dt": "5", "stex_tp": "1",
+    })
+
+
+def test_rank_new_highlow_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "new-highlow", "--type", "new-low", "--basis", "close",
+        "--stk-cnd", "exclude-preferred", "--credit", "b", "--include-limit", "yes",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["ntl_tp"] == "2"
+    assert body["high_low_close_tp"] == "2"
+    assert body["stk_cnd"] == "3"
+    assert body["crd_cnd"] == "2"
+    assert body["updown_incls"] == "1"
+
+
+def test_rank_limit_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "limit"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10017", {
+        "mrkt_tp": "000", "updown_tp": "1", "sort_tp": "2",
+        "stk_cnd": "0", "trde_qty_tp": "0", "crd_cnd": "0",
+        "trde_gold_tp": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_limit_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "limit", "--type", "prev-lower", "--sort", "change-rate",
+        "--stk-cnd", "exclude-managed-preferred-alert", "--credit", "e",
+        "--trade-gold", "over-1k",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["updown_tp"] == "7"
+    assert body["sort_tp"] == "3"
+    assert body["stk_cnd"] == "10"
+    assert body["crd_cnd"] == "7"
+    assert body["trde_gold_tp"] == "8"
+
+
+def test_rank_near_highlow_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "near-highlow"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10018", {
+        "high_low_tp": "1", "alacc_rt": "05", "mrkt_tp": "000",
+        "trde_qty_tp": "0", "stk_cnd": "0", "crd_cnd": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_near_highlow_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "near-highlow", "--type", "low",
+        "--stk-cnd", "only-margin-30", "--credit", "d",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["high_low_tp"] == "2"
+    assert body["stk_cnd"] == "8"
+    assert body["crd_cnd"] == "4"
+
+
+def test_rank_surge_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "surge"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10019", {
+        "mrkt_tp": "000", "flu_tp": "1", "tm_tp": "1", "tm": "5",
+        "trde_qty_tp": "0", "stk_cnd": "0", "crd_cnd": "0",
+        "pric_cnd": "0", "updown_incls": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_surge_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "surge", "--type", "fall", "--time-type", "day",
+        "--stk-cnd", "only-margin-100", "--credit", "c",
+        "--price-cnd", "5k-10k", "--include-limit", "yes",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["flu_tp"] == "2"
+    assert body["tm_tp"] == "2"
+    assert body["stk_cnd"] == "6"
+    assert body["crd_cnd"] == "3"
+    assert body["pric_cnd"] == "4"
+    assert body["updown_incls"] == "1"
+
+
+def test_rank_orderbook_top_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "orderbook-top"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10020", {
+        "mrkt_tp": "001", "sort_tp": "1", "trde_qty_tp": "0",
+        "stk_cnd": "0", "crd_cnd": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_orderbook_top_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "orderbook-top", "--sort", "sell-ratio",
+        "--stk-cnd", "only-margin-20", "--credit", "all-financing",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["sort_tp"] == "4"
+    assert body["stk_cnd"] == "9"
+    assert body["crd_cnd"] == "9"
+
+
+def test_rank_orderbook_surge_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "orderbook-surge"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10021", {
+        "mrkt_tp": "001", "trde_tp": "1", "sort_tp": "1", "tm_tp": "5",
+        "trde_qty_tp": "0", "stk_cnd": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_orderbook_surge_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "orderbook-surge", "--type", "sell-balance",
+        "--sort", "spike-rate", "--stk-cnd", "only-margin-40",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["trde_tp"] == "2"
+    assert body["sort_tp"] == "2"
+    assert body["stk_cnd"] == "7"
+
+
+def test_rank_balance_rate_surge_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "balance-rate-surge"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10022", {
+        "mrkt_tp": "001", "rt_tp": "1", "tm_tp": "5",
+        "trde_qty_tp": "0", "stk_cnd": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_balance_rate_surge_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "balance-rate-surge", "--type", "sell-to-buy",
+        "--stk-cnd", "exclude-margin-100",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["rt_tp"] == "2"
+    assert body["stk_cnd"] == "5"
+
+
+def test_rank_volume_surge_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "rank", "volume-surge"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka10023", {
+        "mrkt_tp": "000", "sort_tp": "1", "tm_tp": "1", "trde_qty_tp": "0",
+        "tm": "", "stk_cnd": "0", "pric_tp": "0", "stex_tp": "1",
+    })
+
+
+def test_rank_volume_surge_human_options(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "rank", "volume-surge", "--sort", "drop-rate",
+        "--time-type", "previous-day", "--stk-cnd", "exclude-etf-etn-spac",
+        "--price-type", "over-100k",
+    ])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["sort_tp"] == "4"
+    assert body["tm_tp"] == "2"
+    assert body["stk_cnd"] == "20"
+    assert body["pric_tp"] == "9"
+
+
+def test_rank_new_highlow_legacy_numeric_code_still_accepted(runner, fake_client):
+    """HumanChoice의 하위호환: raw API 코드도 그대로 통과해야 한다."""
+    result = runner.invoke(cli, ["market", "rank", "new-highlow", "--type", "2"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["ntl_tp"] == "2"
+
+
+# ============================================================
 #  Sectors (업종)
 # ============================================================
 
