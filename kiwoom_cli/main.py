@@ -122,9 +122,12 @@ class KiwoomGroup(click.Group):
         except click.ClickException as e:
             # 인자/옵션 오류(UsageError 포함)도 json 모드에서는 envelope로.
             # table 모드는 Click 기본 출력 그대로 (re-raise).
+            # 일부 호출부(예: config.load_config의 TOMLDecodeError 재발생)는
+            # 더 구체적인 코드를 e.code에 실어 보낸다 — 없으면 INVALID_INPUT.
             if self._json_mode(ctx):
                 envelope.emit(error=envelope.error_body(
-                    e.format_message(), code="INVALID_INPUT", retryable=False,
+                    e.format_message(), code=getattr(e, "code", "INVALID_INPUT"),
+                    retryable=False,
                 ))
                 ctx.exit(e.exit_code)
             raise
@@ -511,8 +514,9 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str, confirm: bool):
     api_id 자리에 list를 주면 전체 API 목록(217개 REST)을 출력합니다.
     두 번째 인자는 검색 키워드: kiwoom api list 미체결
     """
+    from .api_spec import API_REGISTRY
+
     if api_id == "list":
-        from .api_spec import API_REGISTRY
         keyword = "" if body == "{}" else body.lower()
         rows = [
             {"api_id": aid, "url_path": url, "description": desc}
@@ -527,6 +531,9 @@ def raw_api(api_id: str, body: str, raw: bool, next_key: str, confirm: bool):
             console.print(f"  {r['api_id']}  [dim]{escape(r['description'])}[/]", highlight=False)
         console.print(f"[dim]{len(rows)}개 API — kiwoom api <id> '<body-json>' 로 호출[/]")
         return
+
+    if api_id not in API_REGISTRY:
+        fail_input(f"알 수 없는 API ID: {api_id}", code="INVALID_API")
 
     try:
         body_dict = json.loads(body)

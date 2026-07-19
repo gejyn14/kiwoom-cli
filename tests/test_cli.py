@@ -205,3 +205,67 @@ def test_unknown_command_exits_1(runner):
 def test_invalid_json_body_exits_1(runner):
     result = runner.invoke(cli, ["api", "ka10001", "not-json"])
     assert result.exit_code == 1
+
+
+# ── Unhandled exceptions → envelope errors (Task 19 / 감사 발견 N9-N11) ──
+# 아래 3건은 수정 전에는 KiwoomGroup.invoke의 핸들러 목록에 없는 예외가
+# escape해 traceback + 빈 stdout + exit 1로 종료됐다 — 에이전트가 "인자 오류"로
+# 오인하게 된다.
+
+
+def test_unknown_api_id_returns_invalid_api_envelope(runner, monkeypatch):
+    """잘못된 api_id는 client.py의 get_url()이 ValueError를 던져 escape했다.
+
+    (토큰이 있어야 KiwoomAuthError보다 먼저 get_url()에 도달한다.)
+    """
+    monkeypatch.setenv("KIWOOM_TOKEN", "test-token")
+
+    result = runner.invoke(cli, ["-f", "json", "api", "bogus999", "{}"])
+
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert result.exit_code == 1
+    doc = json.loads(result.output)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "INVALID_API"
+
+
+def test_corrupted_config_toml_returns_not_configured_envelope(runner, monkeypatch, tmp_path):
+    """손상된 config.toml은 루트 콜백(resolve_profile -> load_config)에서
+    TOMLDecodeError로 죽어 kiwoom config show조차 불가능했다."""
+    from kiwoom_cli import config
+
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("this is not [ valid toml", encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)
+
+    result = runner.invoke(cli, ["-f", "json", "config", "show"])
+
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert result.exit_code == 1
+    doc = json.loads(result.output)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "NOT_CONFIGURED"
+    assert str(cfg_file) in doc["error"]["message"]
+
+
+def test_non_json_response_returns_upstream_error_envelope(runner, monkeypatch, httpx_mock):
+    """HTTP 200 유지보수 페이지처럼 응답 바디가 JSON이 아니면 resp.json()이
+    json.JSONDecodeError를 던져 escape했다."""
+    from kiwoom_cli import client as client_mod
+
+    monkeypatch.setattr(client_mod.config, "get_domain", lambda profile=None: "https://mock.test")
+    monkeypatch.setattr(client_mod.auth, "load_token", lambda profile=None: "test-token")
+    httpx_mock.add_response(
+        url="https://mock.test/api/dostk/stkinfo",
+        text="<html>점검 중입니다</html>",
+        status_code=200,
+    )
+
+    result = runner.invoke(cli, ["-f", "json", "api", "ka10001", "{}"])
+
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert result.exit_code == 2
+    doc = json.loads(result.output)
+    assert doc["ok"] is False
+    assert doc["error"]["code"] == "UPSTREAM_ERROR"

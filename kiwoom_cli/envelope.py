@@ -97,8 +97,16 @@ def classify(upstream_code: int | None = None, http_status: int | None = None) -
 def build_meta() -> dict[str, Any]:
     ctx = click.get_current_context(silent=True)
     obj = ctx.obj if ctx is not None and isinstance(ctx.obj, dict) else {}
-    profile = config.resolve_profile(obj.get("profile"))
-    env = config.get_domain_key(profile)
+    try:
+        profile = config.resolve_profile(obj.get("profile"))
+        env = config.get_domain_key(profile)
+    except click.ClickException:
+        # config.toml이 손상된 경우(config.load_config()가 재발생시키는
+        # NOT_CONFIGURED ClickException) meta 구성이 load_config()를 다시 호출해
+        # 같은 오류를 또 던지면, 그 오류 자체를 알리는 envelope 생성이 깨진다 —
+        # 서브 정보일 뿐이므로 안전한 기본값으로 대체한다.
+        profile = obj.get("profile") or "default"
+        env = "mock"
     return {"profile": profile, "env": env, "cont": obj.get("last_cont") or None}
 
 
