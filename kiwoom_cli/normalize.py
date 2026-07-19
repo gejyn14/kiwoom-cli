@@ -47,6 +47,7 @@ WS_FIELD_NAMES: dict[str, str] = {
     "17": "고가",
     "18": "저가",
     "20": "체결시간",
+    "21": "호가시간",  # 0D(주식호가잔량). "20"(체결시간)과 다른 필드다
     "25": "전일대비기호",
     "27": "매도호가",
     "28": "매수호가",
@@ -86,6 +87,26 @@ WS_FIELD_NAMES: dict[str, str] = {
     "9203": "주문번호",
 }
 
+# 0D(주식호가잔량) 10단계 호가. 스펙(docs/미국 REST API 문서.xlsx 시트
+# '주식호가잔량(0D)' Response)과 kwcli 0.1.1 동봉 kiwoom_api_spec.json의
+# 같은 API 항목이 필드별로 일치함을 대조해 확인했다:
+#   41~50 매도호가1~10      51~60 매수호가1~10
+#   61~70 매도호가수량1~10  71~80 매수호가수량1~10
+# 블록 시작 ID를 헷갈리면 매도/매수가 통째로 뒤바뀌므로 절대 추측하지 말 것.
+# 81~100(직전대비), 121/122/125/126(총잔량), 128/138(순매수·순매도잔량),
+# 6044~6115(KRX/NXT 분리 잔량)은 아직 미등록이다.
+_ASK_BID_BLOCKS = (
+    (41, "매도호가", "ask"),
+    (51, "매수호가", "bid"),
+    (61, "매도호가수량", "ask_qty"),
+    (71, "매수호가수량", "bid_qty"),
+)
+
+for _base, _ko, _en in _ASK_BID_BLOCKS:
+    for _lvl in range(1, 11):
+        WS_FIELD_NAMES[str(_base + _lvl - 1)] = f"{_ko}{_lvl}"
+del _base, _ko, _en, _lvl
+
 # WebSocket 필드 ID -> 정규 영문명 (CANONICAL_NAMES와 같은 축).
 # 미등록 ID는 WS_FIELD_NAMES의 한글 이름으로, 그것도 없으면 ID 그대로 통과.
 WS_CANONICAL: dict[str, str] = {
@@ -105,9 +126,18 @@ WS_CANONICAL: dict[str, str] = {
     "908": "ts",
     "9001": "symbol",
     "9203": "order_no",
+    "21": "ts",  # 0D 호가시간 (HHmmss) — 20/908과 같은 축의 시각 필드
 }
 
-_WS_TIME_IDS = frozenset({"20", "908"})
+# 0D 10단계 호가: ask1~ask10 / bid1~bid10 / ask_qty1~10 / bid_qty1~10
+for _base, _ko, _en in _ASK_BID_BLOCKS:
+    for _lvl in range(1, 11):
+        WS_CANONICAL[str(_base + _lvl - 1)] = f"{_en}{_lvl}"
+del _base, _ko, _en, _lvl
+
+# 시각 필드 ID: 20(체결시간), 908(주문체결시간), 21(호가시간).
+# 여기 빠지면 handle_message가 ts=None을 내고 history가 조용히 버린다.
+_WS_TIME_IDS = frozenset({"20", "21", "908"})
 
 
 def parse_signed(v: Any) -> tuple[int | float | None, str]:

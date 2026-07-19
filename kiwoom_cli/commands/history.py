@@ -122,18 +122,29 @@ def _collect(
     rows: list[dict[str, Any]] = []
     for path in _files_for(code, start, end):
         fdate = _file_date(path)
+        no_ts = 0  # ts를 못 읽어 범위 판정이 불가능했던 이벤트 수
         for ev in _iter_events(path):
             if type_ and ev.get("type") != type_:
                 continue
             if start or end:
                 dt = _event_dt(ev, fdate)
                 if dt is None:
+                    # ts가 없으면 범위 안팎을 판정할 수 없어 버린다. 조용히
+                    # 버리면 정규화 누락(예: 0D의 ts=None)이 "데이터가 원래
+                    # 없다"로 보여 버그를 가린다 — 반드시 알린다.
+                    no_ts += 1
                     continue
                 if start and dt < start:
                     continue
                 if end and dt > end:
                     continue
             rows.append(ev)
+        if no_ts:
+            # stdout(json envelope/NDJSON)을 오염시키지 않도록 stderr로만
+            err_console.print(
+                f"[yellow]경고: ts를 읽을 수 없어 {no_ts}건 건너뜀 "
+                f"({path.name}) — 시간 필터(--from/--to) 적용 중[/]"
+            )
     return rows
 
 

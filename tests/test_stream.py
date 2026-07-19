@@ -89,6 +89,123 @@ class TestNormalizeWsValues:
         assert out["9999"] == "x"
 
 
+# ── 0D 주식호가잔량 ───────────────────────────────────
+
+# docs/미국 REST API 문서.xlsx 시트 '주식호가잔량(0D)'의 Response Example을
+# 그대로 옮긴 것 (kwcli 0.1.1이 동봉한 kiwoom_api_spec.json의 같은 API 항목과
+# 필드별로 대조해 일치를 확인했다). 10단계 전체 + 21(호가시간)만 남기고
+# 직전대비(81~100)·총잔량·LP·KRX/NXT 계열은 이 청크 범위 밖이라 뺐다.
+_SPEC_0D_VALUES = {
+    "21": "165207",
+    "41": "-20800", "61": "82", "51": "-20700", "71": "23847",
+    "42": "+20900", "62": "393", "52": "-20650", "72": "834748",
+    "43": "+21000", "63": "674739", "53": "-20600", "73": "2145799",
+    "44": "+21050", "64": "2055055", "54": "-20550", "74": "2134689",
+    "45": "+21100", "65": "1998461", "55": "-20500", "75": "1982298",
+    "46": "+21150", "66": "1932347", "56": "-20450", "76": "1853788",
+    "47": "+21200", "67": "1723333", "57": "-20400", "77": "1687992",
+    "48": "+21250", "68": "1621835", "58": "-20350", "78": "1467869",
+    "49": "+21300", "69": "1373291", "59": "-20300", "79": "1259995",
+    "50": "+21350", "70": "1242991", "60": "-20250", "80": "1062405",
+    "13": "30379650",
+}
+
+
+def spec_0d_frame(item: str = "005930") -> dict:
+    """스펙 Response Example 그대로의 0D REAL 프레임 (서버가 보내는 모양)."""
+    return {
+        "trnm": "REAL",
+        "data": [{
+            "type": "0D", "name": "주식호가잔량", "item": item,
+            "values": dict(_SPEC_0D_VALUES),
+        }],
+    }
+
+
+class TestQuoteBook0D:
+    """0D는 21(호가시간)/41~80(10단계 호가·수량)이 전부 미등록이라
+    ts=None + 숫자 ID 그대로 + 부호 붙은 가격이 새어나갔다."""
+
+    def test_ts_from_field_21(self):
+        out = normalize_ws_values({"21": "165207"})
+        assert out["ts"] == "16:52:07+09:00"
+
+    def test_ask_and_bid_are_not_swapped(self):
+        """41=매도호가1(ask), 51=매수호가1(bid). 스펙 예시에서 ask는 오름차순
+        (20800→21350), bid는 내림차순(20700→20250)이고 ask1 > bid1이다.
+        방향을 뒤집으면 이 부등식이 깨진다."""
+        out = normalize_ws_values(dict(_SPEC_0D_VALUES))
+        asks = [out[f"ask{i}"] for i in range(1, 11)]
+        bids = [out[f"bid{i}"] for i in range(1, 11)]
+        assert asks == [20800, 20900, 21000, 21050, 21100,
+                        21150, 21200, 21250, 21300, 21350]
+        assert bids == [20700, 20650, 20600, 20550, 20500,
+                        20450, 20400, 20350, 20300, 20250]
+        assert asks[0] > bids[0]
+        assert asks == sorted(asks) and bids == sorted(bids, reverse=True)
+
+    def test_quantities_typed_and_side_correct(self):
+        """61~70=매도호가수량, 71~80=매수호가수량. 값이 서로 다른 1단계로
+        측을 판별한다 (82 vs 23847)."""
+        out = normalize_ws_values(dict(_SPEC_0D_VALUES))
+        assert out["ask_qty1"] == 82
+        assert out["bid_qty1"] == 23847
+        assert out["ask_qty10"] == 1242991
+        assert out["bid_qty10"] == 1062405
+        assert all(isinstance(out[f"ask_qty{i}"], int) for i in range(1, 11))
+        assert all(isinstance(out[f"bid_qty{i}"], int) for i in range(1, 11))
+
+    def test_prices_are_positive_sign_is_direction(self):
+        """41의 '-20800'과 42의 '+20900'은 방향지시자다. 부호를 값으로 믿으면
+        1호가가 -20800원이라는 말이 되고 ask 정렬도 뒤집힌다."""
+        out = normalize_ws_values(dict(_SPEC_0D_VALUES))
+        assert out["ask1"] == 20800, "매도호가1이 음수로 새어나옴"
+        assert out["ask2"] == 20900
+        assert out["ask1_direction"] == "down"
+        assert out["ask2_direction"] == "up"
+        assert all(out[f"ask{i}"] > 0 for i in range(1, 11))
+        assert all(out[f"bid{i}"] > 0 for i in range(1, 11))
+
+    def test_quantities_are_signed_not_abs(self):
+        """수량(61~80)은 _ABS_FIELDS가 아니라 _SIGNED_FIELDS로 분류돼야 한다.
+
+        스펙 값에는 부호가 없어서 두 분류의 동작이 같다 — 그래서 스펙 값만
+        넣는 테스트는 분류를 전혀 고정하지 못한다(실제로 ABS로 옮기는 변조가
+        전체 테스트를 통과했다). 두 분류가 갈라지는 유일한 입력인 '부호 붙은
+        수량'을 일부러 넣어 고정한다. 스펙상 나오지 않는 값이지만, 나왔을 때
+        ABS는 abs()로 정보를 버리고 *_direction을 만들어내는 반면 SIGNED는
+        값을 그대로 보존한다 — 그 차이가 이 분류를 고른 이유 자체다.
+        """
+        out = normalize_ws_values({"61": "-82", "71": "+23847"})
+        assert out["ask_qty1"] == -82, "수량이 abs()로 뭉개짐 (ABS 분류로 넘어감)"
+        assert out["bid_qty1"] == 23847
+        qty_dirs = [k for k in out if k.endswith("_direction")]
+        assert qty_dirs == [], f"수량에 방향 동반 키가 생김: {qty_dirs}"
+
+    def test_prices_stay_abs_even_when_quantities_are_signed(self):
+        """가격(41~60)은 반대로 ABS여야 한다 — 두 분류가 뒤섞이지 않았는지."""
+        out = normalize_ws_values({"41": "-20800", "61": "-82"})
+        assert out["ask1"] == 20800 and out["ask1_direction"] == "down"
+        assert out["ask_qty1"] == -82
+
+    def test_no_bare_numeric_ids_remain(self):
+        out = normalize_ws_values(dict(_SPEC_0D_VALUES))
+        leftover = sorted(k for k in out if k.isdigit())
+        assert leftover == [], f"정규화되지 않은 숫자 ID: {leftover}"
+
+    def test_end_to_end_real_frame(self):
+        """서버 프레임 -> handle_message. 정규화된 dict에서 출발하지 않는다."""
+        events = handle_message(spec_0d_frame(), {})
+        assert len(events) == 1
+        ev = events[0]
+        assert ev["type"] == "0D"
+        assert ev["symbol"] == "005930"
+        assert ev["ts"] == "16:52:07+09:00", "0D 이벤트 ts가 비어 있음"
+        assert ev["ask1"] == 20800 and ev["bid1"] == 20700
+        assert ev["ask_qty1"] == 82 and ev["bid_qty1"] == 23847
+        assert ev["acc_volume"] == 30379650
+
+
 # ── handle_message ────────────────────────────────────
 
 
