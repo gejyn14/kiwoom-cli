@@ -25,12 +25,25 @@ from ._constants import (
     CREDIT_RATIO_INCLUDE_LIMIT,
     CREDIT_RATIO_QTY_TYPE,
     CREDIT_RATIO_STK_CND,
-    ELW_BROKER_END_SKIP,
+    ELW_BALANCE_RANK_SORT,
     ELW_BROKER_PERIOD,
     ELW_BROKER_QTY_TYPE,
     ELW_BROKER_SIDE,
+    ELW_CHANGE_RANK_SORT,
+    ELW_RANK_RIGHT_TYPE_3DIGIT,
+    ELW_RIGHT_TYPE_1DIGIT,
+    ELW_RIGHT_TYPE_3DIGIT,
+    ELW_SEARCH_SORT,
+    ELW_SURGE_DIRECTION,
+    ELW_SURGE_QTY_TYPE,
+    ELW_SURGE_TIME_UNIT,
+    ETF_ALL_NAV,
+    ETF_ALL_TAX_TYPE,
+    ETF_ALL_TAXABLE,
+    ETF_RETURNS_PERIOD,
     EXCHANGE_ALL,
     EXCHANGE_TWO,
+    EXCLUDE_ENDED_ELW,
     EXPECTED_CHANGE_CREDIT_CND,
     EXPECTED_CHANGE_PRICE_CND,
     EXPECTED_CHANGE_QTY_CND,
@@ -42,6 +55,7 @@ from ._constants import (
     FOREIGN_CONSECUTIVE_SIDE,
     FOREIGN_INST_DATE_INCLUDE,
     FOREIGN_PERIOD_SIDE,
+    GOLD_PRICE_TYPE,
     HOT_PERIOD,
     INVESTOR_TOP_ORGN,
     INVESTOR_TOP_SIDE,
@@ -473,7 +487,7 @@ def rank_expected_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, pric_
               help="거래대금구분 (all,10m,30m,50m,100m,300m,500m,1b,3b,5b,10b,30b,50b = 이상)")
 @click.option("--session", "mrkt_open_tp", type=HumanChoice(VOLUME_RANK_SESSION), default="all",
               help="장운영구분 (all=전체,regular=장중,pre-open=장전시간외,after-hours=장후시간외)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_volume(mrkt_tp, sort_tp, mang_stk_incls, crd_tp, trde_qty_tp, pric_tp, trde_prica_tp, mrkt_open_tp, stex_tp):
     """당일 거래량 상위. (ka10030)"""
 
@@ -483,7 +497,7 @@ def rank_volume(mrkt_tp, sort_tp, mang_stk_incls, crd_tp, trde_qty_tp, pric_tp, 
             "mang_stk_incls": mang_stk_incls, "crd_tp": crd_tp,
             "trde_qty_tp": trde_qty_tp, "pric_tp": pric_tp,
             "trde_prica_tp": trde_prica_tp, "mrkt_open_tp": mrkt_open_tp,
-            "stex_tp": EXCHANGE_TWO[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "당일거래량상위")
 
@@ -1136,7 +1150,8 @@ def etf():
 @etf.command("returns")
 @click.argument("code")
 @click.option("--index", "etfobjt_idex_cd", default="", help="ETF대상지수코드")
-@click.option("--period", "dt", default="0", help="기간 (0=1주,1=1달,2=6개월,3=1년)")
+@click.option("--period", "dt", type=HumanChoice(ETF_RETURNS_PERIOD), default="week",
+              help="기간 (week=1주,month=1달,six-months=6개월,year=1년)")
 def etf_returns(code, etfobjt_idex_cd, dt):
     """ETF 수익율 조회. (ka40001)"""
     with KiwoomClient() as c:
@@ -1174,10 +1189,13 @@ def etf_daily(code):
 
 
 @etf.command("all")
-@click.option("--tax-type", "txon_type", default="0", help="과세유형 (0=전체)")
-@click.option("--nav", "navpre", default="0", help="NAV대비 (0=전체)")
+@click.option("--tax-type", "txon_type", type=HumanChoice(ETF_ALL_TAX_TYPE), default="all",
+              help="과세유형 (all,tax-free,holding-tax,company,foreign,foreign-tax-free)")
+@click.option("--nav", "navpre", type=HumanChoice(ETF_ALL_NAV), default="all",
+              help="NAV대비 (all,nav-gt-close=NAV>전일종가,nav-lt-close=NAV<전일종가)")
 @click.option("--company", "mngmcomp", default="0000", help="운용사 (0000=전체)")
-@click.option("--taxable", "txon_yn", default="0", help="과세여부 (0=전체)")
+@click.option("--taxable", "txon_yn", type=HumanChoice(ETF_ALL_TAXABLE), default="all",
+              help="과세여부 (all,taxable,tax-free)")
 @click.option("--index", "trace_idex", default="0", help="추적지수 (0=전체)")
 @click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
 def etf_all(txon_type, navpre, mngmcomp, txon_yn, trace_idex, stex_tp):
@@ -1291,15 +1309,20 @@ def elw_sensitivity(code):
 
 
 @elw.command("surge")
-@click.option("--type", "flu_tp", default="1", help="등락구분 (1=급등, 2=급락)")
-@click.option("--time-type", "tm_tp", default="1", help="시간구분 (1=분전, 2=일전)")
+@click.option("--type", "flu_tp", type=HumanChoice(ELW_SURGE_DIRECTION), default="rise",
+              help="등락구분 (rise=급등, fall=급락)")
+@click.option("--time-type", "tm_tp", type=HumanChoice(ELW_SURGE_TIME_UNIT), default="minute",
+              help="시간구분 (minute=분전, day=일전)")
 @click.option("--time", "tm", default="5", help="시간")
-@click.option("--vol-type", "trde_qty_tp", default="0", help="거래량구분 (0=전체)")
+@click.option("--vol-type", "trde_qty_tp", type=HumanChoice(ELW_SURGE_QTY_TYPE), default="all",
+              help="거래량구분 (all,10k,50k,100k,300k,500k,1000k = 이상)")
 @click.option("--issuer", "isscomp_cd", default="000000000000", help="발행사코드 (000000000000=전체)")
 @click.option("--underlying", "bsis_aset_cd", default="000000000000", help="기초자산코드 (000000000000=전체)")
-@click.option("--right-type", "rght_tp", default="000", help="권리구분 (000=전체)")
+@click.option("--right-type", "rght_tp", type=HumanChoice(ELW_RIGHT_TYPE_3DIGIT), default="all",
+              help="권리구분 (all,call,put,dc,dp,ex,early-call,early-put)")
 @click.option("--lp", "lpcd", default="000000000000", help="LP코드 (000000000000=전체)")
-@click.option("--exclude-expired", "trde_end_elwskip", default="1", help="거래종료ELW제외 (0=포함, 1=제외)")
+@click.option("--exclude-expired", "trde_end_elwskip", type=HumanChoice(EXCLUDE_ENDED_ELW), default="exclude",
+              help="거래종료ELW제외 (include=포함, exclude=제외)")
 def elw_surge(flu_tp, tm_tp, tm, trde_qty_tp, isscomp_cd, bsis_aset_cd, rght_tp, lpcd, trde_end_elwskip):
     """ELW 가격 급등락. (ka30001)"""
     with KiwoomClient() as c:
@@ -1324,7 +1347,7 @@ def elw_surge(flu_tp, tm_tp, tm, trde_qty_tp, isscomp_cd, bsis_aset_cd, rght_tp,
               help="매매구분 (net-buy=순매수, net-sell=순매도)")
 @click.option("--period", "dt", type=HumanChoice(ELW_BROKER_PERIOD), default="previous",
               help="기간 (previous=전일,5d,10d,40d,60d)")
-@click.option("--exclude-expired", "trde_end_elwskip", type=HumanChoice(ELW_BROKER_END_SKIP), default="exclude",
+@click.option("--exclude-expired", "trde_end_elwskip", type=HumanChoice(EXCLUDE_ENDED_ELW), default="exclude",
               help="거래종료ELW제외 (include=포함, exclude=제외)")
 def elw_broker_top(isscomp_cd, trde_qty_tp, trde_tp, dt, trde_end_elwskip):
     """거래원별 ELW 순매매 상위. (ka30002)"""
@@ -1358,9 +1381,11 @@ def elw_lp_daily(underlying_code, base_dt):
 @elw.command("disparity")
 @click.option("--issuer", "isscomp_cd", default="000000000000", help="발행사코드")
 @click.option("--underlying", "bsis_aset_cd", default="000000000000", help="기초자산코드")
-@click.option("--right-type", "rght_tp", default="000", help="권리구분")
+@click.option("--right-type", "rght_tp", type=HumanChoice(ELW_RIGHT_TYPE_3DIGIT), default="all",
+              help="권리구분 (all,call,put,dc,dp,ex,early-call,early-put)")
 @click.option("--lp", "lpcd", default="000000000000", help="LP코드")
-@click.option("--exclude-expired", "trde_end_elwskip", default="1", help="거래종료ELW제외 (0=포함, 1=제외)")
+@click.option("--exclude-expired", "trde_end_elwskip", type=HumanChoice(EXCLUDE_ENDED_ELW), default="exclude",
+              help="거래종료ELW제외 (include=포함, exclude=제외)")
 def elw_disparity(isscomp_cd, bsis_aset_cd, rght_tp, lpcd, trde_end_elwskip):
     """ELW 괴리율. (ka30004)"""
     with KiwoomClient() as c:
@@ -1378,9 +1403,11 @@ def elw_disparity(isscomp_cd, bsis_aset_cd, rght_tp, lpcd, trde_end_elwskip):
 @elw.command("search")
 @click.option("--issuer", "isscomp_cd", default="000000000000", help="발행사코드")
 @click.option("--underlying", "bsis_aset_cd", default="000000000000", help="기초자산코드")
-@click.option("--right-type", "rght_tp", default="0", help="권리구분 (0~7)")
+@click.option("--right-type", "rght_tp", type=HumanChoice(ELW_RIGHT_TYPE_1DIGIT), default="all",
+              help="권리구분 (all,call,put,dc,dp,ex,early-call,early-put)")
 @click.option("--lp", "lpcd", default="000000000000", help="LP코드")
-@click.option("--sort", "sort_tp", default="0", help="정렬 (0~7)")
+@click.option("--sort", "sort_tp", type=HumanChoice(ELW_SEARCH_SORT), default="none",
+              help="정렬 (none,rise-rate,rise-price,fall-rate,fall-price,volume,amount,days-left)")
 def elw_search(isscomp_cd, bsis_aset_cd, rght_tp, lpcd, sort_tp):
     """ELW 조건 검색. (ka30005)"""
     with KiwoomClient() as c:
@@ -1395,9 +1422,12 @@ def elw_search(isscomp_cd, bsis_aset_cd, rght_tp, lpcd, sort_tp):
 
 
 @elw.command("change-rank")
-@click.option("--sort", "sort_tp", default="1", help="정렬 (1=상승률,2=상승폭,3=하락률,4=하락폭)")
-@click.option("--right-type", "rght_tp", default="000", help="권리구분 (000=전체)")
-@click.option("--exclude-expired", "trde_end_skip", default="1", help="거래종료제외 (0=포함, 1=제외)")
+@click.option("--sort", "sort_tp", type=HumanChoice(ELW_CHANGE_RANK_SORT), default="rise-rate",
+              help="정렬 (rise-rate=상승률,rise-price=상승폭,fall-rate=하락률,fall-price=하락폭)")
+@click.option("--right-type", "rght_tp", type=HumanChoice(ELW_RANK_RIGHT_TYPE_3DIGIT), default="all",
+              help="권리구분 (all,call,put,dc,dp,early-call,early-put)")
+@click.option("--exclude-expired", "trde_end_skip", type=HumanChoice(EXCLUDE_ENDED_ELW), default="exclude",
+              help="거래종료제외 (include=포함, exclude=제외)")
 def elw_change_rank(sort_tp, rght_tp, trde_end_skip):
     """ELW 등락율 순위. (ka30009)"""
     with KiwoomClient() as c:
@@ -1412,9 +1442,12 @@ def elw_change_rank(sort_tp, rght_tp, trde_end_skip):
 
 
 @elw.command("balance-rank")
-@click.option("--sort", "sort_tp", default="1", help="정렬 (1=순매수잔량상위, 2=순매도잔량상위)")
-@click.option("--right-type", "rght_tp", default="000", help="권리구분 (000=전체)")
-@click.option("--exclude-expired", "trde_end_skip", default="1", help="거래종료제외 (0=포함, 1=제외)")
+@click.option("--sort", "sort_tp", type=HumanChoice(ELW_BALANCE_RANK_SORT), default="buy-balance",
+              help="정렬 (buy-balance=순매수잔량상위, sell-balance=순매도잔량상위)")
+@click.option("--right-type", "rght_tp", type=HumanChoice(ELW_RANK_RIGHT_TYPE_3DIGIT), default="all",
+              help="권리구분 (all,call,put,dc,dp,early-call,early-put)")
+@click.option("--exclude-expired", "trde_end_skip", type=HumanChoice(EXCLUDE_ENDED_ELW), default="exclude",
+              help="거래종료제외 (include=포함, exclude=제외)")
 def elw_balance_rank(sort_tp, rght_tp, trde_end_skip):
     """ELW 잔량 순위. (ka30010)"""
     with KiwoomClient() as c:
@@ -1493,7 +1526,8 @@ def gold_daily(stk_cd, base_dt):
 @gold.command("chart-tick")
 @click.option("--code", "stk_cd", default="M04020000", help="종목코드")
 @click.option("--scope", "tic_scope", default="1", help="틱범위 (1,3,5,10,30)")
-@click.option("--price-type", "upd_stkpc_tp", default="0", help="수정주가구분")
+@click.option("--price-type", "upd_stkpc_tp", type=HumanChoice(GOLD_PRICE_TYPE), default="raw",
+              help="수정주가구분 (raw=원본, adjusted=수정주가)")
 def gold_chart_tick(stk_cd, tic_scope, upd_stkpc_tp):
     """금현물 틱차트. (ka50079)"""
     with KiwoomClient() as c:
@@ -1527,7 +1561,8 @@ def gold_chart_minute(stk_cd, tic_scope, upd_stkpc_tp):
 @gold.command("chart-day")
 @click.option("--code", "stk_cd", default="M04020000", help="종목코드")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
-@click.option("--price-type", "upd_stkpc_tp", default="0", help="수정주가구분")
+@click.option("--price-type", "upd_stkpc_tp", type=HumanChoice(GOLD_PRICE_TYPE), default="raw",
+              help="수정주가구분 (raw=원본, adjusted=수정주가)")
 def gold_chart_day(stk_cd, base_dt, upd_stkpc_tp):
     """금현물 일봉 차트. (ka50081)"""
     with KiwoomClient() as c:
@@ -1544,7 +1579,8 @@ def gold_chart_day(stk_cd, base_dt, upd_stkpc_tp):
 @gold.command("chart-week")
 @click.option("--code", "stk_cd", default="M04020000", help="종목코드")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
-@click.option("--price-type", "upd_stkpc_tp", default="0", help="수정주가구분")
+@click.option("--price-type", "upd_stkpc_tp", type=HumanChoice(GOLD_PRICE_TYPE), default="raw",
+              help="수정주가구분 (raw=원본, adjusted=수정주가)")
 def gold_chart_week(stk_cd, base_dt, upd_stkpc_tp):
     """금현물 주봉 차트. (ka50082)"""
     with KiwoomClient() as c:
@@ -1561,7 +1597,8 @@ def gold_chart_week(stk_cd, base_dt, upd_stkpc_tp):
 @gold.command("chart-month")
 @click.option("--code", "stk_cd", default="M04020000", help="종목코드")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
-@click.option("--price-type", "upd_stkpc_tp", default="0", help="수정주가구분")
+@click.option("--price-type", "upd_stkpc_tp", type=HumanChoice(GOLD_PRICE_TYPE), default="raw",
+              help="수정주가구분 (raw=원본, adjusted=수정주가)")
 def gold_chart_month(stk_cd, base_dt, upd_stkpc_tp):
     """금현물 월봉 차트. (ka50083)"""
     with KiwoomClient() as c:
@@ -1691,13 +1728,13 @@ def program_time_trend(date, amt_qty_tp, market, min_tic_tp, stex_tp):
 
 @program.command("arbitrage-balance")
 @click.option("--date", required=True, help="날짜 (YYYYMMDD)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def program_arbitrage_balance(date, stex_tp):
     """프로그램매매 차익잔고 추이. (ka90006)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka90006", {
-            "date": date, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "date": date, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "프로그램매매차익잔고추이")
 
@@ -1707,16 +1744,16 @@ def program_arbitrage_balance(date, stex_tp):
 
 @program.command("cumulative")
 @click.option("--date", required=True, help="날짜 (YYYYMMDD)")
-@click.option("--unit", "amt_qty_tp", default="1", help="금액/수량")
+@click.option("--unit", "amt_qty_tp", type=HumanChoice(AMT_QTY_TP_1_2), default="amount", help="금액/수량")
 @click.option("--market", "mrkt_tp", default="kospi", type=click.Choice(["kospi", "kosdaq"]), help="시장구분")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def program_cumulative(date, amt_qty_tp, mrkt_tp, stex_tp):
     """프로그램매매 누적 추이. (ka90007)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka90007", {
             "date": date, "amt_qty_tp": amt_qty_tp,
-            "mrkt_tp": MARKET_KOSPI_KOSDAQ[mrkt_tp], "stex_tp": EXCHANGE_TWO[stex_tp],
+            "mrkt_tp": MARKET_KOSPI_KOSDAQ[mrkt_tp], "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "프로그램매매누적추이")
 
@@ -1726,7 +1763,7 @@ def program_cumulative(date, amt_qty_tp, mrkt_tp, stex_tp):
 
 @program.command("stock-time")
 @click.argument("code")
-@click.option("--unit", "amt_qty_tp", default="1", help="금액/수량")
+@click.option("--unit", "amt_qty_tp", type=HumanChoice(AMT_QTY_TP_1_2), default="amount", help="금액/수량")
 @click.option("--date", default="", help="날짜 (YYYYMMDD)")
 def program_stock_time(code, amt_qty_tp, date):
     """종목 시간별 프로그램매매 추이. (ka90008)"""

@@ -72,18 +72,27 @@ TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 # 전용이며, 0:금액,1:수량 짝은 별도로 `AMT_QTY_TP_0_1`이라는 이름을 예약해
 # 둔다(ka10051 이관 시 이 이름으로 추가할 것 — 절대 이 상수를 재사용하지 말 것).
 #
-# *** 이 상수는 api_id 5개가 공유한다. 고치기 전에 5곳 전부를 확인할 것. ***
+# *** 이 상수는 api_id 7개가 공유한다. 고치기 전에 7곳 전부를 확인할 것. ***
 #   market.py:776   ka10065  amt_qty_tp   (Task 31c에서 추가)
 #   market.py:822   ka90009  amt_qty_tp   (Task 31c에서 추가)
 #   market.py:1666  ka90005  amt_qty_tp
+#   market.py:1713  ka90007  amt_qty_tp   (Task 33에서 추가)
+#   market.py:1731  ka90008  amt_qty_tp   (Task 33에서 추가)
 #   market.py:1740  ka90010  amt_qty_tp
 #   stock.py:1221   ka10066  amt_qty_tp
-# 다섯 시트 모두 요청 코드북은 1:금액, 2:수량으로 동일하다. 다만 표기까지 같지는
+# 일곱 시트 모두 요청 코드북은 1:금액, 2:수량으로 동일하다. 다만 표기까지 같지는
 # 않다 — ka90009 시트는 "1:금액(천만), 2:수량(천)"으로 적혀 있는데, 괄호 안은
 # 응답 단위 주석이지 요청 코드가 아니다. required 여부도 갈린다(ka10065는
-# Required=N, ka90009는 Required=Y). 값이 같으니 공유는 정당하지만, 나중에 한
-# api_id의 스펙만 바뀌면 이 상수를 제자리에서 고치지 말고 분리할 것 —
-# 제자리 수정은 나머지 넷을 조용히 함께 오염시킨다.
+# Required=N, ka90009/ka90007/ka90008은 Required=Y). 값이 같으니 공유는
+# 정당하지만, 나중에 한 api_id의 스펙만 바뀌면 이 상수를 제자리에서 고치지
+# 말고 분리할 것 — 제자리 수정은 나머지 여섯을 조용히 함께 오염시킨다.
+#
+# ka90013(종목일별프로그램매매추이)도 같은 필드·값을 쓰지만 스펙상
+# Required=N이고 기존 기본값이 빈 문자열 ""이다(Required=Y인 위 7곳은 전부
+# 기본값이 "1") — 빈 문자열은 이 2-값 매핑에 없어 그대로 감싸면 기본 호출이
+# BadParameter로 깨진다. 억지로 기본값을 "1"/"2"로 바꾸면 전송 바이트가
+# 바뀌므로(빈 문자열은 스펙상 합법적인 "생략" 값), ka90013의 --unit은 이번
+# 태스크에서 raw 텍스트로 남긴다(market.py:1770 참고).
 AMT_QTY_TP_1_2 = {"amount": "1", "quantity": "2"}
 
 # AMT_QTY_TP_1_2와 키 집합(amount/quantity)은 같지만 극성이 다른 짝(0:금액,
@@ -327,13 +336,20 @@ TRADER_ANALYSIS_PERIOD_5_120 = {
     "5d": "5", "10d": "10", "20d": "20", "40d": "40", "60d": "60", "120d": "120",
 }
 
-# ka30002(elw broker-top) 전용 — trde_end_elwskip(거래종료ELW제외).
-# 0=포함,1=제외. elw_surge(ka30001)/elw_disparity(ka30004)/elw_change_rank
-# (ka30009)/elw_balance_rank(ka30010)도 동일한 trde_end_elwskip/trde_end_skip
-# 필드를 같은 값(0=포함,1=제외)으로 쓰지만 이번 태스크 범위 밖이라 그대로
-# 원시 텍스트로 남아 있다 — 이 상수를 그쪽에 재사용해도 값은 맞겠으나 아직
-# 검증/적용하지 않았으니 별도 작업으로 남긴다. 1곳: ka30002.
-ELW_BROKER_END_SKIP = {"include": "0", "exclude": "1"}
+# 거래종료ELW제외/거래종료제외 — 0:포함,1:제외. elw_surge(ka30001, 필드
+# trde_end_elwskip)/elw_broker_top(ka30002, trde_end_elwskip)/elw_disparity
+# (ka30004, trde_end_elwskip)/elw_change_rank(ka30009, trde_end_skip)/
+# elw_balance_rank(ka30010, trde_end_skip) 5개 api_id가 공유한다 — 필드명은
+# trde_end_elwskip/trde_end_skip 두 가지지만 5개 시트 전부 값이
+# character-for-character 동일함(0=포함,1=제외)을 워크북으로 확인했다.
+# 이전 판(ELW_BROKER_END_SKIP)은 "1곳: ka30002, 나머지 4곳은 검증/적용 안
+# 됨"이라고 예약해 뒀는데 이번 태스크(Task 33)가 그 별도 작업이라 5곳
+# 전부로 넓혔다.
+#
+# *** 이 상수는 api_id 5개가 공유한다. 한쪽 스펙만 바뀌면 이 상수를 제자리
+# 에서 고치지 말고 분리할 것 — 제자리 수정은 나머지 넷을 조용히 함께
+# 오염시킨다. ***
+EXCLUDE_ENDED_ELW = {"include": "0", "exclude": "1"}
 
 # ── ka10016~ka10023(market rank 신고저가~거래량급증) HumanChoice 전환
 # (Task 31a) ──────────────────────────────────────────────────────────
@@ -1025,3 +1041,133 @@ THEME_LOOKUP_KIND = {"all": "0", "theme": "1", "stock": "2"}
 THEME_LOOKUP_SORT = {
     "profit-top": "1", "profit-bottom": "2", "change-top": "3", "change-bottom": "4",
 }
+
+# ── ka40001/ka40004(market etf 수익율·전체시세) HumanChoice 전환
+# (Task 33) ─────────────────────────────────────────────────────────
+
+# ka40001(ETF수익율) 전용 — dt(기간, 0:1주,1:1달,2:6개월,3:1년). 1곳: ka40001.
+ETF_RETURNS_PERIOD = {"week": "0", "month": "1", "six-months": "2", "year": "3"}
+
+# ka40004(ETF전체시세) 전용 — txon_type(과세유형, 6개 값). 1곳: ka40004.
+ETF_ALL_TAX_TYPE = {
+    "all": "0", "tax-free": "1", "holding-tax": "2", "company": "3",
+    "foreign": "4", "foreign-tax-free": "5",
+}
+
+# ka40004(ETF전체시세) 전용 — navpre(NAV대비, 0:전체,1:NAV>전일종가,
+# 2:NAV<전일종가). 1곳: ka40004.
+ETF_ALL_NAV = {"all": "0", "nav-gt-close": "1", "nav-lt-close": "2"}
+
+# ka40004(ETF전체시세) 전용 — txon_yn(과세여부, 0:전체,1:과세,2:비과세).
+# 1곳: ka40004.
+ETF_ALL_TAXABLE = {"all": "0", "taxable": "1", "tax-free": "2"}
+
+# ka40004(ETF전체시세)의 mngmcomp(운용사)/trace_idex(추적지수코드)는 스펙에
+# 예시 몇 개("0000:전체" 등)+"기타운용사" 카테고리만 있고 전체 코드표가 없는
+# 개방형 목록이다 — kwcli도 값 매핑 없이 자유 코드로 둔다. 미확인이라 이번
+# 태스크에서 전환하지 않고 raw 텍스트로 남긴다(market.py의 --company/--index).
+
+# ── ka30001/ka30004/ka30005/ka30009/ka30010(market elw 가격급등락·괴리율·
+# 조건검색·등락율순위·잔량순위) HumanChoice 전환 (Task 33) ──────────────
+# ka30002(elw broker-top)는 Tranche B에서 이미 전부 HumanChoice였다 —
+# --exclude-expired만 위 EXCLUDE_ENDED_ELW 공유 상수로 갈아탔다(신규 상수
+# 추가 아님, 위 섹션 참고).
+
+# ka30001(ELW가격급등락) 전용 — flu_tp(등락구분, 1:급등,2:급락). 값은
+# SURGE_DIRECTION(ka10019, flu_tp)과 완전히 동일하다(구분 불가 쌍,
+# superset-closure 스크립트로 확인) — api_id가 달라 이름은 분리 유지.
+# 1곳: ka30001.
+ELW_SURGE_DIRECTION = {"rise": "1", "fall": "2"}
+
+# ka30001(ELW가격급등락) 전용 — tm_tp(시간구분, 1:분전,2:일전). 값은
+# SURGE_TIME_UNIT(ka10019, tm_tp)과 완전히 동일하다(구분 불가 쌍) — api_id가
+# 달라 이름은 분리 유지. 1곳: ka30001.
+ELW_SURGE_TIME_UNIT = {"minute": "1", "day": "2"}
+
+# ka30001(ELW가격급등락) 전용 — trde_qty_tp(거래량구분, 7개 값, 무패딩).
+# VOLUME_RANK_QTY_TYPE(ka10030)의 진짜 부분집합이다(5k/200k가 빠짐,
+# superset-closure 스크립트로 확인) — 절대 그쪽을 여기 재사용하지 말 것
+# ("5k"/"200k" 이름은 ka30001에서 거부돼야 한다). 1곳: ka30001.
+ELW_SURGE_QTY_TYPE = {
+    "all": "0", "10k": "10", "50k": "50", "100k": "100",
+    "300k": "300", "500k": "500", "1000k": "1000",
+}
+
+# ka30001/ka30004(ELW가격급등락/ELW괴리율) 공용 — rght_tp(권리구분, 3자리
+# zero-pad, EX 포함 8개 값). 워크북에서 두 시트가 character-for-character
+# 동일함을 확인했다. ka30009/ka30010의 ELW_RANK_RIGHT_TYPE_3DIGIT(EX가
+# 없는 7개 값)의 진짜 상위집합이므로 절대 그쪽과 합치지 말 것 — "ex" 이름은
+# ka30009/ka30010에서 거부돼야 한다. ka30005의 ELW_RIGHT_TYPE_1DIGIT(무패딩)
+# 와도 자릿수가 달라 절대 합치지 말 것.
+#
+# *** 이 상수는 api_id 2개가 공유한다. 한쪽 스펙만 바뀌면 이 상수를 제자리
+# 에서 고치지 말고 분리할 것. ***
+ELW_RIGHT_TYPE_3DIGIT = {
+    "all": "000", "call": "001", "put": "002", "dc": "003", "dp": "004",
+    "ex": "005", "early-call": "006", "early-put": "007",
+}
+
+# ka30005(ELW조건검색) 전용 — rght_tp(권리구분, 무패딩 단일 숫자, EX 포함
+# 8개 값). ELW_RIGHT_TYPE_3DIGIT과 라벨·값 대응은 같으나 자릿수(3자리
+# zero-pad vs 무패딩)가 달라 절대 합치지 말 것. 1곳: ka30005.
+ELW_RIGHT_TYPE_1DIGIT = {
+    "all": "0", "call": "1", "put": "2", "dc": "3", "dp": "4",
+    "ex": "5", "early-call": "6", "early-put": "7",
+}
+
+# ka30005(ELW조건검색) 전용 — sort_tp(정렬구분, 0:정렬없음,1:상승율순,
+# 2:상승폭순,3:하락율순,4:하락폭순,5:거래량순,6:거래대금순,7:잔존일순).
+# 1곳: ka30005.
+ELW_SEARCH_SORT = {
+    "none": "0", "rise-rate": "1", "rise-price": "2", "fall-rate": "3",
+    "fall-price": "4", "volume": "5", "amount": "6", "days-left": "7",
+}
+
+# ka30009(ELW등락율순위) 전용 — sort_tp(정렬구분, 1:상승률,2:상승폭,
+# 3:하락률,4:하락폭). RANK_CHANGE_SORT(ka10027)/AFTERHOURS_CHANGE_SORT
+# (ka10098)의 진짜 부분집합이다(둘 다 flat:5가 더 있음, superset-closure
+# 스크립트로 확인) — 절대 그쪽 상수를 여기 재사용하지 말 것("flat" 이름은
+# ka30009에서 거부돼야 한다). 1곳: ka30009.
+ELW_CHANGE_RANK_SORT = {
+    "rise-rate": "1", "rise-price": "2", "fall-rate": "3", "fall-price": "4",
+}
+
+# ka30009/ka30010(ELW등락율순위/ELW잔량순위) 공용 — rght_tp(권리구분,
+# 3자리 zero-pad, EX가 빠진 7개 값). ELW_RIGHT_TYPE_3DIGIT 참고(짝 — 그쪽의
+# 진짜 부분집합, 절대 합치지 말 것).
+#
+# *** 이 상수는 api_id 2개가 공유한다. 한쪽 스펙만 바뀌면 이 상수를 제자리
+# 에서 고치지 말고 분리할 것. ***
+ELW_RANK_RIGHT_TYPE_3DIGIT = {
+    "all": "000", "call": "001", "put": "002", "dc": "003", "dp": "004",
+    "early-call": "006", "early-put": "007",
+}
+
+# ka30010(ELW잔량순위) 전용 — sort_tp(정렬구분, 1:순매수잔량상위,
+# 2:순매도잔량상위). 값은 ORDERBOOK_SURGE_SIDE(ka10021, trde_tp)와 완전히
+# 동일하다(구분 불가 쌍) — 필드명·api_id가 달라 이름은 분리 유지.
+# 1곳: ka30010.
+ELW_BALANCE_RANK_SORT = {"buy-balance": "1", "sell-balance": "2"}
+
+# ka30001/ka30002/ka30004/ka30005의 isscomp_cd(발행사코드)/bsis_aset_cd
+# (기초자산코드)/lpcd(LP코드)는 스펙에 예시 5~6개 발행사/지수만 있고 전체
+# 코드표가 없는 개방형 목록이다(사실상 종목/지수 코드 조회 필드) — kwcli도
+# 값 매핑 없이 자유 코드로 둔다. 미확인이라 이번 태스크에서 전환하지 않는다.
+
+# ── ka50079/ka50081/ka50082/ka50083(market gold 틱·일·주·월봉차트)
+# HumanChoice 전환 (Task 33) ─────────────────────────────────────────
+#
+# upd_stkpc_tp(수정주가구분, 0 or 1) — 4개 API가 공유한다. ka50080(분봉
+# 차트)도 같은 필드·값이지만 스펙상 Required=N이고 기존 기본값이 빈 문자열
+# ""이다(Required=Y인 나머지 4개는 기본값이 "0") — HumanChoice 매핑에 ""이
+# 없어 그대로 감싸면 기본 호출이 BadParameter로 깨지고, 억지로 기본값을
+# "0"/"1"로 바꾸면 전송 바이트가 바뀐다(빈 문자열은 스펙상 합법적인 "생략"
+# 값이라 다른 태스크에서 나온 zero-pad 결함과 달리 교정 대상이 아니다).
+# 그래서 ka50080의 --price-type만 이번 태스크에서 raw 텍스트로 남긴다
+# (market.py:1513 참고). ka50091/ka50092/ka50101의 tic_scope는 값과 라벨이
+# 동일한 자기서술적 수량 프리셋이라 애초에 전환 대상이 아니다(브리프 판정
+# "수량").
+#
+# *** 이 상수는 api_id 4개가 공유한다(ka50079/81/82/83). ka50080은 위 이유로
+# 제외. 한쪽 스펙만 바뀌면 이 상수를 제자리에서 고치지 말고 분리할 것. ***
+GOLD_PRICE_TYPE = {"raw": "0", "adjusted": "1"}

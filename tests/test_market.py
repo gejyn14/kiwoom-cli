@@ -14,7 +14,23 @@ from click.testing import CliRunner
 
 from kiwoom_cli.commands._constants import (
     AMT_QTY_TP_0_1,
+    AMT_QTY_TP_1_2,
+    ELW_BALANCE_RANK_SORT,
+    ELW_CHANGE_RANK_SORT,
+    ELW_RANK_RIGHT_TYPE_3DIGIT,
+    ELW_RIGHT_TYPE_1DIGIT,
+    ELW_RIGHT_TYPE_3DIGIT,
+    ELW_SEARCH_SORT,
+    ELW_SURGE_DIRECTION,
+    ELW_SURGE_QTY_TYPE,
+    ELW_SURGE_TIME_UNIT,
+    ETF_ALL_NAV,
+    ETF_ALL_TAX_TYPE,
+    ETF_ALL_TAXABLE,
+    ETF_RETURNS_PERIOD,
     EXCHANGE_TWO,
+    EXCLUDE_ENDED_ELW,
+    GOLD_PRICE_TYPE,
     MARKET_ALL,
     MARKET_KOSPI_KOSDAQ,
     MARKET_TWO,
@@ -1483,5 +1499,495 @@ def test_sector_price_family_rejects_name_absent_from_sector_price_market(
     )
     assert result.exit_code != 0
     assert fake_client.calls == []
+
+
+# ============================================================
+#  Task 33: market etf / elw / gold / program HumanChoice 전환
+#  + --exchange 3자리(ka10030/ka90006/ka90007) EXCHANGE_ALL 확대
+# ============================================================
+
+
+# ── --exchange 3자리 정리 (v2.11.0에서 미룬 항목, ka10030/ka90006/ka90007) ──
+
+
+def test_rank_volume_exchange_widened_to_all(runner, fake_client):
+    """rank volume --exchange all은 순수 확대(widening) — ka10032(rank amount)와
+    같은 모양(EXCHANGE_ALL, stex_tp=3)으로 맞춘다."""
+    result = runner.invoke(cli, ["market", "rank", "volume", "--exchange", "all"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stex_tp"] == "3"
+
+
+def test_rank_volume_exchange_default_still_krx(runner, fake_client):
+    """widening 후에도 기본값은 그대로 KRX(1)를 보내야 한다."""
+    result = runner.invoke(cli, ["market", "rank", "volume"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stex_tp"] == "1"
+
+
+def test_program_arbitrage_balance_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "program", "arbitrage-balance", "--date", "20241125"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka90006", {"date": "20241125", "stex_tp": "1"})
+
+
+def test_program_arbitrage_balance_exchange_widened_to_all(runner, fake_client):
+    result = runner.invoke(
+        cli, ["market", "program", "arbitrage-balance", "--date", "20241125", "--exchange", "all"]
+    )
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stex_tp"] == "3"
+
+
+def test_program_cumulative_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "program", "cumulative", "--date", "20241125"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka90007", {
+        "date": "20241125", "amt_qty_tp": "1", "mrkt_tp": "0", "stex_tp": "1",
+    })
+
+
+def test_program_cumulative_exchange_widened_to_all(runner, fake_client):
+    result = runner.invoke(
+        cli, ["market", "program", "cumulative", "--date", "20241125", "--exchange", "all"]
+    )
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stex_tp"] == "3"
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(AMT_QTY_TP_1_2.items()))
+def test_program_cumulative_unit_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(
+        cli, ["market", "program", "cumulative", "--date", "20241125", "--unit", cli_value]
+    )
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
+def test_program_stock_time_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "program", "stock-time", "005930"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka90008", {
+        "amt_qty_tp": "1", "stk_cd": "005930", "date": "",
+    })
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(AMT_QTY_TP_1_2.items()))
+def test_program_stock_time_unit_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(
+        cli, ["market", "program", "stock-time", "005930", "--unit", cli_value]
+    )
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
+def test_program_stock_daily_unit_still_raw_text(runner, fake_client):
+    """ka90013(stock-daily)의 --unit은 Required=N + 기존 기본값이 빈 문자열이라
+    이번 태스크에서 HumanChoice로 전환하지 않았다 — raw 텍스트 그대로 통과해야 한다."""
+    result = runner.invoke(cli, ["market", "program", "stock-daily", "005930", "--unit", "1"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka90013", {
+        "amt_qty_tp": "1", "stk_cd": "005930", "date": "",
+    })
+
+
+# ── ka40001 ETF수익율 / ka40004 ETF전체시세 ──────────────────────────
+
+
+def test_etf_returns_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "etf", "returns", "069500"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka40001", {
+        "stk_cd": "069500", "etfobjt_idex_cd": "", "dt": "0",
+    })
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ETF_RETURNS_PERIOD.items()))
+def test_etf_returns_period_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(
+        cli, ["market", "etf", "returns", "069500", "--period", cli_value]
+    )
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == api_value
+
+
+def test_etf_all_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "etf", "all"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka40004", {
+        "txon_type": "0", "navpre": "0", "mngmcomp": "0000",
+        "txon_yn": "0", "trace_idex": "0", "stex_tp": "1",
+    })
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ETF_ALL_TAX_TYPE.items()))
+def test_etf_all_tax_type_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "etf", "all", "--tax-type", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["txon_type"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ETF_ALL_NAV.items()))
+def test_etf_all_nav_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "etf", "all", "--nav", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["navpre"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ETF_ALL_TAXABLE.items()))
+def test_etf_all_taxable_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "etf", "all", "--taxable", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["txon_yn"] == api_value
+
+
+def test_etf_all_company_and_index_still_raw_text(runner, fake_client):
+    """mngmcomp(운용사)/trace_idex(추적지수)는 개방형 코드북(미확인)이라
+    이번 태스크에서 전환하지 않았다 — raw 코드가 그대로 통과해야 한다."""
+    result = runner.invoke(
+        cli, ["market", "etf", "all", "--company", "3020", "--index", "207"]
+    )
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mngmcomp"] == "3020"
+    assert fake_client.calls[0][1]["trace_idex"] == "207"
+
+
+# ── ka30001 ELW가격급등락 ────────────────────────────────────────────
+
+
+def test_elw_surge_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "elw", "surge"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka30001", {
+        "flu_tp": "1", "tm_tp": "1", "tm": "5", "trde_qty_tp": "0",
+        "isscomp_cd": "000000000000", "bsis_aset_cd": "000000000000",
+        "rght_tp": "000", "lpcd": "000000000000", "trde_end_elwskip": "1",
+    })
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_SURGE_DIRECTION.items()))
+def test_elw_surge_direction_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "surge", "--type", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["flu_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_SURGE_TIME_UNIT.items()))
+def test_elw_surge_time_unit_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "surge", "--time-type", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["tm_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_SURGE_QTY_TYPE.items()))
+def test_elw_surge_vol_type_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "surge", "--vol-type", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_qty_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_RIGHT_TYPE_3DIGIT.items()))
+def test_elw_surge_right_type_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "surge", "--right-type", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["rght_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(EXCLUDE_ENDED_ELW.items()))
+def test_elw_surge_exclude_expired_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "surge", "--exclude-expired", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_end_elwskip"] == api_value
+
+
+# ── ka30002 거래원별ELW순매매상위 (Tranche B에서 이미 전환 — 이름만 갱신) ──
+
+
+def test_elw_broker_top_default_values_still_unchanged_after_rename(runner, fake_client):
+    """ELW_BROKER_END_SKIP → EXCLUDE_ENDED_ELW로 상수 이름만 바뀌었을 뿐
+    전송값은 그대로여야 한다."""
+    result = runner.invoke(cli, ["market", "elw", "broker-top", "--issuer", "003"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_end_elwskip"] == "1"
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(EXCLUDE_ENDED_ELW.items()))
+def test_elw_broker_top_exclude_expired_still_works_after_rename(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(
+        cli, ["market", "elw", "broker-top", "--issuer", "003", "--exclude-expired", cli_value]
+    )
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_end_elwskip"] == api_value
+
+
+# ── ka30004 ELW괴리율 ────────────────────────────────────────────────
+
+
+def test_elw_disparity_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "elw", "disparity"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka30004", {
+        "isscomp_cd": "000000000000", "bsis_aset_cd": "000000000000",
+        "rght_tp": "000", "lpcd": "000000000000", "trde_end_elwskip": "1",
+    })
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_RIGHT_TYPE_3DIGIT.items()))
+def test_elw_disparity_right_type_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "disparity", "--right-type", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["rght_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(EXCLUDE_ENDED_ELW.items()))
+def test_elw_disparity_exclude_expired_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "disparity", "--exclude-expired", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_end_elwskip"] == api_value
+
+
+# ── ka30005 ELW조건검색 ──────────────────────────────────────────────
+
+
+def test_elw_search_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "elw", "search"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka30005", {
+        "isscomp_cd": "000000000000", "bsis_aset_cd": "000000000000",
+        "rght_tp": "0", "lpcd": "000000000000", "sort_tp": "0",
+    })
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_RIGHT_TYPE_1DIGIT.items()))
+def test_elw_search_right_type_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "search", "--right-type", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["rght_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_SEARCH_SORT.items()))
+def test_elw_search_sort_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "search", "--sort", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["sort_tp"] == api_value
+
+
+# ── ka30009 ELW등락율순위 ────────────────────────────────────────────
+
+
+def test_elw_change_rank_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "elw", "change-rank"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka30009", {
+        "sort_tp": "1", "rght_tp": "000", "trde_end_skip": "1",
+    })
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_CHANGE_RANK_SORT.items()))
+def test_elw_change_rank_sort_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "change-rank", "--sort", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["sort_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_RANK_RIGHT_TYPE_3DIGIT.items()))
+def test_elw_change_rank_right_type_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "change-rank", "--right-type", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["rght_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(EXCLUDE_ENDED_ELW.items()))
+def test_elw_change_rank_exclude_expired_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "change-rank", "--exclude-expired", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_end_skip"] == api_value
+
+
+# ── ka30010 ELW잔량순위 ──────────────────────────────────────────────
+
+
+def test_elw_balance_rank_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "elw", "balance-rank"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka30010", {
+        "sort_tp": "1", "rght_tp": "000", "trde_end_skip": "1",
+    })
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_BALANCE_RANK_SORT.items()))
+def test_elw_balance_rank_sort_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "balance-rank", "--sort", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["sort_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(ELW_RANK_RIGHT_TYPE_3DIGIT.items()))
+def test_elw_balance_rank_right_type_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "balance-rank", "--right-type", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["rght_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", list(EXCLUDE_ENDED_ELW.items()))
+def test_elw_balance_rank_exclude_expired_human_options(runner, fake_client, cli_value, api_value):
+    result = runner.invoke(cli, ["market", "elw", "balance-rank", "--exclude-expired", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_end_skip"] == api_value
+
+
+# ── ka50079/81/82/83 금현물 틱·일·주·월봉차트 ────────────────────────
+
+
+def test_gold_chart_tick_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "gold", "chart-tick"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka50079", {
+        "stk_cd": "M04020000", "tic_scope": "1", "upd_stkpc_tp": "0",
+    })
+
+
+@pytest.mark.parametrize(
+    "subcommand,api_id,extra_args",
+    [
+        ("chart-tick", "ka50079", []),
+        ("chart-day", "ka50081", ["--date", "20250826"]),
+        ("chart-week", "ka50082", ["--date", "20250826"]),
+        ("chart-month", "ka50083", ["--date", "20250826"]),
+    ],
+)
+@pytest.mark.parametrize("cli_value,api_value", list(GOLD_PRICE_TYPE.items()))
+def test_gold_chart_price_type_human_options(
+    runner, fake_client, subcommand, api_id, extra_args, cli_value, api_value
+):
+    result = runner.invoke(
+        cli, ["market", "gold", subcommand, *extra_args, "--price-type", cli_value]
+    )
+    assert result.exit_code == 0
+    assert fake_client.calls[0][0] == api_id
+    assert fake_client.calls[0][1]["upd_stkpc_tp"] == api_value
+
+
+def test_gold_chart_day_default_body_unchanged(runner, fake_client):
+    result = runner.invoke(cli, ["market", "gold", "chart-day", "--date", "20250826"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0] == ("ka50081", {
+        "stk_cd": "M04020000", "base_dt": "20250826", "upd_stkpc_tp": "0",
+    })
+
+
+def test_gold_chart_minute_price_type_still_raw_text(runner, fake_client):
+    """ka50080(chart-minute)의 --price-type은 Required=N + 기존 기본값이 빈
+    문자열이라 이번 태스크에서 전환하지 않았다 — raw 코드가 그대로 통과하고,
+    기본 호출은 빈 문자열을 그대로 보내야 한다."""
+    result = runner.invoke(cli, ["market", "gold", "chart-minute"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["upd_stkpc_tp"] == ""
+
+    result2 = runner.invoke(cli, ["market", "gold", "chart-minute", "--price-type", "1"])
+    assert result2.exit_code == 0
+    assert fake_client.calls[-1][1]["upd_stkpc_tp"] == "1"
+
+
+# ── Task 33: 형제 상수 이름 거부(상위집합 오염 방지) ─────────────────
+#
+#  superset-closure 스크립트(양쪽 predicate)로 찾은 진짜 부분집합 관계만
+#  거부 테스트로 고정한다. 값이 완전히 동일한 쌍(ELW_SURGE_DIRECTION==
+#  SURGE_DIRECTION, ELW_SURGE_TIME_UNIT==SURGE_TIME_UNIT, ELW_BALANCE_RANK_SORT
+#  ==ORDERBOOK_SURGE_SIDE)은 어떤 테스트로도 구분할 수 없어 이름 규약과
+#  _constants.py 주석만으로 방어한다(task-33-report.md 참고).
+
+
+@pytest.mark.parametrize("absent", ["5k", "200k"])
+def test_elw_surge_vol_type_rejects_name_absent_from_ka30001(runner, fake_client, absent):
+    """5k/200k는 VOLUME_RANK_QTY_TYPE(ka10030)/CREDIT_RATIO_QTY_TYPE(ka10033)엔
+    있지만 ELW_SURGE_QTY_TYPE(ka30001)엔 없다(superset-closure: 진짜 부분집합)."""
+    result = runner.invoke(cli, ["market", "elw", "surge", "--vol-type", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("subcommand", ["change-rank", "balance-rank"])
+def test_elw_rank_right_type_rejects_ex_absent_from_ka30009_ka30010(runner, fake_client, subcommand):
+    """ex(005)는 ELW_RIGHT_TYPE_3DIGIT(ka30001/ka30004)엔 있지만
+    ELW_RANK_RIGHT_TYPE_3DIGIT(ka30009/ka30010)엔 없다(superset-closure:
+    진짜 부분집합 — 두 API 스펙 모두 005 코드 자체가 없다)."""
+    result = runner.invoke(cli, ["market", "elw", subcommand, "--right-type", "ex"])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("absent", ["flat", "volume"])
+def test_elw_change_rank_sort_rejects_name_absent_from_ka30009(runner, fake_client, absent):
+    """flat은 RANK_CHANGE_SORT(ka10027)/AFTERHOURS_CHANGE_SORT(ka10098)엔,
+    volume은 ELW_SEARCH_SORT(ka30005)엔 있지만 ELW_CHANGE_RANK_SORT(ka30009)엔
+    없다(superset-closure: 둘 다 진짜 상위집합)."""
+    result = runner.invoke(cli, ["market", "elw", "change-rank", "--sort", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+# ── Task 33: polarity 해저드 — 기본값이 아닌 이름까지 wire 값을 고정
+#  (predicate 2: keys ⊆ but values differ) ───────────────────────────
+
+
+def test_elw_surge_direction_fall_pinned_against_limit_move_direction():
+    """ELW_SURGE_DIRECTION의 키 집합은 LIMIT_MOVE_DIRECTION(ka10017)의 부분집합
+    이지만 값이 다르다(fall: ELW_SURGE_DIRECTION=2, LIMIT_MOVE_DIRECTION=5).
+    fall은 elw_surge의 기본값이 아니므로 기본 body 테스트로는 안 잡힌다."""
+    assert ELW_SURGE_DIRECTION["fall"] == "2"
+
+
+def test_elw_surge_qty_type_300k_unpadded_against_5digit_siblings():
+    """ELW_SURGE_QTY_TYPE(무패딩)의 키 집합은 여러 5자리 zero-pad 상수
+    (LIMIT_MOVE_QTY_TYPE_5DIGIT 등)의 부분집합이지만 값이 다르다
+    (300k: ELW_SURGE_QTY_TYPE="300" vs 5자리류="00300"). 300k는 elw_surge의
+    기본값이 아니므로 기본 body 테스트로는 안 잡힌다."""
+    assert ELW_SURGE_QTY_TYPE["300k"] == "300"
+
+
+@pytest.mark.parametrize(
+    "subcommand,api_id,expected_code",
+    [
+        # 하드코딩된 리터럴 — mapping[...]을 참조하면 ELW_RIGHT_TYPE_3DIGIT을
+        # 바꿔치기했을 때 parametrize 값도 같이 바뀌어 자기참조가 되므로
+        # (실측: dict(ELW_RIGHT_TYPE_1DIGIT)로 치환해도 이 형태면 통과해
+        # 버림) 반드시 고정된 문자열로 적는다.
+        ("surge", "ka30001", "005"),
+        ("search", "ka30005", "5"),
+    ],
+)
+def test_elw_right_type_ex_padding_pinned(
+    runner, fake_client, subcommand, api_id, expected_code
+):
+    """ELW_RIGHT_TYPE_3DIGIT(zero-pad)과 ELW_RIGHT_TYPE_1DIGIT(무패딩)은 키
+    집합이 완전히 같지만 값이 다르다("ex": 3자리는 "005", 1자리는 "5").
+    자릿수가 바뀌면 같은 human 이름이 다른 API에 잘못된 폭의 코드를 보내게
+    되므로 각 API에서 정확한 폭으로 전송되는지 못 박는다."""
+    result = runner.invoke(
+        cli, ["market", "elw", subcommand, "--right-type", "ex"]
+    )
+    assert result.exit_code == 0
+    assert fake_client.calls[0][0] == api_id
+    assert fake_client.calls[0][1]["rght_tp"] == expected_code
+
+
+def test_elw_change_rank_sort_fall_rate_pinned_against_expected_change_sort(runner, fake_client):
+    """ELW_CHANGE_RANK_SORT의 키 집합은 EXPECTED_CHANGE_SORT(ka10029)의
+    부분집합처럼 보이지만 값이 다르다(fall-rate: ELW_CHANGE_RANK_SORT="3",
+    EXPECTED_CHANGE_SORT="4"). fall-rate는 ka30009 change-rank의 기본값이
+    아니므로(기본은 rise-rate) 기본 body 테스트로는 안 잡힌다."""
+    result = runner.invoke(cli, ["market", "elw", "change-rank", "--sort", "fall-rate"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["sort_tp"] == "3"
+
+
+def test_elw_rank_right_type_call_padding_pinned_against_1digit_sibling():
+    """ELW_RANK_RIGHT_TYPE_3DIGIT(zero-pad)의 키 집합은 ELW_RIGHT_TYPE_1DIGIT
+    (무패딩)의 부분집합이지만 값이 다르다(call: 3자리는 "001", 1자리는 "1").
+    call은 ka30009/ka30010의 기본값이 아니므로(기본은 all) 기본 body
+    테스트로는 안 잡힌다."""
+    assert ELW_RANK_RIGHT_TYPE_3DIGIT["call"] == "001"
+    assert ELW_RIGHT_TYPE_1DIGIT["call"] == "1"
 
 

@@ -269,7 +269,7 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "VOLUME_RANK_CREDIT_TYPE", "VOLUME_RANK_QTY_TYPE", "VOLUME_RANK_PRICE_TYPE",
     "VOLUME_RANK_AMOUNT_TYPE", "VOLUME_RANK_SESSION", "BROKER_BY_STOCK_SIDE",
     "PERIOD_DAYS_OFF_BY_ONE", "ELW_BROKER_QTY_TYPE", "ELW_BROKER_SIDE",
-    "ELW_BROKER_PERIOD", "ELW_BROKER_END_SKIP",
+    "ELW_BROKER_PERIOD",
     "TRADER_ANALYSIS_DATE_MODE", "TRADER_ANALYSIS_POSITION",
     "TRADER_ANALYSIS_SORT", "TRADER_ANALYSIS_PERIOD_5_120",
     # 아래 13개는 HumanChoice 데코레이터에 실제로 물려 있는데도 이 목록에
@@ -326,6 +326,17 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     # 있음(ka10131과 공유, ka10051이 이번에 이관돼도 새로 추가하지 않음).
     "SECTOR_PRICE_MARKET", "SECTOR_CODES_MARKET",
     "THEME_LOOKUP_KIND", "THEME_LOOKUP_SORT",
+    # Task 33 — market etf·elw·gold·program (ka40001/ka40004/ka30001/
+    # ka30004/ka30005/ka30009/ka30010/ka50079/ka50081/ka50082/ka50083/
+    # ka90007/ka90008) HumanChoice 전환. AMT_QTY_TP_1_2는 위 목록에 이미
+    # 있음(ka90007/ka90008이 이번에 이관돼도 새로 추가하지 않음).
+    # ELW_BROKER_END_SKIP은 EXCLUDE_ENDED_ELW로 이름이 바뀌어 5개 api_id
+    # (ka30001/ka30002/ka30004/ka30009/ka30010) 공유 상수가 됐다.
+    "ETF_RETURNS_PERIOD", "ETF_ALL_TAX_TYPE", "ETF_ALL_NAV", "ETF_ALL_TAXABLE",
+    "ELW_SURGE_DIRECTION", "ELW_SURGE_TIME_UNIT", "ELW_SURGE_QTY_TYPE",
+    "ELW_RIGHT_TYPE_3DIGIT", "ELW_RIGHT_TYPE_1DIGIT", "ELW_SEARCH_SORT",
+    "ELW_CHANGE_RANK_SORT", "ELW_RANK_RIGHT_TYPE_3DIGIT", "ELW_BALANCE_RANK_SORT",
+    "EXCLUDE_ENDED_ELW", "GOLD_PRICE_TYPE",
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -360,6 +371,20 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
         for path, p in _iter_options(root_cli)
         if isinstance(p.type, _constants.HumanChoice)
     ]
+    # 170 = 145(Task 32까지의 누적치, 아래 옛 주석 참고) + Task 33(market
+    # etf·elw·gold·program)의 25 = etf returns 1[dt] + etf all 3[txon_type/
+    # navpre/txon_yn] + elw surge 5[flu_tp/tm_tp/trde_qty_tp/rght_tp/
+    # trde_end_elwskip] + elw disparity 2[rght_tp/trde_end_elwskip] +
+    # elw search 2[rght_tp/sort_tp] + elw change-rank 3[sort_tp/rght_tp/
+    # trde_end_skip] + elw balance-rank 3[sort_tp/rght_tp/trde_end_skip] +
+    # gold chart-tick/day/week/month 4[upd_stkpc_tp 각 1개] + program
+    # cumulative 1[amt_qty_tp] + program stock-time 1[amt_qty_tp].
+    # (elw broker-top의 --exclude-expired는 ELW_BROKER_END_SKIP →
+    # EXCLUDE_ENDED_ELW 이름만 바뀌었을 뿐 기존에 이미 HumanChoice였던
+    # 데코레이터라 이 델타에 포함되지 않는다. --exchange 3자리
+    # 정리(ka10030/ka90006/ka90007)는 HumanChoice가 아니라 순수
+    # click.Choice(list(EXCHANGE_ALL))라 이 카운트에 잡히지 않는다.)
+    #
     # 145 = 138(Task 31c까지의 누적치, 아래 옛 주석 참고) + Task 32(market
     # sector·theme ka10051/ka20001/ka20002/ka20009/ka10101/ka90001)의 7 =
     # sector investor 1[amt_qty_tp] + sector current/stocks/daily 3[mrkt_tp
@@ -382,7 +407,7 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # 28 = ka10027 7 + ka10029 5 + ka10031 1 + ka10033 4 + ka10034 2 +
     # ka10035 2 + ka10036 1 + ka10037 3 + ka10039 3.
     # 이 수는 트리 순회로 재도출한 값이지 델타 추정이 아니다.
-    assert len(converted) == 145
+    assert len(converted) == 170
     # 금현물 주문 두 건은 이름으로도 못 박아 둔다. 개수만 맞추면 다른 곳이
     # 늘고 여기가 빠져도 통과하기 때문이다.
     assert ("cli order gold buy", "order_type") in converted
@@ -408,6 +433,21 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     assert ("cli market rank investor-top", "orgn_tp") in converted
     assert ("cli market rank afterhours-change", "trde_prica") in converted
     assert ("cli market rank foreign-inst", "qry_dt_tp") in converted
+    # Task 33: elw broker-top의 --exclude-expired는 이름만 EXCLUDE_ENDED_ELW로
+    # 바뀌었을 뿐 여전히 HumanChoice여야 한다(개수만 맞추면 라운드트립 중
+    # raw 텍스트로 되돌아가도 통과하기 때문에 이름으로 못 박는다).
+    assert ("cli market elw broker-top", "trde_end_elwskip") in converted
+    # ka90005/ka90010(program time-trend/daily-trend)의 --unit/--tick-type은
+    # Tranche B가 이미 HumanChoice로 전환해 뒀다 — Task 33은 손대지 않았다는
+    # 것을 이름으로 못 박는다(개수만 맞추면 이 두 자리가 빠져도 통과한다).
+    assert ("cli market program time-trend", "amt_qty_tp") in converted
+    assert ("cli market program daily-trend", "amt_qty_tp") in converted
+    # ka90013(program stock-daily)의 --unit은 Required=N + 기존 기본값이
+    # 빈 문자열이라 이번 태스크에서 의도적으로 전환하지 않았다 — 이름으로
+    # 못 박아 실수로 전환되어도(또는 실수로 빠져도) 눈에 띄게 한다.
+    assert ("cli market program stock-daily", "amt_qty_tp") not in converted
+    # ka50080(gold chart-minute)의 --price-type도 같은 이유로 raw 유지.
+    assert ("cli market gold chart-minute", "upd_stkpc_tp") not in converted
 
 
 # ── Task 8: both-fail envelope (fail_api) ────────────────
