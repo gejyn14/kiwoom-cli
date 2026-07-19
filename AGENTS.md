@@ -351,7 +351,7 @@ required, choices, is_flag)를 반환합니다. 도움말 파싱 대신 이걸 �
 각 단계는 이전 단계의 stdout JSON만으로 구동됩니다 (전부 `-f json`):
 
 ```bash
-# 1. 시세 — 타입 있는 필드 (파싱 불필요)
+# 1. 시세: 타입 있는 필드 (파싱 불필요)
 $ kiwoom -f json --fields symbol,price,change_direction stock info 005930
 {"ok": true, "data": {"symbol": "005930", "price": 70000, "change_direction": "up"}, ...}
 
@@ -361,16 +361,16 @@ $ kiwoom -f json order validate buy 005930 10 --price 70000
  "sufficient_balance": true, "price_ok": true, "price_known": true}, "est_cost": 700000,
  "heuristic": true}, ...}
 
-# 3. dry-run — 전송될 body 확인 (미전송)
+# 3. dry-run: 전송될 body 확인 (미전송)
 $ kiwoom -f json order buy 005930 10 --price 70000 --type limit --dry-run
 {"ok": true, "data": {"would_send": true, "api_id": "kt10000", "est_cost": 700000,
  "currency": "KRW", "env": "mock", "body": {"stk_cd": "005930", "ord_qty": "10", ...}}, ...}
 
-# 4. 실제 주문 — 멱등키와 함께
+# 4. 실제 주문: 멱등키와 함께
 $ kiwoom -f json order buy 005930 10 --price 70000 --type limit --confirm --client-order-id run-42
 {"ok": true, "data": {"order_no": "0000777", "raw": {...}}, ...}
 
-# 4b. 재시도해도 안전 — 같은 키는 재전송하지 않음
+# 4b. 재시도해도 안전: 같은 키는 재전송하지 않음
 $ kiwoom -f json order buy 005930 10 --price 70000 --type limit --confirm --client-order-id run-42
 {"ok": true, "data": {"order_no": "0000777", "idempotent_replay": true, ...}, ...}
 
