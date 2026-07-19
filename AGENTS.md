@@ -69,6 +69,19 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 `data`(및 내부 모든 리스트의 각 요소)를 지정한 키로만 투영하고 `data.raw`를
 제거합니다. 대량 조회 시 응답 토큰을 크게 줄입니다.
 
+**값이 dict나 list인 키도 이름으로 통째로 선택할 수 있습니다.** 요청한 키가
+컨테이너면 내부를 다시 투영하지 않고 그대로 반환합니다(최상위 `raw` 키만
+제거). dry-run의 `body`와 `order validate`의 `checks`가 대표적인 경우입니다.
+
+```bash
+kiwoom -f json --fields body  order buy 005930 --qty 1 --price 70000 --dry-run
+kiwoom -f json --fields checks order validate buy 005930 --qty 1 --price 70000
+```
+
+요청하지 않은 리스트 키는 **요청한 필드를 담은 원소가 하나라도 있을 때만**
+남습니다. dict가 들어 있지 않은 리스트(숫자·문자열 배열)는 이름으로 직접
+요청하지 않는 한 항상 제거됩니다 — 값이 `0`인지 여부는 판단에 쓰이지 않습니다.
+
 요청한 키 중 하나라도 매칭되지 않으면(부분 매칭 포함, 오타 등) 조용히 넘어가지 않고
 `meta.fields_unmatched`에 매칭 실패한 키 목록을 담아 반환합니다. (`--fields`는
 `-f json` 전용입니다 — csv는 아래에서 설명하는 자체 컬럼 규칙을 따릅니다.)
