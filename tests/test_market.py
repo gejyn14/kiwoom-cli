@@ -14,7 +14,6 @@ from click.testing import CliRunner
 
 from kiwoom_cli.commands._constants import (
     AMT_QTY_TP_0_1,
-    AMT_QTY_TP_1_2,
     ELW_BALANCE_RANK_SORT,
     ELW_CHANGE_RANK_SORT,
     ELW_RANK_RIGHT_TYPE_3DIGIT,
@@ -1555,8 +1554,16 @@ def test_program_cumulative_exchange_widened_to_all(runner, fake_client):
     assert fake_client.calls[0][1]["stex_tp"] == "3"
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(AMT_QTY_TP_1_2.items()))
+@pytest.mark.parametrize("cli_value,api_value", [("amount", "1"), ("quantity", "2")])
 def test_program_cumulative_unit_human_options(runner, fake_client, cli_value, api_value):
+    """기대값을 AMT_QTY_TP_1_2 참조가 아니라 리터럴로 못 박는다.
+
+    ka90007은 Task 33에서 AMT_QTY_TP_1_2 공유 사이트로 새로 편입됐는데, 이
+    상수는 AMT_QTY_TP_0_1(amount=0,quantity=1)·SAME_NET_TRADE_SORT
+    (quantity=1,amount=2)와 키가 같고 값만 다른 극성 해저드를 갖는다.
+    parametrize가 상수를 참조하면 상수를 형제로 바꿔치기해도 수집 시점에
+    바뀐 값을 그대로 가져와 자기참조로 통과한다.
+    """
     result = runner.invoke(
         cli, ["market", "program", "cumulative", "--date", "20241125", "--unit", cli_value]
     )
@@ -1572,8 +1579,9 @@ def test_program_stock_time_default_body_unchanged(runner, fake_client):
     })
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(AMT_QTY_TP_1_2.items()))
+@pytest.mark.parametrize("cli_value,api_value", [("amount", "1"), ("quantity", "2")])
 def test_program_stock_time_unit_human_options(runner, fake_client, cli_value, api_value):
+    """ka90008도 ka90007과 같은 이유로 리터럴 고정 — 위 테스트 주석 참고."""
     result = runner.invoke(
         cli, ["market", "program", "stock-time", "005930", "--unit", cli_value]
     )
@@ -1618,6 +1626,24 @@ def test_etf_all_default_body_unchanged(runner, fake_client):
         "txon_type": "0", "navpre": "0", "mngmcomp": "0000",
         "txon_yn": "0", "trace_idex": "0", "stex_tp": "1",
     })
+
+
+def test_etf_all_exchange_widened_to_all(runner, fake_client):
+    """ka40004의 stex_tp도 스펙이 1:KRX,2:NXT,3:통합이라 ka10030/ka90006/ka90007과
+    같이 all을 받도록 넓혔다. 기존 KRX/NXT와 기본값은 그대로 동작해야 한다."""
+    result = runner.invoke(cli, ["market", "etf", "all", "--exchange", "all"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stex_tp"] == "3"
+
+
+@pytest.mark.parametrize("cli_value,exchange_code", [("KRX", "1"), ("NXT", "2")])
+def test_etf_all_exchange_existing_values_unchanged(
+    runner, fake_client, cli_value, exchange_code
+):
+    """확대(widening)이므로 종전 두 값의 전송 바이트는 변하지 않아야 한다."""
+    result = runner.invoke(cli, ["market", "etf", "all", "--exchange", cli_value])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stex_tp"] == exchange_code
 
 
 @pytest.mark.parametrize("cli_value,api_value", list(ETF_ALL_TAX_TYPE.items()))
