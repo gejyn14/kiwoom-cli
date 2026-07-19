@@ -9,6 +9,7 @@ from kiwoom_cli.formatters import (
     _CLASSIFIED_FIELDS,
     _CODE_FIELDS,
     _fmt_number,
+    _flat_dict,
     _sign_color,
     print_generic_table,
     print_stock_info,
@@ -427,3 +428,82 @@ def test_code_fields_and_classified_fields_are_disjoint():
     _CODE_FIELDS 등록이 조용히 무효화된다. _CODE_FIELDS가 17->55개로 늘어난
     지금, 이 불변식을 명시적으로 지켜야 한다."""
     assert (_CODE_FIELDS & _CLASSIFIED_FIELDS) == frozenset()
+
+
+# ── Task 21: csv 모드에서 스칼라 요약 블록 소실 (감사 확인 #17/#18/N33) ──
+
+
+class TestFlatDict:
+    """`_flat_dict`은 CSV 출력을 위해 dict 하나를 한 줄짜리 row로 평탄화한다."""
+
+    def test_scalar_only(self):
+        assert _flat_dict({"a": "1", "b": "2"}) == [{"a": "1", "b": "2"}]
+
+    def test_drops_return_code_and_msg(self):
+        assert _flat_dict({"a": "1", "return_code": 0, "return_msg": "OK"}) == [{"a": "1"}]
+
+    def test_drops_list_values(self):
+        assert _flat_dict({"a": "1", "items": [1, 2]}) == [{"a": "1"}]
+
+    def test_recurses_one_level_into_dict_with_dot_prefix(self):
+        result = _flat_dict({"acnt_nm": "홍길동", "info": {"entr": "1000000"}})
+        assert result == [{"acnt_nm": "홍길동", "info.entr": "1000000"}]
+
+    def test_all_values_are_dicts_still_produces_a_row(self):
+        """감사 버그의 핵심: 값이 전부 dict이면 예전엔 []를 반환해 0바이트 출력이 됐다."""
+        result = _flat_dict({"info": {"a": "1", "b": "2"}})
+        assert result == [{"info.a": "1", "info.b": "2"}]
+
+    def test_recursion_stops_after_one_level(self):
+        """명시된 스코프: 한 단계만 재귀 — 중첩 dict/list 안의 dict/list는 버려진다."""
+        result = _flat_dict({"info": {"a": "1", "nested": {"x": "1"}, "deep_list": [1]}})
+        assert result == [{"info.a": "1"}]
+
+    def test_only_containers_with_no_scalars_returns_empty(self):
+        """리스트만 있고 재귀할 dict도 없으면 여전히 빈 리스트 — 호출부가 리스트를 따로 출력한다."""
+        assert _flat_dict({"items": [1, 2]}) == []
+
+
+class TestGenericTableCsvScalarSummary:
+    """print_generic_table의 csv 분기 — 리스트가 있어도 스칼라/딕트 요약이 사라지면 안 된다."""
+
+    def test_mixed_list_and_scalars_emits_both(self, capsys):
+        """account balance류 payload: 계좌 요약(스칼라) + 보유종목(리스트)."""
+        data = {
+            "acnt_nm": "홍길동",
+            "entr": "1000000",
+            "stk_acnt_evlt_prst": [{"stk_cd": "005930", "stk_nm": "삼성전자"}],
+        }
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        assert "홍길동" in out, "스칼라 요약(계좌명)이 리스트 때문에 통째로 사라짐"
+        assert "1000000" in out
+        assert "005930" in out
+        assert "삼성전자" in out
+
+    def test_mixed_list_and_scalars_summary_comes_first(self, capsys):
+        """table 모드(print_generic_table dict 분기)가 이미 스칼라 요약 -> 리스트 순서이므로
+        csv 모드도 동일한 순서를 따른다 (기존 관례 일치)."""
+        data = {
+            "acnt_nm": "홍길동",
+            "stk_acnt_evlt_prst": [{"stk_cd": "005930"}],
+        }
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        lines = [line.rstrip("\r") for line in out.strip("\n").split("\n")]
+        assert lines[0] == "acnt_nm"
+        assert lines[1] == "홍길동"
+
+    def test_all_values_are_containers_is_not_zero_bytes(self, capsys):
+        """감사 버그의 두번째 절반: dict 값이 전부 dict/list이면 이전엔 0바이트+exit 0이었다."""
+        data = {
+            "acnt_info": {"acnt_nm": "홍길동", "entr": "1000000"},
+        }
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        assert out != "", "스칼라 요약이 전혀 없어 0바이트 출력됨"
+        assert "홍길동" in out
+        assert "1000000" in out

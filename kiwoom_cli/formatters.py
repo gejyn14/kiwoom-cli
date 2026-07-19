@@ -96,9 +96,26 @@ def _output_csv(rows: list[dict], keys: list[str] | None = None) -> None:
 
 
 def _flat_dict(data: dict) -> list[dict]:
-    """Flatten a dict with scalar values into a single-row list for CSV."""
-    clean = {k: v for k, v in data.items()
-             if not isinstance(v, (list, dict)) and k not in ("return_code", "return_msg")}
+    """Flatten a dict into a single-row list for CSV.
+
+    Scalar values pass through as-is. dict values recurse exactly one level:
+    their keys are emitted as "parent_key.nested_key" instead of being dropped
+    (a payload whose values are all dicts used to flatten to [], producing
+    0-byte CSV output on a successful call). Values still list or dict after
+    that one level of recursion are dropped — callers with list data emit it
+    separately (see print_generic_table's csv branch). Keys collide last-write
+    -wins, following the input dict's iteration order.
+    """
+    clean: dict[str, Any] = {}
+    for k, v in data.items():
+        if k in ("return_code", "return_msg"):
+            continue
+        if isinstance(v, dict):
+            for nk, nv in v.items():
+                if not isinstance(nv, (list, dict)):
+                    clean[f"{k}.{nk}"] = nv
+        elif not isinstance(v, list):
+            clean[k] = v
     return [clean] if clean else []
 
 
@@ -920,13 +937,16 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
         if isinstance(data, list):
             _output_csv(data)
         elif isinstance(data, dict):
-            # Flatten: output lists first, then scalars
+            # Table 모드의 dict 분기(스칼라 요약 먼저, 리스트는 그 다음)와 순서를 맞춘다.
             lists = {k: v for k, v in data.items() if isinstance(v, list)}
+            summary = _flat_dict(data)
+            if summary:
+                _output_csv(summary)
             if lists:
+                if summary:
+                    print()  # 두 CSV 블록을 빈 줄로 구분
                 for lv in lists.values():
                     _output_csv(lv)
-            else:
-                _output_csv(_flat_dict(data))
         return
 
     # Table mode (default)
