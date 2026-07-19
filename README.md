@@ -9,7 +9,9 @@
 [![License](https://img.shields.io/badge/license-Source--Available-blue)](LICENSE)
 
 ```bash
-pip install kiwoom-cli
+uv tool install kiwoom-cli     # 권장
+# 또는: pipx install kiwoom-cli
+# 또는: pip  install kiwoom-cli
 ```
 
 ```bash
@@ -66,7 +68,7 @@ kiwoom -f json describe order buy                             # 명령 스키마
 - **AI 에이전트 퍼스트** — 구조화된 JSON 출력(`-f json`), 일관된 exit code(0/1/2/3), 주문 확인 게이트(`--confirm`). Claude Code, 자동매매 스크립트에 바로 연결됩니다.
 - **미국주식 자동 라우팅** — `005930`은 국내로, `NVDA`는 미국으로. 거래소(NASDAQ/NYSE/AMEX)도 자동 판별. 국내+미국 통합 잔고를 원화 총계로 보여줍니다.
 - **사람에게도 친절** — Rich 테이블, 상승=빨강/하락=파랑 색상, 실시간 TUI 대시보드, shell 자동완성.
-- **246개 테스트 + CI** — Python 3.10–3.13 매트릭스, CodeQL 정적 분석.
+- **699개 테스트 + CI** — Python 3.10–3.13 매트릭스, CodeQL 정적 분석.
 
 > 📖 **전체 문서는 [Wiki](https://github.com/gejyn14/kiwoom-cli/wiki)에서** — 설치 가이드, 명령어 레퍼런스, 미국주식·AI 에이전트·멀티 프로필 가이드, 릴리스 노트.
 
@@ -90,6 +92,66 @@ NDJSON 스트리밍(`--max-events`/`--duration`/`--until` 종료조건),
 미국주식 29개 엔드포인트를 기존 명령 체계에 그대로 통합했습니다. 티커만 입력하면 시장을 자동 판별하므로 미국 주문도 국내 주문과 똑같이 짧습니다. 소수점 가격, stop/stop-limit/vwap/twap 주문유형, 환전(`account exchange`), 국내+미국 통합 계좌 뷰를 지원합니다.
 
 전체 변경 내역: [CHANGELOG](CHANGELOG.md) · [Wiki 릴리스 노트](https://github.com/gejyn14/kiwoom-cli/wiki/Release-Notes)
+
+## 설치
+
+`kiwoom`은 라이브러리가 아니라 CLI 도구이므로 **격리된 환경에 설치**하는 편이 좋습니다 —
+전역 Python 환경을 건드리지 않아 다른 패키지와 의존성이 충돌하지 않습니다.
+
+```bash
+# uv (권장) — https://docs.astral.sh/uv/
+uv tool install kiwoom-cli
+
+# pipx
+pipx install kiwoom-cli
+
+# pip — 격리되지 않음
+pip install kiwoom-cli
+```
+
+셋 다 `kiwoom` 명령 하나를 PATH에 노출합니다. Python 3.10–3.13을 지원하고,
+인증정보를 다루는 `keyring`은 격리 환경에서도 OS 키체인 백엔드를 그대로 사용합니다.
+
+### 설치 없이 한 번만 실행
+
+```bash
+uvx --from kiwoom-cli kiwoom stock price 005930
+```
+
+> 패키지 이름은 `kiwoom-cli`인데 명령 이름은 `kiwoom`이라서, `uvx kiwoom-cli`는 동작하지 않습니다.
+> `--from`으로 패키지와 명령을 따로 지정해야 합니다.
+
+### 프로젝트 의존성으로 쓰기
+
+봇이나 스크립트에서 `kiwoom_cli`를 라이브러리로 함께 쓰는 경우:
+
+```bash
+uv add kiwoom-cli
+uv run kiwoom -f json stock info 005930
+```
+
+### 업그레이드 · 삭제
+
+```bash
+uv tool upgrade kiwoom-cli      # pipx upgrade kiwoom-cli
+uv tool uninstall kiwoom-cli    # pipx uninstall kiwoom-cli
+```
+
+### `kiwoom`이 예전 버전을 가리킬 때
+
+전에 `pip install kiwoom-cli`를 한 적이 있으면 그때의 실행 파일이 PATH 앞쪽에 남아
+새로 설치한 쪽을 가릴 수 있습니다 (pyenv shim이 대표적입니다):
+
+```bash
+which kiwoom       # 실제로 어떤 실행 파일이 잡히는지
+kiwoom --version   # 기대한 버전이 맞는지
+```
+
+버전이 다르면 예전 설치본을 지웁니다:
+
+```bash
+pip uninstall kiwoom-cli
+```
 
 ## 시작하기
 

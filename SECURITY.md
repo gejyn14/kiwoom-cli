@@ -37,4 +37,5 @@
 
 - 모의투자 환경에서 먼저 테스트하세요 (`kiwoom config set domain mock`)
 - 주문 확인 프롬프트를 생략하는 `--confirm`은 신뢰할 수 있는 자동화 환경에서만 사용하세요
-- 정기적으로 `pip install --upgrade kiwoom-cli`로 최신 버전을 유지하세요
+- 정기적으로 최신 버전을 유지하세요 — 설치 방식에 맞는 명령을 쓰면 됩니다:
+  `uv tool upgrade kiwoom-cli` / `pipx upgrade kiwoom-cli` / `pip install --upgrade kiwoom-cli`

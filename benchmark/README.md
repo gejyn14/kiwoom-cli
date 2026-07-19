@@ -26,7 +26,8 @@ AI 에이전트가 kiwoom-cli를 실제로 밟게 될 경로를 **모의투자(m
 1. **모의투자 appkey/secretkey** — [키움 REST API](https://openapi.kiwoom.com)에서 발급
 2. **kiwoom-cli 설정** (도메인을 반드시 mock으로):
    ```bash
-   pip install kiwoom-cli jq   # jq는 brew install jq / apt install jq
+   uv tool install kiwoom-cli   # 또는 pipx install / pip install
+   # jq는 별도로: brew install jq / apt install jq
    kiwoom config setup          # 도메인 질문에 mock 입력
    kiwoom auth login
    ```

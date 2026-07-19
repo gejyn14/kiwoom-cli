@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- 설치 문서를 uv·pipx 중심으로 개편했습니다. 패키징 변경은 없고(기존에도
+  `uv tool install`/`pipx install`이 그대로 동작했습니다) 문서만 바뀐 것입니다 —
+  README에 `## 설치` 절이 추가되어 격리 설치(uv/pipx/pip), 설치 없이 실행
+  (`uvx --from kiwoom-cli kiwoom`), 프로젝트 의존성(`uv add`), 업그레이드·삭제,
+  그리고 예전 `pip install` 실행 파일이 PATH에서 새 설치본을 가리는 경우의
+  진단 방법을 다룹니다. `SECURITY.md`·`CONTRIBUTING.md`·`benchmark/README.md`의
+  설치·업그레이드 안내도 함께 갱신했습니다.
+
 ## [2.9.0] - 2026-07-19
 
 **Breaking**

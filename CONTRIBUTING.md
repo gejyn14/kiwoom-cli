@@ -7,8 +7,16 @@
 ```bash
 git clone https://github.com/gejyn14/kiwoom-cli.git
 cd kiwoom-cli
+
+# uv
+uv venv
+uv pip install -e ".[dev]"
+
+# 또는 pip
 pip install -e ".[dev]"
 ```
+
+설치 후 `pytest tests/ -v`와 `ruff check kiwoom_cli/`가 모두 통과하는지 확인하세요.
 
 ## Development Workflow
 
