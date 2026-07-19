@@ -2,7 +2,87 @@
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-07-19
+
+에이전트 계약(agent contract) 정비. `-f json`은 stdout에 **파싱 가능한 envelope
+하나만**, `-f csv`는 **CSV 데이터만** 내보낸다는 보장을 실제로 지키도록 7개 결함을
+고쳤습니다. 소비자가 "데이터가 없음"과 "조회가 실패했음"을 구분할 수 있게 하는
+것이 이번 릴리스의 핵심입니다.
+
+**Breaking**
+
+- **`-f csv`의 dict 응답이 스칼라 요약 블록을 함께 출력합니다.** 이전에는 응답에
+  리스트가 하나라도 있으면 스칼라 값이 **통째로 버려졌습니다**. 이제 요약 블록,
+  빈 줄 하나, 그리고 리스트 블록 순서로 나옵니다. `account balance`의 예수금·
+  총매입금액과 `dashboard`의 계좌 블록이 여기 해당합니다. CSV를 단일 테이블로
+  가정하고 파싱하던 스크립트는 수정이 필요합니다.
+
+  ```
+  # 2.9.0 (요약 소실)
+  stk_cd,stk_nm,rmnd_qty
+  005930,삼성전자,10
+  000660,SK하이닉스,5
+
+  # 2.10.0
+  entr,tot_pur_amt
+  1000000,5000000
+
+  stk_cd,stk_nm,rmnd_qty
+  005930,삼성전자,10
+  000660,SK하이닉스,5
+  ```
+
+- **값이 전부 dict/list인 응답이 `-f csv`에서 0바이트 + exit 0을 내던 문제.**
+  `_flat_dict`가 스칼라만 남기고 `[]`를 반환해 아무것도 출력하지 않았습니다.
+  이제 dict 값을 한 단계 재귀해 `부모.자식` 형태의 컬럼으로 펼칩니다. 예:
+  `{"account": {"entr": 1000}}` → 컬럼 `account.entr`.
+- **테이블·CSV 컬럼이 첫 행이 아니라 전체 행의 합집합으로 결정됩니다.**
+  이전에는 첫 레코드에 없는 키가 모든 행에서 보이지 않았습니다. 서로 다른 이벤트
+  타입이 한 파일에 섞인 `history query`(예: `stream multi --record`가 0B와 0D를
+  같은 파일에 기록)에서 뒤쪽 타입의 컬럼이 전부 공백이던 문제가 사라집니다.
+  컬럼 수가 늘어날 수 있습니다.
+- **`--fields`가 요청하지 않은 리스트 키를 더 이상 무조건 남기지 않습니다.**
+  이전에는 모든 리스트 키가 원소를 `{}`로 채운 채 살아남았습니다. 이제 요청한
+  필드를 담은 원소가 하나라도 있을 때만 남습니다. dict가 없는 리스트(스칼라
+  배열)는 이름으로 직접 요청하지 않는 한 항상 제거됩니다.
+- **`dashboard -f json`의 부분 실패 표현이 바뀝니다.** 조회에 실패한 쪽은 키가
+  사라지는 대신 명시적 `null`로 남습니다. 양쪽 모두 실패하면 `UPSTREAM_ERROR`
+  envelope + **exit 2**입니다(이전에는 `{"ok": true}` + exit 0). table 모드도
+  동일하게 exit 2로 끝납니다.
+- **`stock sync -f json`이 평문 대신 envelope을 출력합니다**
+  (`{"synced": N, "cache": "..."}`). `-f csv`에서는 stdout이 비고 완료 메시지가
+  stderr로 갑니다. `stock search`와 미국 `stock search`의 빈 결과도 평문이 아니라
+  `{"items": [], "raw": []}`가 됩니다 — 미국 쪽은 이전에 **stdout이 완전히 비어
+  exit 0**이었습니다.
+
+**Fixed**
+
+- 손상된 `config.toml` 위에서 `config setup`이 실행되지 않던 문제. 오류 메시지가
+  복구 방법으로 `config setup`을 안내하는데 그 명령 자체가 같은 예외로 죽어,
+  안내를 따른 에이전트가 무한루프에 빠졌습니다. 게다가 appkey/secretkey가 실패
+  지점보다 **먼저** 키체인에 기록돼 재시도마다 자격증명을 덮어썼습니다. 이제
+  루트 콜백과 `config setup` 양쪽이 손상된 파일을 견디고, 키체인 기록은 설정
+  로드 이후로 옮겼습니다.
+- `KiwoomGroup`의 오류 출력 11곳이 `-f csv`에서 stdout으로 나가 리다이렉트한
+  CSV 파일을 한국어 산문과 ANSI 이스케이프로 오염시키던 문제. 전부 stderr로
+  보냅니다.
+- 미처리 예외 3종이 traceback + 빈 stdout + exit 1로 끝나 "인자 오류"로
+  오인되던 문제. 잘못된 api_id → `INVALID_API`(exit 1), 손상된 `config.toml` →
+  `NOT_CONFIGURED`(exit 1), JSON이 아닌 응답 바디(HTTP 200 점검 페이지 등) →
+  `UPSTREAM_ERROR`(exit 2).
+- `--fields`가 dict/list 값을 가진 키를 이름으로 선택하지 못하던 문제.
+  `AGENTS.md`가 문서화한 `--fields body`(dry-run)와 `--fields checks`(validate)가
+  `data: {}` + `fields_unmatched`를 반환해, 존재하는 필드를 오타로 안내했습니다.
+- 오류 envelope의 `meta.env`가 설정을 읽을 수 없을 때 `"mock"`으로 위조되던 문제.
+  `meta.env`는 에이전트가 주문 안전을 판단하는 필드이므로 이제 `null`을 냅니다.
+
 ### Changed
+- `AGENTS.md`에 **`## CSV 출력 형식`** 절이 추가됐습니다. 블록 순서, 빈 줄 구분,
+  블록당 헤더 1행, 컬럼 합집합 규칙, 빈 결과의 0바이트 + exit 0을 명시합니다.
+  `account balance --market all`은 환율 환산 소계 스키마가 미확정이라 요약 블록
+  없는 단일 테이블을 유지하며, 이 비대칭도 문서에 적었습니다.
+- `INVALID_API`가 클라이언트 사전검증에서는 exit 1, 업스트림 응답에서는 exit 2로
+  끝난다는 점을 `AGENTS.md` 오류 코드 표에 명시했습니다.
 - 설치 문서를 uv·pipx 중심으로 개편했습니다. 패키징은 바뀌지 않았고(기존에도
   `uv tool install`/`pipx install`이 그대로 동작했습니다) 문서만 바뀌었습니다.
   README에 `## 설치` 절이 추가되어 격리 설치(uv/pipx/pip), 설치 없이 실행
