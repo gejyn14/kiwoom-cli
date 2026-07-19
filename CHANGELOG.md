@@ -142,6 +142,38 @@ human-readable 이름을 추가했습니다(하위호환).
   전에 `exit 1`로 거부됩니다. 스펙에 없는 값을 쓰던 스크립트만 영향을
   받습니다.
 
+`stock credit inquiry`(kt20017)는 필수 필드를 받을 방법이 없어 `{}`만
+전송했고, `stock credit available`(kt20016)도 필수 `mrkt_deal_tp`를
+누락하고 있었습니다.
+
+**Fixed**
+
+- **`credit inquiry`가 필수 `stk_cd`를 아예 보내지 않아 호출 자체가
+  성립하지 않았습니다.** kt20017 Request Body는 `stk_cd`(Required=Y)
+  하나뿐인데 커맨드에 이를 받을 인자/옵션이 없어 항상 `{}`를 전송했고,
+  API가 이를 거부했습니다. 이제 종목코드를 위치 인자로 받아
+  `{"stk_cd": <code>}`를 전송합니다.
+- **`credit available`이 필수 `mrkt_deal_tp`를 누락했습니다.** kt20016
+  Request Body는 `mrkt_deal_tp`(Required=Y, `%:전체, 1:코스피,
+  0:코스닥`)를 요구하는데 기존 코드는 아예 보내지 않았습니다. 이제
+  `--market`(기본 `all`→`"%"`)으로 항상 전송합니다. 같은 요청 바디의
+  선택 필드 `crd_stk_grde_tp`(`--grade`, 기본 `all`→`"%"`, 항상 전송)와
+  `stk_cd`(`--code`, 미지정 시 키 자체를 생략— 빈 문자열 아님)도 함께
+  노출했습니다.
+
+**Breaking**
+
+- **`credit inquiry`가 이제 종목코드 인자를 요구합니다.** 인자 없이
+  호출하면 `exit 1`(Click 필수 인자 누락 → 이 프로젝트는 `UsageError`를
+  `EXIT_INPUT=1`로 재매핑합니다, `main.py`)로 종료합니다. 다만 인자 없는
+  기존 호출은 어차피 `{}`를 보내 API가 거부하고 있었으므로, "정상 동작하던
+  것이 깨지는" 종류의 breaking은 아닙니다.
+- `credit available --market`은 `MARKET_KOSPI_KOSDAQ`(kospi=0, kosdaq=1)과
+  극성이 반대인 `CREDIT_MARKET`(kospi=1, kosdaq=0)을 씁니다 — kt20016
+  고유 코드북이라 다른 엔드포인트에 영향 없습니다. `HumanChoice`가 원시
+  코드도 하위호환으로 허용하고, 두 커맨드 모두 이전에는 옵션이 하나도
+  없었으므로 여기서 "옵션 하위호환 깨짐"에 해당하는 변경은 없습니다.
+
 ## [2.10.1] - 2026-07-19
 
 금현물 주문(`order gold buy`/`sell`, kt50000/kt50001)이 API가 받지 않는 주문타입을
