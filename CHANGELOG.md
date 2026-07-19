@@ -72,6 +72,33 @@
   영향이 없습니다. `ka10034`/`ka10036`/`ka10037`의 `--period`(`dt`)는 값이
   완전히 동일해 하나의 코드북으로 수렴시켰습니다.
 
+`market rank`의 순매수거래원순위~외국인기관매매상위 5개 커맨드
+(ka10042/62/65/98, ka90009)의 숫자코드 옵션도 human-readable 이름으로
+전환했습니다. 이번 청크는 순수 표기 전환입니다 — 다섯 커맨드 전부 기본
+호출이 종전과 완전히 동일한 body를 전송합니다(wire-value fix 없음, 워크북·
+kwcli 이중 확인).
+
+**Non-breaking (사람이 읽는 이름 추가, 하위호환)**
+
+- `market rank`의 `net-buyer`/`same-net-trade`/`investor-top`/
+  `afterhours-change`/`foreign-inst`(ka10042/62/65/98, ka90009) 5개 커맨드의
+  옵션 16개가 human-readable 이름을 받습니다(`--date-type start-end`,
+  `--type net-sell`, `--investor pension`, `--vol-cnd 5k+`, `--credit short`
+  등). raw 숫자코드도 그대로 통과하므로 기존 호출은 영향이 없습니다.
+  `net-buyer`(ka10042)의 `--date-type`/`--pot-type`/`--sort`는 워크북으로
+  값이 완전히 동일함을 확인해 기존 `stock analysis trader-analysis`
+  (ka10043)의 코드북을 그대로 공유합니다. `investor-top`(ka10065)/
+  `foreign-inst`(ka90009)의 `--unit`(`amt_qty_tp`)도 동일한 이유로 서로
+  공유합니다. `net-buyer`의 `--period`(`dt`)는 값→라벨이 단위접미사
+  부착만으로 유도되는 폐쇄집합(5,10,20,40,60,120)이라 이번 전환에서
+  제외하고 raw 텍스트로 남겼습니다.
+- 일부 옵션은 이전 상태가 타입 제약이 없는 자유 텍스트 `click.option`
+  이었습니다(예: `--vol-cnd`는 서버로 그대로 전달되는 임의 문자열을
+  받았습니다). 전환 후에는 매핑에 없는 값이 로컬에서 `INVALID_INPUT`으로
+  즉시 거부됩니다(이전에는 서버까지 갔다가 API 에러로 실패했습니다) — 매핑에
+  있는 값(사람 이름·raw 코드 모두)의 동작은 바뀌지 않으므로 정상적인 호출에는
+  영향이 없습니다.
+
 ## [2.11.0] - 2026-07-19
 
 `market rank volume`(ka10030)의 `--include-managed` help 문구가 스펙과 정반대였고,
