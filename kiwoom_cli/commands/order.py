@@ -30,6 +30,7 @@ from rich.panel import Panel
 from .. import envelope
 from ..client import KiwoomAPIError, KiwoomClient
 from ..formatters import _get_format, fail_api, fail_input, human, print_generic_table
+from ._constants import GOLD_ORDER_TYPES, HumanChoice
 from ._mutation import (
     QuoteUnavailable,
     confirm_gate,
@@ -81,6 +82,31 @@ def _kr_type_or_exit(order_type: str) -> str:
     if order_type not in ORDER_TYPES:
         fail_input(f"국내주식에서 지원하지 않는 주문유형입니다: {order_type}")
     return ORDER_TYPES[order_type]
+
+
+def _resolve_gold_type(order_type: str) -> tuple[str, str]:
+    """--type 값을 금현물(kt50000/kt50001) trde_tp 코드로 정규화한다.
+
+    order_type은 두 경로로 들어온다: --type을 명시하면 HumanChoice가 이미
+    API 코드("00"/"10"/"20")로 변환해 넘긴다(gold_buy/gold_sell의 --type
+    옵션이 HumanChoice(GOLD_ORDER_TYPES)라서 그 외 값은 Click 파싱 단계에서
+    이미 거부된다). --type을 생략하면 _resolve_order_type의 기본값 로직이
+    Click을 거치지 않고 사람이 읽는 이름("limit" 또는 "market")을 그대로
+    반환한다 — 금현물은 전부 보통(지정가) 계열이라 시장가가 없으므로,
+    가격도 --type도 생략한 경우의 기본값 "market"은 여기서 거부해야 한다.
+
+    반환값은 (wire 코드, 사람이 읽는 이름) — 후자는 미리보기 표시용이다.
+    """
+    if order_type in GOLD_ORDER_TYPES:
+        return GOLD_ORDER_TYPES[order_type], order_type
+    if order_type in GOLD_ORDER_TYPES.values():
+        label = next(k for k, v in GOLD_ORDER_TYPES.items() if v == order_type)
+        return order_type, label
+    fail_input(
+        "금현물은 limit/ioc/fok 세 가지 주문유형만 지원합니다"
+        f" (입력값: {order_type!r}). --type limit/ioc/fok 중 하나와 --price를 지정하세요.",
+        code="INVALID_INPUT",
+    )
 
 
 # 시장가 계열 — ord_uv(주문단가)를 시스템이 결정하므로 사용자가 넘긴 --price는
@@ -745,29 +771,35 @@ def gold():
 @gold.command("buy")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략)")
-@click.option("--type", "order_type", default=None, type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
+@click.option("--price", type=float, default=0, help="주문가격 (금현물은 전체 유형이 지정가 계열이라 필수)")
+@click.option("--type", "order_type", default=None, type=HumanChoice(GOLD_ORDER_TYPES), help="주문유형 (limit=보통, ioc=보통(IOC), fok=보통(FOK); 시장가 없음, 기본 limit)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 @click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
 @click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
 def gold_buy(code: str, qty: int, price: float, order_type: str | None, confirm: bool, dry_run: bool, client_order_id: str | None):
-    """금현물 매수주문 (kt50000).
+    """금현물 매수주문 (kt50000). 지정가 계열만 지원 (limit/ioc/fok) — 시장가 없음.
 
     예: kiwoom order gold buy M04020000 10 --type limit --price 90000 --confirm
     """
     order_type = _resolve_order_type(order_type, price)
+    trde_tp, order_type_label = _resolve_gold_type(order_type)
     kr_price = _kr_price_or_exit(price)
+    if not kr_price:
+        fail_input(
+            "금현물 주문은 가격이 필수입니다 (전체 유형이 보통/지정가 계열이며 시장가가 없습니다). --price를 지정하세요.",
+            code="INVALID_INPUT",
+        )
     body = {
         "stk_cd": code,
         "ord_qty": str(qty),
-        "ord_uv": str(kr_price) if kr_price else "",
-        "trde_tp": ORDER_TYPES[order_type],
+        "ord_uv": str(kr_price),
+        "trde_tp": trde_tp,
     }
     if dry_run:
-        _dry_run_kr("kt50000", "buy", code, qty, kr_price, order_type, None, body,
-                    lambda: _show_order_preview("금현물 매수", code, qty, kr_price, order_type))
+        _dry_run_kr("kt50000", "buy", code, qty, kr_price, order_type_label, None, body,
+                    lambda: _show_order_preview("금현물 매수", code, qty, kr_price, order_type_label))
         return
-    _show_order_preview("금현물 매수", code, qty, kr_price, order_type)
+    _show_order_preview("금현물 매수", code, qty, kr_price, order_type_label)
     confirm_gate(confirm)
     send_order("kt50000", body, "금현물 매수", client_order_id, client_cls=KiwoomClient)
 
@@ -775,29 +807,35 @@ def gold_buy(code: str, qty: int, price: float, order_type: str | None, confirm:
 @gold.command("sell")
 @click.argument("code")
 @click.argument("qty", type=int)
-@click.option("--price", type=float, default=0, help="주문가격 (시장가 주문시 생략)")
-@click.option("--type", "order_type", default=None, type=click.Choice(list(ORDER_TYPES.keys())), help="주문유형 (기본: --price 지정 시 limit, 미지정 시 market)")
+@click.option("--price", type=float, default=0, help="주문가격 (금현물은 전체 유형이 지정가 계열이라 필수)")
+@click.option("--type", "order_type", default=None, type=HumanChoice(GOLD_ORDER_TYPES), help="주문유형 (limit=보통, ioc=보통(IOC), fok=보통(FOK); 시장가 없음, 기본 limit)")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 주문 실행")
 @click.option("--dry-run", "dry_run", is_flag=True, help="전송될 내용만 출력하고 주문을 전송하지 않음")
 @click.option("--client-order-id", "client_order_id", default=None, help="멱등성 키 (같은 키 재실행 시 재전송 없이 이전 응답 반환)")
 def gold_sell(code: str, qty: int, price: float, order_type: str | None, confirm: bool, dry_run: bool, client_order_id: str | None):
-    """금현물 매도주문 (kt50001).
+    """금현물 매도주문 (kt50001). 지정가 계열만 지원 (limit/ioc/fok) — 시장가 없음.
 
-    예: kiwoom order gold sell M04020000 10 --type market --confirm
+    예: kiwoom order gold sell M04020000 10 --type limit --price 90000 --confirm
     """
     order_type = _resolve_order_type(order_type, price)
+    trde_tp, order_type_label = _resolve_gold_type(order_type)
     kr_price = _kr_price_or_exit(price)
+    if not kr_price:
+        fail_input(
+            "금현물 주문은 가격이 필수입니다 (전체 유형이 보통/지정가 계열이며 시장가가 없습니다). --price를 지정하세요.",
+            code="INVALID_INPUT",
+        )
     body = {
         "stk_cd": code,
         "ord_qty": str(qty),
-        "ord_uv": str(kr_price) if kr_price else "",
-        "trde_tp": ORDER_TYPES[order_type],
+        "ord_uv": str(kr_price),
+        "trde_tp": trde_tp,
     }
     if dry_run:
-        _dry_run_kr("kt50001", "sell", code, qty, kr_price, order_type, None, body,
-                    lambda: _show_order_preview("금현물 매도", code, qty, kr_price, order_type))
+        _dry_run_kr("kt50001", "sell", code, qty, kr_price, order_type_label, None, body,
+                    lambda: _show_order_preview("금현물 매도", code, qty, kr_price, order_type_label))
         return
-    _show_order_preview("금현물 매도", code, qty, kr_price, order_type)
+    _show_order_preview("금현물 매도", code, qty, kr_price, order_type_label)
     confirm_gate(confirm)
     send_order("kt50001", body, "금현물 매도", client_order_id, client_cls=KiwoomClient)
 

@@ -48,3 +48,13 @@ PRODUCT_TYPE = {"all": "0", "stock": "1"}                # 상품구분
 ODD_LOT_QRY = {"same-day-buy": "1", "all": "2"}          # 단주구분
 CASH_CREDIT = {"all": "0", "cash": "1", "credit": "2"}   # 현금신용구분
 HOT_PERIOD = {"1m": "1", "10m": "2", "1h": "3", "today": "4", "30s": "5"}  # ka00198
+
+# kt50000/kt50001(금현물 매수/매도) trde_tp — 국내주식 ORDER_TYPES(order.py)의 18종
+# 중 딱 3개만 받는다(스펙: docs/미국 REST API 문서.xlsx kt50000/kt50001 시트,
+# trde_tp 설명 "00:보통, 10:보통(IOC), 20:보통(FOK)"). 셋 다 지정가(보통) 계열
+# 이라 금현물에는 시장가가 없다. ioc/fok 이름은 이 코드베이스가 국내주식 주문에
+# 이미 쓰는 이름을 그대로 재사용한다 — "limit-ioc"/"limit-fok"로 바꾸면 지금도
+# 정상 동작하는(trde_tp가 이미 올바른) 두 호출을 깨뜨리고 금현물만 다른 이름
+# 체계를 쓰게 된다. kt50002/kt50003(정정/취소)은 trde_tp 필드 자체가 없어
+# 여기 포함하지 않는다.
+GOLD_ORDER_TYPES = {"limit": "00", "ioc": "10", "fok": "20"}
