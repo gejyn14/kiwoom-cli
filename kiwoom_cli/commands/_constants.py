@@ -63,7 +63,6 @@ GOLD_ORDER_TYPES = {"limit": "00", "ioc": "10", "fok": "20"}
 # 극성이 전부 다름). "trde_tp니까 하나로 합치자"는 절대 금지 — 이름에 코드
 # 집합을 새겨서 다른 codebook과 절대 재사용되지 않게 한다.
 # 그룹③ (0:순매수, 1:매수, 2:매도) — ka10059/ka10060/ka10064/ka10066.
-# (docs/superpowers/plans/2026-07-18-humanreadable-inventory.md 참고)
 TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 
 # amt_qty_tp(금액수량구분)도 API마다 극성이 다르다(표준 1:금액,2:수량 vs
@@ -72,17 +71,14 @@ TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
 # 수 없다. 그래서 이름 자체에 코드 값을 새긴다: 이 상수는 1:금액,2:수량
 # 전용(13곳, ka10066 포함)이며, 0:금액,1:수량 짝은 별도로
 # `AMT_QTY_TP_0_1`이라는 이름을 예약해 둔다(ka10051/ka10131 이관 시 이
-# 이름으로 추가할 것 — 절대 이 상수를 재사용하지 말 것). 두 코드북 및
-# 다른 amt_qty_tp 변형 전체 목록은
-# docs/superpowers/plans/2026-07-18-humanreadable-inventory.md의 "절대
-# 합치면 안 되는" 절(C4) 참고.
+# 이름으로 추가할 것 — 절대 이 상수를 재사용하지 말 것).
 AMT_QTY_TP_1_2 = {"amount": "1", "quantity": "2"}
 
 # AMT_QTY_TP_1_2와 키 집합(amount/quantity)은 같지만 극성이 다른 짝(0:금액,
 # 1:수량) — ka10131(stock.py, 기관외국인연속매매현황)에서 사용. ka10051
 # (market.py:651, 업종별투자자순매수)도 같은 코드북이나 아직 이관 전이라
 # 이 상수를 쓰지 않는다(별도 작업 대상). 절대 AMT_QTY_TP_1_2와 합치지 말 것 —
-# docs/superpowers/plans/2026-07-18-humanreadable-inventory.md C4 참고.
+# 키 집합이 같아 합쳐도 조용히 통과하고, 극성만 뒤집힌 값이 나간다.
 AMT_QTY_TP_0_1 = {"amount": "0", "quantity": "1"}
 
 # ka10131(stock.py) 전용 — dt(기간) 필드. 값이 순수 일수 시퀀스가 아니라
@@ -158,7 +154,7 @@ PROGRAM_MARKET_BY_EXCHANGE = {
 # "0:틱, 1:분"으로 동일하다(docs/미국 REST API 문서.xlsx, 두 시트 확인).
 MIN_TIC_TP = {"tick": "0", "minute": "1"}
 
-# ── task-14: ka10030(rank volume)/ka10032(rank amount)/ka10038(broker-by-stock)
+# ── ka10030(rank volume)/ka10032(rank amount)/ka10038(broker-by-stock)
 # /ka30002(elw broker-top) 파라미터 교정 ─────────────────────────────────
 
 # ka10030(rank volume) mang_stk_incls — 이름은 "관리종목포함"이지만 실제로는
@@ -276,7 +272,7 @@ ELW_BROKER_SIDE = {"net-buy": "1", "net-sell": "2"}
 # 1곳: ka30002.
 ELW_BROKER_PERIOD = {"previous": "1", "5d": "5", "10d": "10", "40d": "40", "60d": "60"}
 
-# ── task-14 (stock.py 부분): ka10043(trader-analysis, 거래원매물대분석)
+# ── ka10043(trader-analysis, 거래원매물대분석)
 # qry_dt_tp/pot_tp/sort_base/dt 파라미터 교정 ─────────────────────────────
 
 # ka10043 전용 — qry_dt_tp(조회기간구분). market.py의 ka10042(rank net-buyer)도

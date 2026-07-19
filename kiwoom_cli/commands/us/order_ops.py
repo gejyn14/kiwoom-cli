@@ -44,8 +44,8 @@ def _validate_us_type(order_type: str, side: str, price: float) -> str:
     없으면 ord_uv=""로 전송되어 거부되거나 의도치 않게 처리된다(ust20000/
     ust20001 스펙: "trde_tp가 00(지정가),30(LOC)...인 경우 필수 입력"). 이
     가드가 없으면 `order buy NVDA 10 --type limit`이 조용히 ord_uv=""로
-    전송된다(task 14b — 국내 kt10000/kt10001은 대상 아님: 그쪽 ord_uv
-    Description엔 "단위: 원"뿐이고 이 조건부 필수 문구가 없다).
+    전송된다(국내 kt10000/kt10001은 대상 아님: 그쪽 ord_uv Description엔
+    "단위: 원"뿐이고 이 조건부 필수 문구가 없다).
 
     price는 필수 위치 인자다 — 기본값 0을 두면 그 값 자체가 이 가드를 조용히
     건너뛰는 우회로가 되어, 이 작업 전체가 막으려는 바로 그 실패 모드(가격
