@@ -106,10 +106,19 @@ def project_fields(data: Any, fields: list[str]) -> Any:
     """--fields 투영: 요청된 키만 유지, raw 제거.
 
     키 자체가 fields에 있으면 값이 dict/list여도 통째로 선택된다
-    (예: --fields body가 dry-run의 body 전체를 반환).
-    그렇지 않은 dict/list 컨테이너는 내부 요소를 같은 필드 목록으로 투영한다
-    (리스트 응답에서 --fields symbol,price 가 동작하도록); 투영 결과가
-    전부 비어 있으면 그 키는 통째로 버려진다.
+    (예: --fields body가 dry-run의 body 전체를 반환). 선택된 값이 dict이면
+    최상위 "raw" 키만 제거하고(중첩 raw는 그대로 둠) 원본은 변경하지 않는다.
+    선택된 값이 list이면 요소를 건드리지 않고 그대로 반환한다.
+
+    키 자체가 요청되지 않은 dict 컨테이너는 내부를 같은 필드 목록으로
+    재귀 투영하고, 결과가 비어 있으면 그 키는 버려진다.
+
+    키 자체가 요청되지 않은 list 컨테이너는 각 dict 원소만 재귀 투영하고
+    (스칼라 원소는 그대로 둠), "적어도 하나의 원소가 비어있지 않은 dict로
+    투영됐는가"로 보존 여부를 판단한다 — 원소 값의 진위(0, "", False 등)가
+    아니라 "요청한 필드를 실제로 담고 있는 dict가 있는가"를 본다. dict를
+    하나도 담지 않은 리스트(스칼라 리스트, 빈 리스트)는 이름으로 요청되지
+    않는 한 키를 가질 수 없으므로 항상 버려진다.
     """
     if isinstance(data, list):
         return [project_fields(x, fields) if isinstance(x, (dict, list)) else x for x in data]
@@ -120,11 +129,14 @@ def project_fields(data: Any, fields: list[str]) -> Any:
         if k == "raw":
             continue
         if k in fields:
-            out[k] = v
+            if isinstance(v, dict):
+                out[k] = {kk: vv for kk, vv in v.items() if kk != "raw"}
+            else:
+                out[k] = v
             continue
         if isinstance(v, list):
             projected = [project_fields(i, fields) if isinstance(i, dict) else i for i in v]
-            if any(projected):
+            if any(isinstance(p, dict) and p for p in projected):
                 out[k] = projected
         elif isinstance(v, dict):
             sub = project_fields(v, fields)

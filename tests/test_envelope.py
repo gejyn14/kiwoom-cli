@@ -122,6 +122,86 @@ def test_project_fields_selects_dict_valued_key():
     assert project_fields(data, ["body"]) == {"body": {"x": 1}}
 
 
+# ── project_fields: 컨테이너 보존 규칙 교정 (Fix round 1) ─────
+#
+# any(projected)는 값 진위(0/""/False 등)를 테스트하므로, 거래 데이터에서
+# 흔한 0 수량/가격/손익이 우연히 리스트를 삭제하거나 살렸다. "요청한 필드를
+# 실제로 담고 있는 dict가 있는가"로 바꾼다.
+
+
+def test_all_falsy_scalar_list_dropped():
+    """스칼라 리스트는 dict를 하나도 담지 못하므로 이름으로 요청되지 않으면
+    항상 버려진다 — 값이 전부 falsy(0)여도 마찬가지고, 이 사실 자체가
+    버려지는 이유여서는 안 된다(다음 테스트가 대조군)."""
+    from kiwoom_cli.envelope import project_fields
+
+    assert project_fields({"a": 1, "qtys": [0, 0, 0]}, ["a"]) == {"a": 1}
+
+
+def test_mixed_truthy_scalar_list_also_dropped():
+    """이전 버그: any(projected)가 값 진위를 테스트해서 [0, 5, 0]처럼 하나라도
+    truthy면 리스트가 남았다. qtys는 요청되지 않았으니 all-falsy든 아니든
+    동일하게 버려져야 한다 — 시장 데이터에 따라 필드가 나타났다 사라지면
+    안 되기 때문."""
+    from kiwoom_cli.envelope import project_fields
+
+    assert project_fields({"a": 1, "qtys": [0, 5, 0]}, ["a"]) == {"a": 1}
+
+
+def test_list_of_dicts_with_one_matching_element_kept():
+    """dict 리스트는 요소를 투영한 뒤, 적어도 하나가 비어있지 않은 dict로
+    투영되면 유지된다. 순서/값은 변하지 않는다(매칭 안 된 요소는 {}로)."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"rows": [{"x": 1, "y": 2}, {"y": 3}]}
+    assert project_fields(data, ["x"]) == {"rows": [{"x": 1}, {}]}
+
+
+def test_list_of_dicts_with_no_matching_elements_dropped():
+    """dict 리스트라도 요청된 필드를 하나도 담지 못하면(모든 요소가 {}로
+    투영되면) 버려진다."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"a": 1, "rows": [{"y": 2}, {"z": 3}]}
+    assert project_fields(data, ["a"]) == {"a": 1}
+
+
+def test_requested_by_name_list_returned_whole_and_unaltered():
+    """리스트 키 자체가 요청되면(hoisted 체크) 원소는 전혀 건드리지 않고
+    통째로 반환한다 — dict 원소 내부의 raw도 스트립하지 않는다(Finding 3은
+    선택된 값이 dict일 때의 최상위 raw만 다룬다; 리스트는 그대로)."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"rows": [{"p": 1, "raw": {"secret": 1}}, 5, "x"]}
+    assert project_fields(data, ["rows"]) == {
+        "rows": [{"p": 1, "raw": {"secret": 1}}, 5, "x"]
+    }
+
+
+# ── project_fields: 선택된 dict의 최상위 raw 제거 (Fix round 1, Finding 3) ──
+
+
+def test_selected_dict_key_strips_top_level_raw():
+    """--fields body 처럼 값이 dict인 키를 통째로 선택해도, 함수 자체의
+    'raw 제거' 계약은 지켜져야 한다 — 최상위 raw만 제거하고 원본은
+    변경하지 않는다."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"body": {"x": 1, "raw": {"secret": 1}}}
+    assert project_fields(data, ["body"]) == {"body": {"x": 1}}
+    # 원본은 변경되지 않는다 (copy, not mutate)
+    assert data["body"] == {"x": 1, "raw": {"secret": 1}}
+
+
+def test_selected_dict_key_does_not_deep_strip_nested_raw():
+    """raw 제거는 선택된 dict의 최상위 한 겹만 다룬다 — 중첩된 raw는 건드리지
+    않는다(계약 범위를 넘는 deep-strip은 하지 않는다)."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"body": {"x": {"raw": 1}}}
+    assert project_fields(data, ["body"]) == {"body": {"x": {"raw": 1}}}
+
+
 # ── classify ──────────────────────────────────────────
 
 
