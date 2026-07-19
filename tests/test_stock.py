@@ -1887,6 +1887,30 @@ def test_chart_intraday_investor_trade_enum_literal(
 
 
 # ============================================================
+#  Task 34b 리뷰 fix — chart intraday-investor --market 값 커버리지 확대
+#  (ka10064 스펙: 000:전체, 001:코스피, 101:코스닥 — "전체"가 도달 불가였음)
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value", [("kospi", "001"), ("kosdaq", "101"), ("all", "000")]
+)
+def test_chart_intraday_investor_market_enum_literal(
+    runner, fake_client, cli_value, api_value
+):
+    """--market kospi/kosdaq/all이 mrkt_tp 001/101/000으로 매핑되어야 한다
+    (리터럴 핀). kospi/kosdaq는 종전과 동일한 값을 그대로 전송해야 하고(순수
+    확장), all은 이번에 새로 도달 가능해진 값이다."""
+    result = runner.invoke(
+        cli,
+        ["stock", "chart", "intraday-investor", "005930", "--market", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mrkt_tp"] == api_value
+
+
+# ============================================================
 #  Task 34b — lending trend/by-stock (--all, 미확인 — raw 텍스트 유지)
 # ============================================================
 

@@ -1686,9 +1686,9 @@ def chart_investor(code: str, dt: str, amt_qty_tp: str, trde_tp: str, unit_tp: s
 @click.argument("code")
 @click.option(
     "--market", "mrkt_tp",
-    type=click.Choice(["kospi", "kosdaq"]),
+    type=HumanChoice(MARKET_ALL),
     default="kospi",
-    help="시장구분 (kospi/kosdaq)",
+    help="시장구분 (all=전체, kospi=코스피, kosdaq=코스닥)",
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
@@ -1706,7 +1706,7 @@ def chart_intraday_investor(code: str, mrkt_tp: str, amt_qty_tp: str, trde_tp: s
     """장중투자자별매매 차트 조회. (ka10064)"""
     with KiwoomClient() as c:
         data, _ = c.request("ka10064", {
-            "mrkt_tp": MARKET_TWO[mrkt_tp],
+            "mrkt_tp": mrkt_tp,
             "amt_qty_tp": amt_qty_tp,
             "trde_tp": trde_tp,
             "stk_cd": code,

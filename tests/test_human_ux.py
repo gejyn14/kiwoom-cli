@@ -467,7 +467,12 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # (반대쪽 불명) 전환하지 않아 이 델타에 포함되지 않는다. chart
     # tick/minute의 --range/--interval(tic_scope)도 값=라벨 그대로인
     # 자기서술적 수량이라(I2 규칙) 전환 대상에서 제외했다.
-    assert len(converted) == 215
+    #
+    # 216 = 215(위) + Task 34b 리뷰 fix의 순증 1 = chart intraday-investor의
+    # --market(mrkt_tp)이 click.Choice(["kospi","kosdaq"])에서
+    # HumanChoice(MARKET_ALL)로 전환되며 "전체"(000)에 도달 가능해졌다(사전
+    # 존재 결함, 순수 확대 — kospi/kosdaq 기본값·전송값은 그대로다).
+    assert len(converted) == 216
     assert ("cli stock investor program-top", "trde_upper_tp") in converted
     assert ("cli stock investor program-top", "amt_qty_tp") in converted
     for command in ("tick", "minute", "day", "week", "month", "year"):
@@ -477,6 +482,9 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     assert ("cli stock chart investor", "unit_tp") in converted
     assert ("cli stock chart intraday-investor", "amt_qty_tp") in converted
     assert ("cli stock chart intraday-investor", "trde_tp") in converted
+    # 34b 리뷰 fix: --market(mrkt_tp)이 이번에 click.Choice에서 HumanChoice로
+    # 전환됐다 — 이름으로 못 박아 실수로 빠져도 눈에 띄게 한다.
+    assert ("cli stock chart intraday-investor", "mrkt_tp") in converted
     # lending trend/by-stock의 --all(all_tp)은 스펙에 값이 하나뿐이라
     # (반대쪽 불명) 이번 태스크에서 의도적으로 전환하지 않았다 — 이름으로
     # 못 박아 실수로 전환되어도(또는 실수로 빠져도) 눈에 띄게 한다.
