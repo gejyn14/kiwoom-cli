@@ -84,14 +84,16 @@ intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
   `--volume-type`(`qty_tp`)은 스펙 코드 `3`/`5`의 라벨이 워크북·kwcli
   양쪽 모두 비어 있어 이번에는 전환하지 않고 자유 텍스트로 남겼습니다
   (전환하면 두 코드가 거부됩니다).
-- **`stock analysis trader-analysis`(ka10043)의 `--days`가 `"5d"` 같은
-  human 이름을 더 이상 받지 않습니다.** 이 옵션은 v2.11.0에서 실수로
-  `HumanChoice`가 됐습니다 — 값과 라벨이 단위접미사(`d`)만 다른 자기서술적
-  수량 프리셋(`market rank net-buyer`의 동일 필드 `--period`와 완전히 같은
-  패턴)이라 애초에 human-readable 전환 대상이 아니었습니다(I2 규칙). 이번에
-  raw 텍스트로 되돌렸습니다 — `--days 5`처럼 스펙 숫자 코드를 쓰던 호출은
-  영향이 없고, `--days 5d`처럼 human 이름을 쓰던 호출만 `dt="5d"`가 그대로
-  전송되어 서버에서 거부됩니다.
+- **`market rank net-buyer`(ka10042)의 `--period`가 스펙 밖의 값을
+  거부합니다(exit 1).** `stock analysis trader-analysis`(ka10043)의
+  동일 필드 `--days`는 v2.11.0부터 이미 `HumanChoice`로 배포돼 있었는데,
+  `--period`는 그때 자유 텍스트로 남아 `--period 999` 같은 값도 검증 없이
+  그대로 전송되고 있었습니다. 이번에 두 필드가 같은 값 목록
+  (5/10/20/40/60/120, 워크북으로 character-for-character 동일함을 확인)을
+  쓰는 걸 근거로 `--period`도 `HumanChoice`로 끌어올려 둘을
+  `TRADER_ANALYSIS_PERIOD_5_120` 하나로 통일했습니다 — 스펙 숫자 코드와
+  `5d`/`10d`/`20d`/`40d`/`60d`/`120d` human 이름은 그대로 통과하고, 목록
+  밖의 값만 이제 로컬에서 거부됩니다.
 - **`stock investor by-stock-total`(ka10061)의 `--trade`가 `1`/`2`를 더
   이상 받지 않습니다.** 스펙의 `trde_tp`는 `0`(순매수) 단일값뿐인데 기존
   코드는 `click.Choice(["0","1","2"])`로 스펙에 없는 `1`/`2`까지 받고
@@ -120,8 +122,9 @@ intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
   확인해 기존 `stock analysis trader-analysis`(ka10043)의 코드북을 그대로
   공유합니다. `investor-top`(ka10065)/`foreign-inst`(ka90009)의
   `--unit`(`amt_qty_tp`)도 같은 이유로 서로 공유합니다. `net-buyer`의
-  `--period`(`dt`)는 값→라벨이 단위접미사 부착만으로 유도되는 폐쇄집합
-  (5,10,20,40,60,120)이라 전환하지 않고 raw 텍스트로 남겼습니다.
+  `--period`(`dt`)도 `trader-analysis`의 `--days`와 코드북을 공유하도록
+  전환했지만, 전환 전이 자유 텍스트였던 탓에 값 목록이 좁아지는 쪽이라
+  위 Breaking 절에 따로 적었습니다.
 - `sector investor`(ka10051)의 `--unit`(`amt_qty_tp`)이 human-readable
   이름을 받습니다(`--unit quantity` 등). `stock investor consecutive`
   (ka10131)와 코드북이 동일해(0:금액,1:수량) 기존 `AMT_QTY_TP_0_1`을
