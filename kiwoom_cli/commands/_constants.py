@@ -116,6 +116,10 @@ INTRADAY_INVESTOR = {
 # 짝: AMT_QTY_TP_1_2(13곳), AMT_QTY_TP_0_1(ka10051/ka10131). 이 상수는 1곳: ka10063.
 AMT_QTY_TP_COMBINED = {"combined": "1"}
 
-# ka10063(stock.py) 전용 — frgn_all(외국계전체)/smtm_netprps_tp(동시순매수구분)
-# 공용. 둘 다 스펙상 "1:체크, 0:미체크"인 동일 코드북.
-CHECK_YES_NO = {"yes": "1", "no": "0"}
+# ka10063(stock.py) 전용, 2곳 — frgn_all(외국계전체)/smtm_netprps_tp(동시순매수구분)
+# 공용. 둘 다 스펙상 "yes"->"1"(체크), "no"->"0"(미체크)인 동일 코드북.
+# stock.py에는 이 밖에도 의미가 다른 click.Choice(["0","1"]) 옵션이 여럿
+# 있다(indc_tp, tdy_pred/tic_min, cur_prc_entry, updown_incls, qry_dt_tp/pot_tp
+# 등) — 이름에 극성(1=yes/0=no)과 값을 박아 넣은 것은 그것들과 절대 합치지
+# 말라는 뜻이다. 절대 합치지 말 것.
+CHECK_YES_1_NO_0 = {"yes": "1", "no": "0"}

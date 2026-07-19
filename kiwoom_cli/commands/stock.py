@@ -24,7 +24,7 @@ from ._constants import (
     AMT_QTY_TP_0_1,
     AMT_QTY_TP_1_2,
     AMT_QTY_TP_COMBINED,
-    CHECK_YES_NO,
+    CHECK_YES_1_NO_0,
     EXCHANGE_ALL,
     HumanChoice,
     INTRADAY_INVESTOR,
@@ -1146,13 +1146,13 @@ def by_stock_total(
 )
 @click.option(
     "--foreign-all", "frgn_all",
-    type=HumanChoice(CHECK_YES_NO),
+    type=HumanChoice(CHECK_YES_1_NO_0),
     default="no",
     help="외국계전체 (yes=체크, no=미체크)",
 )
 @click.option(
     "--simultaneous", "smtm_netprps_tp",
-    type=HumanChoice(CHECK_YES_NO),
+    type=HumanChoice(CHECK_YES_1_NO_0),
     default="no",
     help="동시순매수구분 (yes=체크, no=미체크)",
 )

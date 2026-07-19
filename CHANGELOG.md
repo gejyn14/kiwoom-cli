@@ -103,28 +103,39 @@ human-readable 이름을 추가했습니다(하위호환).
   없습니다.
 - **`--foreign-all`(`frgn_all`)/`--simultaneous`(`smtm_netprps_tp`)가 원시
   코드 `0`/`1`만 노출했습니다.** 둘 다 스펙상 `1:체크, 0:미체크`인 동일
-  코드북이라 공용 상수 하나(`CHECK_YES_NO`)로 정리했습니다.
+  코드북이라 공용 상수 하나(`CHECK_YES_1_NO_0`)로 정리했습니다.
 - `--exchange`(`stex_tp`)는 이미 `EXCHANGE_ALL`(`1:KRX, 2:NXT, 3:통합`)로
   스펙과 정확히 일치해 이번 변경 대상이 아닙니다.
 
 **Non-breaking (사람이 읽는 이름 추가, 하위호환)**
 
 - **`--investor-type`/`--amount-qty`/`--foreign-all`/`--simultaneous`가
-  이제 사람이 읽는 이름도 받습니다.** 기존에 숫자 코드를 직접 넘기던
-  스크립트는 **그대로 동작합니다** — `HumanChoice`가 raw API 코드를
-  하위호환으로 계속 허용하기 때문입니다. 전송값도 이름 추가 전과
+  이제 사람이 읽는 이름도 받습니다.** 새 매핑의 값(=스펙이 정의한 코드)을
+  직접 넘기던 스크립트는 **그대로 동작합니다** — `HumanChoice`가 raw API
+  코드도 하위호환으로 계속 허용하기 때문입니다. 전송값도 이름 추가 전과
   동일합니다: `foreign`→`invsr=6`, `institution`→`invsr=7`,
   `investment-trust`→`invsr=1`, `insurance`→`invsr=0`, `bank`→`invsr=2`,
   `pension`→`invsr=3`, `state`→`invsr=4`, `other-corporate`→`invsr=5`;
   `combined`→`amt_qty_tp=1`; `yes`→`1`, `no`→`0`(`frgn_all`/
-  `smtm_netprps_tp` 공통). `--market`에 `all`이 추가된 것도 순수 추가라
-  기존 호출은 영향 없습니다(기본값 `kospi` 그대로).
+  `smtm_netprps_tp` 공통 — 스펙의 값이 이 두 개뿐이라 완전히
+  하위호환입니다). `--market`에 `all`이 추가된 것도 순수 추가라 기존
+  호출은 영향 없습니다(기본값 `kospi` 그대로). **단, `--investor-type`과
+  `--amount-qty`는 매핑에 없는 값(스펙 밖 raw 코드)을 넘기던 호출까지는
+  하위호환하지 않습니다 — 아래 Breaking 참고.**
 
 **Breaking**
 
 - **`--investor-type`의 기본 전송값이 `invsr="1000"`에서 `invsr="6"`(외국인)로
   바뀌었습니다.** 기존 기본 호출은 스펙 밖 값을 보내고 있었으므로, 이전에
   기본값에 의존하던 호출은 이제 다른(그리고 실제로 유효한) 데이터를
+  받습니다.
+- **`--investor-type`가 자유 텍스트에서 스펙값 8개(`invsr` 코드북)만 받는
+  enum이 되었습니다.** 기존엔 `type=` 지정이 없어 어떤 문자열이든 그대로
+  `invsr`로 전송했습니다. 이제 그 8개 값(및 대응하는 사람이 읽는 이름)
+  이외의 입력은 전송 전에 `exit 1`로 거부됩니다. 실제로 확인된 회귀:
+  이전 기본값이었던 `--investor-type 1000`, 그리고 `--investor-type 9`
+  둘 다 이전에는 각각 `invsr="1000"`/`invsr="9"`를 그대로 전송했지만
+  지금은 `exit 1`입니다. 스펙에 없는 값을 쓰던 스크립트만 영향을
   받습니다.
 - **`--amount-qty`가 자유 텍스트에서 스펙값 하나(`combined`/`1`)만 받는
   enum이 되었습니다.** `1` 이외의 값(예: `--amount-qty 2`)은 이제 전송
