@@ -250,9 +250,9 @@ kiwoom -f json order buy 005930 10 --price 70000 --type limit --confirm --client
 
 - 어떤 명령도 비밀번호·생체인증을 요구하지 않으므로 에이전트 세션이 중간에 멈추지 않습니다. json/csv 모드에서는 확인 프롬프트 대신 `CONFIRMATION_REQUIRED` 오류(exit 1)로 응답합니다.
 - 페이지네이션(연속조회)은 전역 `--all-pages`(끝까지 자동 수집·리스트 병합) 또는 `--next-key <값>`(특정 페이지부터 재조회)로 명시 제어합니다. 커서를 직접 다루지 않아도 됩니다.
-- `kiwoom -f json describe --paths`으로 전체 명령 경로를 저비용에 훑어본 뒤, 필요한 명령만 `kiwoom -f json describe <경로>`으로 상세 스키마를 조회하세요.
+- `kiwoom -f json describe --paths`으로 전체 명령 경로를 저비용에 훑어본 뒤, 필요한 명령만 `kiwoom -f json describe <경로>`로 상세 스키마를 조회하세요.
 - 테이블 출력은 50행(차트는 30행)에서 잘리며 잘린 경우 안내 문구가 표시됩니다. 전체 데이터가 필요하면 `-f json` 또는 `-f csv`를 사용하세요.
-- `account`/`market`/`stock`의 옵션 대다수(`--side sell`, `--sort rise-rate`, `--stock-cond exclude-managed` 등)는 사람이 읽는 이름이 표준이며 기존 숫자 코드(`--side 1`)도 계속 허용됩니다. 자기서술적 수량 프리셋(`--range`/`--interval` 등)이나 예시 몇 개뿐인 개방형 코드북(발행사코드 등)은 raw 텍스트로 남아 있습니다.
+- `account`/`market`/`stock`의 옵션 대다수(`--side sell`, `--sort rise-rate`, `--stock-cond exclude-managed` 등)는 사람이 읽는 이름이 표준이며 기존 숫자 코드(`--side 1`)도 대부분 계속 허용됩니다(예외는 CHANGELOG의 Breaking 절 참고). 자기서술적 수량 프리셋(`--range`/`--interval` 등)이나 예시 몇 개뿐인 개방형 코드북(발행사코드 등)은 raw 텍스트로 남아 있습니다.
 - 자세한 패턴은 [Wiki: AI 에이전트 가이드](https://github.com/gejyn14/kiwoom-cli/wiki/AI-Agents) 참고.
 
 ### 명령어/API 찾기
@@ -629,7 +629,7 @@ kiwoom api ka10001 '{"stk_cd":"005930"}' --raw   # JSON 원본
 적용됩니다. table 모드는 미리보기 후 y/n 프롬프트, 자동화는 `--confirm`:
 
 ```bash
-kiwoom api kt10000 '{"stk_cd":"005930","ord_qty":"1",...}' --confirm
+kiwoom api kt10000 '{"dmst_stex_tp":"KRX","stk_cd":"005930","ord_qty":"1","ord_uv":"70000","trde_tp":"0"}' --confirm
 ```
 
 ---
