@@ -1762,8 +1762,12 @@ def test_elw_surge_exclude_expired_human_options(runner, fake_client, cli_value,
 
 
 def test_elw_broker_top_default_values_still_unchanged_after_rename(runner, fake_client):
-    """ELW_BROKER_END_SKIP → EXCLUDE_ENDED_ELW로 상수 이름만 바뀌었을 뿐
-    전송값은 그대로여야 한다."""
+    """ka30002의 trde_end_elwskip 기본값은 "1"(거래종료 ELW 제외)이다.
+
+    이 자리는 종전 ka30002 전용 상수를 쓰다가 5개 api_id 공유
+    상수(EXCLUDE_ENDED_ELW)로 넘어왔다 — 공유로 바뀌면서 기본 전송값이
+    딸려 바뀌지 않았는지 고정한다.
+    """
     result = runner.invoke(cli, ["market", "elw", "broker-top", "--issuer", "003"])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["trde_end_elwskip"] == "1"
@@ -2111,6 +2115,19 @@ def test_sector_index_sector_code_alias_matches_old_name(runner, fake_client):
     assert fake_client.calls == [("ka20003", {"inds_cd": "101"})]
 
 
+# 이중 철자 옵션에서 **legacy**(키움 wire 필드를 축약한 옛 이름) 쪽
+# 스펠링을 명시적으로 열거한다. human 쪽은 "나머지 하나"로 정의된다.
+# 여기에 없는 새 legacy 이름이 등장하면 아래 발견 로직이 즉시 실패한다 —
+# 조용히 잘못 추측하는 것보다 낫다.
+_LEGACY_SPELLINGS = frozenset({
+    "--stk-cnd",      # ↔ --stock-cond   (stk_cnd)
+    "--price-cnd",    # ↔ --price-cond   (pric_cnd)
+    "--vol-cnd",      # ↔ --volume-cond  (trde_qty_cnd)
+    "--amount-cnd",   # ↔ --amount-cond  (trde_prica_cnd)
+    "--inds-cd",      # ↔ --sector-code  (inds_cd)
+})
+
+
 def _discover_dual_spelling_options() -> list[tuple[list[str], str, str]]:
     """Click 트리를 순회해 human/legacy 이중 철자 옵션을 모두 찾는다.
 
@@ -2122,12 +2139,18 @@ def _discover_dual_spelling_options() -> list[tuple[list[str], str, str]]:
     하드코딩된 사이트 목록 대신 트리를 직접 순회하는 이유: 사이트가
     추가돼도 이 목록이 자동으로 따라가야 커버리지 누락을 막을 수 있다.
 
-    human/legacy 판별: 두 스펠링 중 더 긴 쪽(풀어쓴 human 이름)이 human,
-    짧은 쪽(키움 wire 필드를 그대로 축약한 이름)이 legacy다. 이 판별은
-    문자열 길이만으로 결정하며 `param.opts`의 선언 순서를 절대 참조하지
-    않는다 — 선언 순서 자체가 검증 대상(constraint 3)이므로, 그 순서에서
-    "어느 쪽이 human인지"를 역산하면 항상 참이 되는 순환 검증이 되어
-    선언 순서가 뒤바뀌어도 테스트가 잡아내지 못한다.
+    human/legacy 판별: 아래 _LEGACY_SPELLINGS에 **명시적으로 열거된**
+    쪽이 legacy(키움 wire 필드를 축약한 옛 이름)이고, 나머지 한쪽이
+    human이다. `param.opts`의 선언 순서는 절대 참조하지 않는다 — 선언
+    순서 자체가 검증 대상(constraint 3)이므로, 그 순서에서 "어느 쪽이
+    human인지"를 역산하면 항상 참이 되는 순환 검증이 된다.
+
+    종전에는 "둘 중 더 긴 쪽이 human"이라는 길이 휴리스틱을 썼고 길이가
+    **같은** 경우만 막아 뒀다. 하지만 legacy 쪽이 더 긴 쌍(예: --type vs
+    --trde-upper-tp)이 새로 생기면 휴리스틱이 legacy를 human으로 잘못
+    지목해, 그 사이트에 대해 정반대 순서를 요구하면서도 오늘은 그런 쌍이
+    없어 조용히 통과한다. 명시 목록은 그런 쌍이 생기는 순간 "둘 중 어느
+    것도 legacy로 등록돼 있지 않다"며 실패한다.
     """
     sites: list[tuple[list[str], str, str]] = []
 
@@ -2143,13 +2166,16 @@ def _discover_dual_spelling_options() -> list[tuple[list[str], str, str]]:
                 and all(opt.startswith("--") for opt in param.opts)
                 and not param.is_flag
             ):
-                opt_a, opt_b = param.opts
-                assert len(opt_a) != len(opt_b), (
-                    f"{path} {param.opts}: 두 스펠링의 길이가 같아 "
-                    "길이 기준으로 human/legacy를 구분할 수 없다 — "
-                    "판별 기준을 재검토할 것"
+                legacy = [o for o in param.opts if o in _LEGACY_SPELLINGS]
+                assert len(legacy) == 1, (
+                    f"{path} {param.opts}: 이중 철자 쌍에서 legacy 이름을 "
+                    f"정확히 하나 특정할 수 없다(발견: {legacy}). 새 쌍을 "
+                    "추가했다면 legacy(키움 wire 필드 축약) 쪽을 "
+                    "_LEGACY_SPELLINGS에 등록할 것 — 길이 같은 것으로 "
+                    "추측하지 않는다."
                 )
-                human_opt, legacy_opt = sorted(param.opts, key=len, reverse=True)
+                legacy_opt = legacy[0]
+                human_opt = next(o for o in param.opts if o != legacy_opt)
                 sites.append((path, human_opt, legacy_opt))
 
     walk(cli, [])
