@@ -54,9 +54,9 @@ class KiwoomGroup(click.Group):
             if self._json_mode(ctx):
                 envelope.emit(error=envelope.error_body(e.msg, upstream_code=e.code))
             elif auth_related:
-                console.print(f"[red]인증 오류:[/] {e} [dim]kiwoom auth login[/]")
+                err_console.print(f"[red]인증 오류:[/] {e} [dim]kiwoom auth login[/]")
             else:
-                console.print(f"[red]API 오류:[/] {e}")
+                err_console.print(f"[red]API 오류:[/] {e}")
             ctx.exit(EXIT_AUTH if auth_related else EXIT_API)
         except KiwoomAuthError:
             keychain_ok = auth.keychain_readable()
@@ -70,10 +70,10 @@ class KiwoomGroup(click.Group):
                     msg, code="AUTH_REQUIRED", retryable=False,
                 ))
             elif keychain_ok:
-                console.print("[red]인증 필요:[/] 토큰이 없습니다. [dim]kiwoom auth login[/]")
+                err_console.print("[red]인증 필요:[/] 토큰이 없습니다. [dim]kiwoom auth login[/]")
             else:
-                console.print("[red]인증 필요:[/] 토큰이 없습니다 (키체인 접근 불가 환경).")
-                console.print(
+                err_console.print("[red]인증 필요:[/] 토큰이 없습니다 (키체인 접근 불가 환경).")
+                err_console.print(
                     "[dim]본인 터미널에서 'kiwoom auth login'으로 발급한 토큰을 "
                     "KIWOOM_TOKEN 환경변수로 전달하세요. (README '샌드박스 환경' 참고)[/]"
                 )
@@ -85,8 +85,8 @@ class KiwoomGroup(click.Group):
                     code="KEYCHAIN_UNAVAILABLE", retryable=False,
                 ))
             else:
-                console.print("[red]키체인 오류:[/] OS 키체인에 접근할 수 없습니다 (잠김 또는 비대화형 세션).")
-                console.print(
+                err_console.print("[red]키체인 오류:[/] OS 키체인에 접근할 수 없습니다 (잠김 또는 비대화형 세션).")
+                err_console.print(
                     "[dim]키체인 없는 환경에서는 본인 터미널에서 토큰을 발급한 뒤 "
                     "KIWOOM_TOKEN 환경변수로 전달하세요. (README '샌드박스 환경' 참고)[/]"
                 )
@@ -96,9 +96,9 @@ class KiwoomGroup(click.Group):
             if self._json_mode(ctx):
                 envelope.emit(error=envelope.error_body(f"HTTP {status}", http_status=status))
             elif status == 401:
-                console.print("[red]인증 오류:[/] 토큰이 만료되었습니다. [dim]kiwoom auth login[/]")
+                err_console.print("[red]인증 오류:[/] 토큰이 만료되었습니다. [dim]kiwoom auth login[/]")
             else:
-                console.print(f"[red]HTTP 오류:[/] {status}")
+                err_console.print(f"[red]HTTP 오류:[/] {status}")
             ctx.exit(EXIT_AUTH if status == 401 else EXIT_API)
         except httpx.ConnectError:
             if self._json_mode(ctx):
@@ -107,7 +107,7 @@ class KiwoomGroup(click.Group):
                     code="NETWORK_ERROR", retryable=True,
                 ))
             else:
-                console.print("[red]연결 오류:[/] API 서버에 연결할 수 없습니다. 도메인을 확인하세요.")
+                err_console.print("[red]연결 오류:[/] API 서버에 연결할 수 없습니다. 도메인을 확인하세요.")
             ctx.exit(EXIT_API)
         except httpx.RequestError as e:
             # 타임아웃 등 나머지 전송 오류 — traceback 대신 계약대로 종료
@@ -117,7 +117,7 @@ class KiwoomGroup(click.Group):
                     code="NETWORK_ERROR", retryable=True,
                 ))
             else:
-                console.print(f"[red]네트워크 오류:[/] {type(e).__name__} — 잠시 후 재시도하세요.")
+                err_console.print(f"[red]네트워크 오류:[/] {type(e).__name__} — 잠시 후 재시도하세요.")
             ctx.exit(EXIT_API)
         except click.ClickException as e:
             # 인자/옵션 오류(UsageError 포함)도 json 모드에서는 envelope로.

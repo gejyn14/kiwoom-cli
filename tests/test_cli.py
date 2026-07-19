@@ -146,6 +146,28 @@ def test_api_error_handling(runner):
         assert "오류" in result.output
 
 
+def test_api_error_csv_mode_stdout_is_clean(runner):
+    """-f csv에서 API 오류가 나면 stdout은 비어 있고 오류는 stderr로 가야 한다.
+
+    KiwoomGroup.invoke의 오류 핸들러는 이전에 json 모드만 확인하고 그 외에는
+    (csv 포함) console.print로 stdout에 Rich 서식 오류 문구를 찍었다 —
+    `kiwoom -f csv ... > out.csv` 가 오류 시 CSV 파일을 한국어 산문으로 오염시켰다.
+    """
+    from kiwoom_cli.client import KiwoomAPIError
+
+    with patch("kiwoom_cli.commands.stock.KiwoomClient") as mock_cls:
+        mock_client = MagicMock()
+        mock_client.request.side_effect = KiwoomAPIError(-1, "테스트 오류")
+        mock_client.__enter__ = lambda s: s
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_cls.return_value = mock_client
+
+        result = runner.invoke(cli, ["-f", "csv", "stock", "info", "005930"])
+        assert result.exit_code == 2
+        assert result.stdout == ""
+        assert "오류" in result.stderr
+
+
 # Note: Order command tests moved to tests/test_order.py for strict coverage.
 
 
