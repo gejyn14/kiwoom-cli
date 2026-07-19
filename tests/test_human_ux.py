@@ -271,7 +271,7 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "PERIOD_DAYS_OFF_BY_ONE", "ELW_BROKER_QTY_TYPE", "ELW_BROKER_SIDE",
     "ELW_BROKER_PERIOD",
     "TRADER_ANALYSIS_DATE_MODE", "TRADER_ANALYSIS_POSITION",
-    "TRADER_ANALYSIS_SORT", "TRADER_ANALYSIS_PERIOD_5_120",
+    "TRADER_ANALYSIS_SORT",
     # 아래 13개는 HumanChoice 데코레이터에 실제로 물려 있는데도 이 목록에
     # 빠져 있었다. GOLD_ORDER_TYPES는 금현물 주문 경로다.
     "GOLD_ORDER_TYPES", "CREDIT_MARKET", "CREDIT_GRADE",
@@ -337,6 +337,23 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "ELW_RIGHT_TYPE_3DIGIT", "ELW_RIGHT_TYPE_1DIGIT", "ELW_SEARCH_SORT",
     "ELW_CHANGE_RANK_SORT", "ELW_RANK_RIGHT_TYPE_3DIGIT", "ELW_BALANCE_RANK_SORT",
     "EXCLUDE_ENDED_ELW", "GOLD_PRICE_TYPE",
+    # Task 34a — stock 일별주가~투자자별매매(daily_price~by_stock_total)
+    # HumanChoice 전환. TRADER_ANALYSIS_PERIOD_5_120은 위 목록에서 제거됐다
+    # (I2 규칙 재적용으로 --days가 raw 텍스트로 되돌아가 더 이상 쓰이지 않음).
+    "DAILY_PRICE_DISPLAY", "TODAY_PREV_1_2", "TODAY_EXEC_TIC_MIN",
+    "PRICE_CLUSTER_CUR_PRC_ENTRY",
+    "OPEN_CHANGE_SORT", "OPEN_CHANGE_QTY_CND", "OPEN_CHANGE_INCLUDE_LIMIT",
+    "OPEN_CHANGE_STK_CND", "OPEN_CHANGE_CREDIT_CND", "OPEN_CHANGE_AMOUNT_CND",
+    "OPEN_CHANGE_DIRECTION",
+    "INSTANT_VOLUME_MARKET", "INSTANT_VOLUME_PRICE_TYPE",
+    "VI_TRIGGER_SESSION", "VI_TRIGGER_TYPE", "VI_TRIGGER_USE_FILTER",
+    "VI_TRIGGER_DIRECTION",
+    "WARRANT_TYPE",
+    "INVESTOR_DAILY_TRADE_SIDE", "INST_FOREIGN_PRICE_TYPE",
+    "DAILY_BY_INVESTOR_TRADE_SIDE", "DAILY_BY_INVESTOR_TYPE",
+    "INVESTOR_BY_STOCK_UNIT", "BY_STOCK_TOTAL_TRADE_SIDE",
+    # AMT_QTY_TP_1_2/TRDE_TP_NET_BUY_BUY_SELL은 위 목록에 이미 있음(ka10059/
+    # ka10061이 이번에 이관돼도 새로 추가하지 않음, 커플링 주석 참고).
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -371,6 +388,27 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
         for path, p in _iter_options(root_cli)
         if isinstance(p.type, _constants.HumanChoice)
     ]
+    # 200 = 170(Task 33까지의 누적치, 아래 옛 주석 참고) + Task 34a(stock
+    # daily-price~by-stock-total, ka10086/84/55/24(제외)/25/28/43/52/54/11/
+    # 44/45/58/59/61)의 순증 30 = 신규 전환 31 - trader-analysis --days
+    # 1건(반환, I2 규칙 재적용) = daily-price 1[indc_tp] + today-exec
+    # 2[tdy_pred/tic_min] + today-volume 1[tdy_pred] + price-cluster
+    # 1[cur_prc_entry] + open-change 7[sort_tp/trde_qty_cnd/updown_incls/
+    # stk_cnd/crd_cnd/trde_prica_cnd/flu_cnd] + instant-volume
+    # 2[mrkt_tp/pric_tp] + vi-trigger 5[bf_mkrt_tp/motn_tp/trde_qty_tp/
+    # trde_prica_tp/motn_drc] + warrant 1[newstk_recvrht_tp] + daily-trade
+    # 1[trde_tp] + stock-institution 2[orgn_prsm_unp_tp/for_prsm_unp_tp] +
+    # daily-by-investor 2[trde_tp/invsr_tp] + by-stock 3[amt_qty_tp/trde_tp/
+    # unit_tp] + by-stock-total 3[amt_qty_tp/trde_tp/unit_tp] = 31, minus
+    # trader-analysis의 --days(dt) 1건 = 30. credit available/trader-analysis
+    # (--days 제외)/intraday/after-close/consecutive는 Task 34a 이전에 이미
+    # HumanChoice였다(선행 fix 커밋들) — 이 델타에 포함되지 않는다.
+    # volume-renewal의 --volume-type(trde_qty_tp)은 기본값 "0"이 스펙 8개
+    # 값(5/10/50/100/200/300/500/1000) 어디에도 없는 결함이라 Task 31a의
+    # 동일 패턴과 같은 이유로 이번에도 raw 텍스트로 남겼다(전환 안 함).
+    # instant-volume의 --volume-type(qty_tp)/vi-trigger의
+    # --skip-stock(skip_stk)도 라벨 미확인/비트마스크라 raw 텍스트로 남겼다.
+    #
     # 170 = 145(Task 32까지의 누적치, 아래 옛 주석 참고) + Task 33(market
     # etf·elw·gold·program)의 25 = etf returns 1[dt] + etf all 3[txon_type/
     # navpre/txon_yn] + elw surge 5[flu_tp/tm_tp/trde_qty_tp/rght_tp/
@@ -407,7 +445,7 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # 28 = ka10027 7 + ka10029 5 + ka10031 1 + ka10033 4 + ka10034 2 +
     # ka10035 2 + ka10036 1 + ka10037 3 + ka10039 3.
     # 이 수는 트리 순회로 재도출한 값이지 델타 추정이 아니다.
-    assert len(converted) == 170
+    assert len(converted) == 200
     # 금현물 주문 두 건은 이름으로도 못 박아 둔다. 개수만 맞추면 다른 곳이
     # 늘고 여기가 빠져도 통과하기 때문이다.
     assert ("cli order gold buy", "order_type") in converted
