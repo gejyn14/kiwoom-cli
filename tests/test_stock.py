@@ -614,6 +614,19 @@ def test_investor_consecutive_net_type_net_buy_explicit(runner, fake_client):
     assert fake_client.calls[0][1]["netslmt_tp"] == "2"
 
 
+def test_investor_consecutive_net_type_rejects_net_sell(runner, fake_client):
+    """NETSLMT_TP_NET_BUY_ONLY({net-buy:2})는 Task 34b가 추가한
+    PROGRAM_TOP_SIDE({net-sell:1,net-buy:2})의 진짜 부분집합이다(클로저
+    스크립트로 확인) — "net-sell"은 저쪽에만 있으므로 거부돼야 한다. 상수가
+    실수로 PROGRAM_TOP_SIDE로 바꿔치기되면 이 테스트가 실패한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "consecutive", "--net-type", "net-sell"]
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
 def test_investor_consecutive_exchange_unchanged(runner, fake_client):
     """--exchange는 이미 EXCHANGE_ALL로 전환되어 있어 이번 작업에서 그대로 둔다."""
     result = runner.invoke(cli, ["stock", "investor", "consecutive"])
@@ -1614,3 +1627,286 @@ def test_by_stock_total_unit_enum(runner, fake_client, cli_value, api_value):
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["unit_tp"] == api_value
+
+
+# ============================================================
+#  Task 34b — investor program-top (ka90003)
+# ============================================================
+
+
+def test_program_top_default_unchanged_body(runner, fake_client):
+    """기본 호출은 종전과 동일하게 trde_upper_tp="2", amt_qty_tp="1",
+    mrkt_tp="P00101"(코스피), stex_tp="3"(all)을 보내야 한다."""
+    result = runner.invoke(cli, ["stock", "investor", "program-top"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka90003",
+            {
+                "trde_upper_tp": "2",
+                "amt_qty_tp": "1",
+                "mrkt_tp": "P00101",
+                "stex_tp": "3",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("net-sell", "1"), ("net-buy", "2")])
+def test_program_top_trade_enum_literal(runner, fake_client, cli_value, api_value):
+    """--trade net-sell/net-buy가 trde_upper_tp 1/2로 매핑되어야 한다 (리터럴 핀 —
+    PROGRAM_TOP_SIDE는 ELW_BROKER_SIDE(net-buy:1,net-sell:2)와 키가 같고 극성이
+    반대다, 폴백으로 상수가 바꿔치기되면 이 테스트가 실패한다)."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "program-top", "--trade", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_upper_tp"] == api_value
+
+
+def test_program_top_trade_rejects_net_trade(runner, fake_client):
+    """PROGRAM_TOP_SIDE({net-sell:1,net-buy:2})는 FOREIGN_PERIOD_SIDE
+    ({net-sell:1,net-buy:2,net-trade:3})의 진짜 부분집합이다(클로저 스크립트로
+    확인) — "net-trade"는 저쪽에만 있으므로 거부돼야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "program-top", "--trade", "net-trade"]
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("amount", "1"), ("quantity", "2")])
+def test_program_top_amount_qty_enum_literal(runner, fake_client, cli_value, api_value):
+    """--amount-qty amount/quantity가 amt_qty_tp 1/2로 매핑되어야 한다 (리터럴 핀 —
+    AMT_QTY_TP_1_2는 AMT_QTY_TP_0_1/SAME_NET_TRADE_SORT/DAILY_PRICE_DISPLAY와
+    키가 같고 극성이 다르다)."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "program-top", "--amount-qty", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
+def test_program_top_market_and_exchange_unchanged(runner, fake_client):
+    """--market/--exchange는 이번 태스크 범위 밖 — 그대로 동작해야 한다."""
+    result = runner.invoke(
+        cli,
+        ["stock", "investor", "program-top", "--market", "kosdaq", "--exchange", "KRX"],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mrkt_tp"] == "P10102"
+    assert fake_client.calls[0][1]["stex_tp"] == "1"
+
+
+# ============================================================
+#  Task 34b — chart tick/minute/day/week/month/year (--adjusted)
+# ============================================================
+
+_CHART_ADJUSTED_COMMANDS = [
+    ("tick", ["stock", "chart", "tick", "005930"]),
+    ("minute", ["stock", "chart", "minute", "005930"]),
+    ("day", ["stock", "chart", "day", "005930", "--base-date", "20260101"]),
+    ("week", ["stock", "chart", "week", "005930", "--base-date", "20260101"]),
+    ("month", ["stock", "chart", "month", "005930", "--base-date", "20260101"]),
+    ("year", ["stock", "chart", "year", "005930", "--base-date", "20260101"]),
+]
+
+
+@pytest.mark.parametrize("name,args", _CHART_ADJUSTED_COMMANDS)
+def test_chart_adjusted_default_unchanged(runner, fake_client, name, args):
+    """--adjusted 기본 호출은 종전과 동일하게 upd_stkpc_tp="0"을 보내야 한다."""
+    result = runner.invoke(cli, args)
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["upd_stkpc_tp"] == "0"
+
+
+@pytest.mark.parametrize("name,args", _CHART_ADJUSTED_COMMANDS)
+@pytest.mark.parametrize("cli_value,api_value", [("raw", "0"), ("adjusted", "1")])
+def test_chart_adjusted_enum_literal(
+    runner, fake_client, name, args, cli_value, api_value
+):
+    """--adjusted raw/adjusted가 upd_stkpc_tp 0/1로 매핑되어야 한다 (리터럴 핀,
+    CHART_ADJUSTED_PRICE는 6개 api_id가 공유하고 GOLD_PRICE_TYPE과 값이
+    완전히 동일한 구분 불가 클러스터라 이 테스트로도 그 둘의 치환은 못 잡는다
+    — 이름 규약이 유일한 방어선)."""
+    result = runner.invoke(cli, [*args, "--adjusted", cli_value])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["upd_stkpc_tp"] == api_value
+
+
+def test_chart_tick_adjusted_rejects_out_of_spec_value(runner, fake_client):
+    """CHART_ADJUSTED_PRICE는 0/1 두 값뿐이라 다른 값은 exit 1이어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "chart", "tick", "005930", "--adjusted", "2"]
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+# ============================================================
+#  Task 34b — chart investor (ka10060)
+# ============================================================
+
+
+def test_chart_investor_default_unchanged_body(runner, fake_client):
+    """기본 호출은 종전과 동일하게 amt_qty_tp="1", trde_tp="0", unit_tp="1"을
+    보내야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "chart", "investor", "005930", "--date", "20260101"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10060",
+            {
+                "dt": "20260101",
+                "stk_cd": "005930",
+                "amt_qty_tp": "1",
+                "trde_tp": "0",
+                "unit_tp": "1",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("amount", "1"), ("quantity", "2")])
+def test_chart_investor_amount_qty_enum_literal(runner, fake_client, cli_value, api_value):
+    """--amount-qty amount/quantity가 amt_qty_tp 1/2로 매핑되어야 한다 (리터럴 핀)."""
+    result = runner.invoke(
+        cli,
+        ["stock", "chart", "investor", "005930", "--date", "20260101",
+         "--amount-qty", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value", [("net-buy", "0"), ("buy", "1"), ("sell", "2")]
+)
+def test_chart_investor_trade_enum_literal(runner, fake_client, cli_value, api_value):
+    """--trade net-buy/buy/sell이 trde_tp 0/1/2로 매핑되어야 한다 (리터럴 핀)."""
+    result = runner.invoke(
+        cli,
+        ["stock", "chart", "investor", "005930", "--date", "20260101",
+         "--trade", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == api_value
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("thousand", "1000"), ("share", "1")])
+def test_chart_investor_unit_enum_literal(runner, fake_client, cli_value, api_value):
+    """--unit thousand/share가 unit_tp 1000/1로 매핑되어야 한다 (리터럴 핀,
+    INVESTOR_BY_STOCK_UNIT 공유 — ka10059/ka10061/ka10060 3곳)."""
+    result = runner.invoke(
+        cli,
+        ["stock", "chart", "investor", "005930", "--date", "20260101",
+         "--unit", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["unit_tp"] == api_value
+
+
+def test_chart_investor_trade_rejects_out_of_spec_value(runner, fake_client):
+    """TRDE_TP_NET_BUY_BUY_SELL은 0/1/2 세 값뿐이라 다른 값은 exit 1이어야 한다."""
+    result = runner.invoke(
+        cli,
+        ["stock", "chart", "investor", "005930", "--date", "20260101",
+         "--trade", "3"],
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+# ============================================================
+#  Task 34b — chart intraday-investor (ka10064)
+# ============================================================
+
+
+def test_chart_intraday_investor_default_unchanged_body(runner, fake_client):
+    """기본 호출은 종전과 동일하게 mrkt_tp="001", amt_qty_tp="1", trde_tp="0"을
+    보내야 한다."""
+    result = runner.invoke(cli, ["stock", "chart", "intraday-investor", "005930"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10064",
+            {
+                "mrkt_tp": "001",
+                "amt_qty_tp": "1",
+                "trde_tp": "0",
+                "stk_cd": "005930",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize("cli_value,api_value", [("amount", "1"), ("quantity", "2")])
+def test_chart_intraday_investor_amount_qty_enum_literal(
+    runner, fake_client, cli_value, api_value
+):
+    """--amount-qty amount/quantity가 amt_qty_tp 1/2로 매핑되어야 한다 (리터럴 핀)."""
+    result = runner.invoke(
+        cli,
+        ["stock", "chart", "intraday-investor", "005930", "--amount-qty", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value", [("net-buy", "0"), ("buy", "1"), ("sell", "2")]
+)
+def test_chart_intraday_investor_trade_enum_literal(
+    runner, fake_client, cli_value, api_value
+):
+    """--trade net-buy/buy/sell이 trde_tp 0/1/2로 매핑되어야 한다 (리터럴 핀)."""
+    result = runner.invoke(
+        cli,
+        ["stock", "chart", "intraday-investor", "005930", "--trade", cli_value],
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == api_value
+
+
+# ============================================================
+#  Task 34b — lending trend/by-stock (--all, 미확인 — raw 텍스트 유지)
+# ============================================================
+
+
+def test_lending_trend_all_still_accepts_arbitrary_text(runner, fake_client):
+    """ka10068의 all_tp는 스펙에 "1:전체표시" 하나만 문서화돼 있어(반대값 불명)
+    이번 태스크에서 HumanChoice로 좁히지 않았다 — 자유 텍스트는 계속 그대로
+    전송돼야 한다(breaking 아님을 확인)."""
+    result = runner.invoke(cli, ["stock", "lending", "trend", "--all", "9"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["all_tp"] == "9"
+
+
+def test_lending_by_stock_all_still_accepts_arbitrary_text(runner, fake_client):
+    """ka20068의 all_tp도 마찬가지로 자유 텍스트로 남겨 뒀다(스펙에 "0:종목코드
+    입력종목만" 하나만 문서화, 반대값 불명)."""
+    result = runner.invoke(
+        cli, ["stock", "lending", "by-stock", "005930", "--all", "9"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["all_tp"] == "9"
