@@ -15,14 +15,14 @@ CLI(`kwcli`, 명령어 `kiwoomcli`)를 제공한다. 이 문서는 두 도구의
 | 출력 형식 | pretty / json / jsonl / yaml (`--format`) | Rich 테이블 / JSON / CSV (`-f`) |
 | 기계가 읽는 계약 | JSON 출력은 있으나 응답 envelope·오류 코드·exit code **계약이 문서화되어 있지 않음** | `{ok, schema, data, meta, error}` envelope v1 + 타입 있는 정규화 필드 + 안정적 error.code 32종(retryable 포함) + exit code 0/1/2/3 계약 ([AGENTS.md](../AGENTS.md)) |
 | 시장 | 국내 주식만 | 국내 + **미국주식 29 API** (티커 자동 라우팅, 원화+달러 통합 잔고) |
-| 실시간 스트리밍 | 있음 — `--count`/`--duration`, 복수 종목, `--output file.jsonl` 녹화, `--named` 필드명 | WebSocket 19종, 이벤트당 envelope 한 줄(NDJSON) + `--max-events`/`--duration`/`--until`(절대시각) + 오류도 envelope + exit code 계약 |
+| 실시간 스트리밍 | 있음: `--count`/`--duration`, 복수 종목, `--output file.jsonl` 녹화, `--named` 필드명 | WebSocket 19종, 이벤트당 envelope 한 줄(NDJSON) + `--max-events`/`--duration`/`--until`(절대시각) + 오류도 envelope + exit code 계약 |
 | 녹화/히스토리 | 스트림 파일 녹화(`--output`)까지 | `--record` 녹화 → **`history list/query/export`** (sqlite/csv/parquet) 조회·내보내기 도구 |
 | 주문 안전장치 | 미리보기 기본값(`--confirm` 없으면 미전송) + 가격 규칙 사전검증 | `--dry-run`(전송 body 그대로 출력) / **`order validate`**(잔고·장운영 실조회 read-only 사전점검) / **`--client-order-id` 멱등성**(재시도 중복주문 방지) / json 모드 구조화된 CONFIRMATION_REQUIRED |
 | 계좌번호 마스킹 | 전 출력 형식에서 계좌 식별자 마스킹 | 없음 (로드맵) |
 | 자기서술 | `spec search/show/groups/apis` (번들 스펙, 네트워크 불필요), `-h`에 OpenAPI 매핑 | `kiwoom describe -f json` (명령 트리+옵션 스키마) + [AGENTS.md](../AGENTS.md) 기계 계약 |
 | 스크립팅 | json 한 줄 출력은 에이전트 파싱 가능. exit code·stdout 순수성 계약은 미문서화 | stdout 순수성(진행 메시지는 전부 stderr), `--fields` 투영, `jq` 파이프 전제 설계 |
 | 요구 환경 | Python ≥3.13, pandas ≥3.0.3 의존 | Python ≥3.10, pandas 없음 (경량 의존성) |
-| 인증 UX | OS 자격증명 저장소, 멀티 alias, `doctor` 진단, env 모드(APP_KEY/APP_SECRET) | OS 키체인, 프롬프트 제로, 멀티 프로필, **`KIWOOM_TOKEN`**(키 노출 없이 토큰만 — CI/샌드박스/에이전트) |
+| 인증 UX | OS 자격증명 저장소, 멀티 alias, `doctor` 진단, env 모드(APP_KEY/APP_SECRET) | OS 키체인, 프롬프트 제로, 멀티 프로필, **`KIWOOM_TOKEN`**(키 노출 없이 토큰만, CI/샌드박스/에이전트) |
 
 ## 구체적 차이 하나로: litmus loop
 

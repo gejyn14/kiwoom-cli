@@ -1,25 +1,25 @@
-# Code of Conduct
+# 행동 강령
 
-## Our Pledge
+## 우리의 다짐
 
-We are committed to providing a welcoming and respectful environment for everyone, regardless of experience level, background, or identity.
+경험 수준, 배경, 정체성과 관계없이 누구나 환영받고 존중받는 환경을 만들기 위해 노력합니다.
 
-## Our Standards
+## 행동 기준
 
-**Positive behavior:**
-- Being respectful and constructive in communication
-- Accepting feedback gracefully
-- Focusing on what's best for the project and community
+**바람직한 행동:**
+- 소통할 때 정중하고 건설적인 태도를 유지합니다
+- 피드백을 겸허히 받아들입니다
+- 프로젝트와 커뮤니티에 무엇이 최선인지를 우선합니다
 
-**Unacceptable behavior:**
-- Harassment, trolling, or personal attacks
-- Publishing others' private information
-- Any conduct that would be considered inappropriate in a professional setting
+**용납되지 않는 행동:**
+- 괴롭힘, 트롤링, 인신공격
+- 타인의 개인정보를 공개하는 행위
+- 전문적인 자리에서 부적절하다고 여겨질 만한 모든 행동
 
-## Enforcement
+## 시행
 
-Project maintainers may remove, edit, or reject contributions that violate this code of conduct. Instances of unacceptable behavior may be reported to the project maintainers.
+프로젝트 관리자는 이 행동 강령을 위반하는 기여를 삭제, 수정, 거부할 수 있습니다. 부적절한 행동을 목격했다면 프로젝트 관리자에게 신고해 주세요.
 
-## Attribution
+## 출처
 
-This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/), version 2.1.
+이 행동 강령은 [Contributor Covenant](https://www.contributor-covenant.org/) 2.1판을 바탕으로 작성되었습니다.

@@ -1,6 +1,6 @@
 # kiwoom-cli
 
-**키움증권 REST API 전체를 터미널에서.** 시세 조회부터 주문, 실시간 스트리밍, 미국주식까지 — 명령어 하나로.
+**키움증권 REST API 전체를 터미널에서.** 시세 조회부터 주문, 실시간 스트리밍, 미국주식까지 명령어 하나로.
 
 [![PyPI](https://img.shields.io/pypi/v/kiwoom-cli)](https://pypi.org/project/kiwoom-cli/)
 [![Python](https://img.shields.io/pypi/pyversions/kiwoom-cli)](https://pypi.org/project/kiwoom-cli/)
@@ -23,7 +23,7 @@ $ kiwoom -f json account balance | jq       # AI 에이전트·스크립트 친�
 ## AI-agent native
 
 모든 명령이 `-f json`에서 **하나의 안정된 envelope**를 stdout에 출력한다
-(진행 메시지는 전부 stderr — stdout은 항상 파싱 가능한 단일 문서):
+(진행 메시지는 전부 stderr, stdout은 항상 파싱 가능한 단일 문서):
 
 ```json
 {"ok": true, "schema": "v1",
@@ -34,9 +34,9 @@ $ kiwoom -f json account balance | jq       # AI 에이전트·스크립트 친�
 
 `data`는 타입 있는 정규화 필드(부호 문자열 파싱 불필요), `error.code`는
 안정적인 enum 32종(`retryable` 포함), exit code는 0=성공 / 1=입력 / 2=API /
-3=인증으로 고정 — 에이전트가 문자열이 아니라 계약으로 분기한다.
+3=인증으로 고정된다. 에이전트는 문자열이 아니라 계약으로 분기한다.
 
-**주문 안전장치** — 에이전트가 돈을 다루는 경로 전체에 가드가 있다:
+**주문 안전장치.** 에이전트가 돈을 다루는 경로 전체에 가드가 있다:
 
 ```bash
 kiwoom -f json order validate buy 005930 10          # read-only 사전점검
@@ -46,7 +46,7 @@ kiwoom -f json order buy 005930 10 --price 70000 --confirm --client-order-id run
 ```
 
 `--confirm` 없이 json 모드로 주문하면 프롬프트에 멈추는 대신 구조화된
-`CONFIRMATION_REQUIRED` 오류로 즉시 반환된다 — 에이전트가 걸려서 죽지 않는다.
+`CONFIRMATION_REQUIRED` 오류로 즉시 반환된다. 에이전트가 걸려서 죽지 않는다.
 
 **에이전트 퀵스타트**:
 
@@ -63,31 +63,31 @@ kiwoom -f json describe order buy                             # 명령 스키마
 
 ## 왜 kiwoom-cli인가
 
-- **236개 API 전체 지원** — REST 217개 + WebSocket 실시간 19종. 시세·차트·계좌·주문·순위·업종·테마·ETF·ELW·금현물·미국주식까지 키움 REST API를 빠짐없이 커버합니다.
-- **프롬프트 제로** — 인증정보는 OS 키체인에 저장되고, 어떤 명령도 비밀번호를 묻지 않습니다. `gh`/`aws`/`docker`와 같은 모델. 크론잡, CI, AI 에이전트가 그대로 돌립니다.
-- **AI 에이전트 퍼스트** — 구조화된 JSON 출력(`-f json`), 일관된 exit code(0/1/2/3), 주문 확인 게이트(`--confirm`). Claude Code, 자동매매 스크립트에 바로 연결됩니다.
-- **미국주식 자동 라우팅** — `005930`은 국내로, `NVDA`는 미국으로. 거래소(NASDAQ/NYSE/AMEX)도 자동 판별. 국내+미국 통합 잔고를 원화 총계로 보여줍니다.
-- **사람에게도 친절** — Rich 테이블, 상승=빨강/하락=파랑 색상, 실시간 TUI 대시보드, shell 자동완성.
-- **699개 테스트 + CI** — Python 3.10–3.13 매트릭스, CodeQL 정적 분석.
+- **236개 API 전체 지원**: REST 217개 + WebSocket 실시간 19종. 시세·차트·계좌·주문·순위·업종·테마·ETF·ELW·금현물·미국주식까지 키움 REST API를 빠짐없이 커버합니다.
+- **프롬프트 제로**: 인증정보는 OS 키체인에 저장되고 어떤 명령도 비밀번호를 묻지 않습니다. `gh`/`aws`/`docker`와 같은 모델. 크론잡, CI, AI 에이전트가 그대로 돌립니다.
+- **AI 에이전트 퍼스트**: 구조화된 JSON 출력(`-f json`), 일관된 exit code(0/1/2/3), 주문 확인 게이트(`--confirm`). Claude Code, 자동매매 스크립트에 바로 연결됩니다.
+- **미국주식 자동 라우팅**: `005930`은 국내로, `NVDA`는 미국으로. 거래소(NASDAQ/NYSE/AMEX)도 자동 판별. 국내+미국 통합 잔고를 원화 총계로 보여줍니다.
+- **사람에게도 친절**: Rich 테이블, 상승=빨강/하락=파랑 색상, 실시간 TUI 대시보드, shell 자동완성.
+- **699개 테스트 + CI**: Python 3.10–3.13 매트릭스, CodeQL 정적 분석.
 
-> 📖 **전체 문서는 [Wiki](https://github.com/gejyn14/kiwoom-cli/wiki)에서** — 설치 가이드, 명령어 레퍼런스, 미국주식·AI 에이전트·멀티 프로필 가이드, 릴리스 노트.
+> **전체 문서는 [Wiki](https://github.com/gejyn14/kiwoom-cli/wiki)에서**: 설치 가이드, 명령어 레퍼런스, 미국주식·AI 에이전트·멀티 프로필 가이드, 릴리스 노트.
 
 ## 최근 업데이트
 
-### v2.5 — 에이전트 네이티브: 정규화 데이터·NDJSON 스트리밍·녹화 (2026-07)
+### v2.5 에이전트 네이티브: 정규화 데이터·NDJSON 스트리밍·녹화 (2026-07)
 
 `-f json`의 `data`가 정규화된 타입 있는 필드로 바뀌고 원본은 `data.raw`로
-이동했습니다 (**기존 `-f json` 소비자에게는 breaking** — 기존 키는 `data.raw`
+이동했습니다 (**기존 `-f json` 소비자에게는 breaking**: 기존 키는 `data.raw`
 아래에 그대로 있습니다). 전역 `--fields` 투영, `kiwoom describe` 자기서술,
 NDJSON 스트리밍(`--max-events`/`--duration`/`--until` 종료조건),
 `--record` 녹화 + `history query/export`, [AGENTS.md](AGENTS.md) 기계 계약이
 추가됐습니다. 위 [AI-agent native](#ai-agent-native) 섹션 참고.
 
-### v2.1 — 비밀번호 프롬프트 완전 제거 (2026-07)
+### v2.1 비밀번호 프롬프트 완전 제거 (2026-07)
 
 앱 자체 암호화 계층을 걷어내고 모든 인증정보를 OS 키체인에 직접 저장합니다. `config setup`, `auth login` 어디서도 더 이상 비밀번호를 묻지 않습니다. 기존 사용자는 업그레이드 후 `kiwoom config setup` 한 번만 다시 실행하면 됩니다.
 
-### v2.0 — 미국주식 지원 (2026-07)
+### v2.0 미국주식 지원 (2026-07)
 
 미국주식 29개 엔드포인트를 기존 명령 체계에 그대로 통합했습니다. 티커만 입력하면 시장을 자동 판별하므로 미국 주문도 국내 주문과 똑같이 짧습니다. 소수점 가격, stop/stop-limit/vwap/twap 주문유형, 환전(`account exchange`), 국내+미국 통합 계좌 뷰를 지원합니다.
 
@@ -95,17 +95,17 @@ NDJSON 스트리밍(`--max-events`/`--duration`/`--until` 종료조건),
 
 ## 설치
 
-`kiwoom`은 라이브러리가 아니라 CLI 도구이므로 **격리된 환경에 설치**하는 편이 좋습니다 —
+`kiwoom`은 라이브러리가 아니라 CLI 도구이므로 **격리된 환경에 설치**하는 편이 좋습니다.
 전역 Python 환경을 건드리지 않아 다른 패키지와 의존성이 충돌하지 않습니다.
 
 ```bash
-# uv (권장) — https://docs.astral.sh/uv/
+# uv (권장) https://docs.astral.sh/uv/
 uv tool install kiwoom-cli
 
 # pipx
 pipx install kiwoom-cli
 
-# pip — 격리되지 않음
+# pip: 격리되지 않음
 pip install kiwoom-cli
 ```
 
@@ -193,7 +193,7 @@ export KIWOOM_PROFILE="isa"       # 선택
 export KIWOOM_TOKEN="..."         # 선택: 키체인 대신 사용할 접근토큰 (샌드박스/CI용)
 ```
 
-appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 반드시 `kiwoom config setup`으로 OS 키체인에 저장하세요. `KIWOOM_TOKEN`은 만료·폐기 가능한 접근토큰만 담는 통로로, 키체인에 접근할 수 없는 환경(샌드박스, CI, AI 에이전트)에서 사용합니다 — 설정 시 키체인 토큰보다 우선합니다.
+appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 반드시 `kiwoom config setup`으로 OS 키체인에 저장하세요. `KIWOOM_TOKEN`은 만료·폐기 가능한 접근토큰만 담는 통로로, 키체인에 접근할 수 없는 환경(샌드박스, CI, AI 에이전트)에서 사용합니다. 설정하면 키체인 토큰보다 우선합니다.
 
 ### 토큰 저장 방식 (keychain vs env)
 
@@ -232,11 +232,11 @@ kiwoom -p isa auth login
 kiwoom-cli는 AI 에이전트가 도구로 쓰는 것을 처음부터 염두에 두고 설계됐습니다.
 
 ```bash
-# 구조화된 JSON — 파싱이 필요 없는 출력
+# 구조화된 JSON: 파싱이 필요 없는 출력
 kiwoom -f json stock info 005930
 kiwoom -f json market rank volume | jq '.[].stk_nm'
 
-# 일관된 exit code — 0=성공, 1=입력오류, 2=API오류, 3=인증필요
+# 일관된 exit code: 0=성공, 1=입력오류, 2=API오류, 3=인증필요
 kiwoom stock price 005930 || echo "재시도 또는 재인증"
 
 # 주문은 기본 확인 게이트, 자동화 시에만 --confirm으로 명시적 스킵
@@ -249,10 +249,10 @@ kiwoom -f json order buy 005930 10 --price 70000 --type limit --confirm --client
 ```
 
 - 어떤 명령도 비밀번호·생체인증을 요구하지 않으므로 에이전트 세션이 중간에 멈추지 않습니다. json/csv 모드에서는 확인 프롬프트 대신 `CONFIRMATION_REQUIRED` 오류(exit 1)로 응답합니다.
-- 페이지네이션(연속조회)은 전역 `--all-pages`(끝까지 자동 수집·리스트 병합) 또는 `--next-key <값>`(특정 페이지부터 재조회)로 명시 제어합니다 — 커서를 직접 다루지 않아도 됩니다.
+- 페이지네이션(연속조회)은 전역 `--all-pages`(끝까지 자동 수집·리스트 병합) 또는 `--next-key <값>`(특정 페이지부터 재조회)로 명시 제어합니다. 커서를 직접 다루지 않아도 됩니다.
 - `kiwoom describe --paths -f json`으로 전체 명령 경로를 저비용에 훑어본 뒤, 필요한 명령만 `kiwoom describe <경로> -f json`으로 상세 스키마를 조회하세요.
-- 테이블 출력은 50행(차트는 30행)에서 잘리며, 잘린 경우 안내 문구가 표시됩니다 — 전체 데이터가 필요하면 `-f json` 또는 `-f csv`를 사용하세요.
-- `account`/`market`의 옵션 19개(`--side sell`, `--period 1h` 등)는 사람이 읽는 이름이 표준이며, 기존 숫자 코드(`--side 1`)도 계속 허용됩니다 (`stock` 등 나머지 명령의 숫자 옵션은 이번 티어의 범위 밖).
+- 테이블 출력은 50행(차트는 30행)에서 잘리며 잘린 경우 안내 문구가 표시됩니다. 전체 데이터가 필요하면 `-f json` 또는 `-f csv`를 사용하세요.
+- `account`/`market`의 옵션 19개(`--side sell`, `--period 1h` 등)는 사람이 읽는 이름이 표준이며 기존 숫자 코드(`--side 1`)도 계속 허용됩니다 (`stock` 등 나머지 명령의 숫자 옵션은 이번 티어의 범위 밖).
 - 자세한 패턴은 [Wiki: AI 에이전트 가이드](https://github.com/gejyn14/kiwoom-cli/wiki/AI-Agents) 참고.
 
 ### 명령어/API 찾기
@@ -265,10 +265,10 @@ kiwoom api list 주문        # 키워드로 필터
 
 ### 샌드박스 환경 (키체인 접근 불가)
 
-샌드박스 셸, CI, 컨테이너에서는 OS 키체인을 읽을 수 없습니다. 이때는 본인 터미널에서 토큰을 발급받아 `KIWOOM_TOKEN`으로 전달하세요 — appkey/secretkey는 키체인 밖으로 나가지 않고, 토큰은 만료·폐기 가능합니다.
+샌드박스 셸, CI, 컨테이너에서는 OS 키체인을 읽을 수 없습니다. 이때는 본인 터미널에서 토큰을 발급받아 `KIWOOM_TOKEN`으로 전달하세요. appkey/secretkey는 키체인 밖으로 나가지 않고 토큰은 만료·폐기 가능합니다.
 
 ```bash
-# 본인 터미널에서 (하루 1회 정도) — env 모드라면 login이 export 명령을 그대로 출력
+# 본인 터미널에서 (하루 1회 정도). env 모드라면 login이 export 명령을 그대로 출력
 kiwoom config set token_storage env
 kiwoom auth login
 export KIWOOM_TOKEN='...'   # login 출력의 export 라인을 복사해 실행
@@ -454,7 +454,7 @@ kiwoom account exchange rate                       # 환율
 kiwoom account exchange apply 1000000 --confirm    # 원화 → 달러 환전
 ```
 
-- 거래소(`--exchange nasdaq|nyse|amex`)는 자동 판별되며, 복수 상장 종목만 직접 지정이 필요합니다.
+- 거래소(`--exchange nasdaq|nyse|amex`)는 자동 판별되며 복수 상장 종목만 직접 지정이 필요합니다.
 - 미국 주문 유형: limit/market/vwap/twap/vwap-limit/twap-limit/loc (매수·매도), moc/stop/stop-limit (매도 전용).
 - 정정은 가격만 가능(전량), 취소는 전량 취소만 지원됩니다 (키움 API 제약).
 - 계좌 조회 명령(`balance/deposit/pnl/orders/history`)은 기본 통합 표시이며 `--market kr|us`로 필터링합니다.
@@ -465,7 +465,7 @@ kiwoom account exchange apply 1000000 --confirm    # 원화 → 달러 환전
 
 ## order - 주문
 
-주문은 실행 전 미리보기 + 대화형 확인이 기본입니다. 자동화 시에만 `--confirm`(별칭 `--yes`)으로 스킵하세요. `-f json`/`-f csv` 모드는 절대 프롬프트하지 않습니다 — `--confirm` 없이 실행하면 `CONFIRMATION_REQUIRED` 오류(exit 1)로 응답해 에이전트 세션이 멈추지 않습니다.
+주문은 실행 전 미리보기 + 대화형 확인이 기본입니다. 자동화 시에만 `--confirm`(별칭 `--yes`)으로 스킵하세요. `-f json`/`-f csv` 모드는 절대 프롬프트하지 않습니다. `--confirm` 없이 실행하면 `CONFIRMATION_REQUIRED` 오류(exit 1)로 응답해 에이전트 세션이 멈추지 않습니다.
 
 ```bash
 # 안전장치 (에이전트/자동화)
@@ -500,9 +500,9 @@ kiwoom order condition search 001 --confirm
 
 ### 주문 안전장치 (v2.4)
 
-- `--dry-run` — 실제 전송될 request body를 그대로 출력하고 아무것도 전송하지 않습니다. `--confirm`보다 우선합니다. 시장가 주문은 현재가를 조회해 예상비용(`est_cost`)을 계산합니다.
-- `--client-order-id KEY` — 멱등성 키. 같은 키로 재실행하면 재전송 없이 이전 응답을 반환합니다(`idempotent_replay: true`). 네트워크 단절·에이전트 재시도로 인한 중복 주문을 방지합니다. 원장: `~/.kiwoom/idempotency/<프로필>-<환경>.jsonl`
-- `order validate buy|sell CODE QTY` — read-only 사전점검. `symbol_ok` / `market_open`(KST 시계 휴리스틱, 공휴일 미감지) / `sufficient_balance` / `price_ok` / `price_known`(--price 미지정 시 현재가로 예상비용을 계산할 수 있었는지)를 점검하고, 실패 시 `VALIDATION_FAILED` + 실패 항목을 `error.details`에 담아 exit 1. 국내 주식 전용.
+- `--dry-run`: 실제 전송될 request body를 그대로 출력하고 아무것도 전송하지 않습니다. `--confirm`보다 우선합니다. 시장가 주문은 현재가를 조회해 예상비용(`est_cost`)을 계산합니다.
+- `--client-order-id KEY`: 멱등성 키. 같은 키로 재실행하면 재전송 없이 이전 응답을 반환합니다(`idempotent_replay: true`). 네트워크 단절·에이전트 재시도로 인한 중복 주문을 방지합니다. 원장: `~/.kiwoom/idempotency/<프로필>-<환경>.jsonl`
+- `order validate buy|sell CODE QTY`: read-only 사전점검. `symbol_ok` / `market_open`(KST 시계 휴리스틱, 공휴일 미감지) / `sufficient_balance` / `price_ok` / `price_known`(--price 미지정 시 현재가로 예상비용을 계산할 수 있었는지)를 점검하고 실패 시 `VALIDATION_FAILED` + 실패 항목을 `error.details`에 담아 exit 1. 국내 주식 전용.
 
 ---
 
@@ -594,19 +594,19 @@ kiwoom stream types                     # 타입 코드 목록
 ### 녹화와 조회 (Recording & history)
 
 모든 stream 명령에 `--record`를 붙이면 수신 이벤트를 NDJSON 파일로 저장한다
-(출력 형식과 무관 — 테이블을 보면서도 기록된다). 경로를 생략하면
-`~/.kiwoom/data/<심볼>_<날짜>.ndjson`에 심볼별로 쌓이고, 경로를 주면 한 파일에 모인다.
+(출력 형식과 무관하게, 테이블을 보면서도 기록된다). 경로를 생략하면
+`~/.kiwoom/data/<심볼>_<날짜>.ndjson`에 심볼별로 쌓이고 경로를 주면 한 파일에 모인다.
 저장된 데이터는 `history`로 다시 읽는다.
 
 ```bash
-# 1. 캡처 — 장중 30분간 체결 실시간을 녹화
+# 1. 캡처: 장중 30분간 체결 실시간을 녹화
 kiwoom stream quote 005930 --record --duration 30m
 
-# 2. 조회 — 시각 범위/타입으로 필터 (파일은 한 줄씩 스트리밍으로 읽음)
+# 2. 조회: 시각 범위/타입으로 필터 (파일은 한 줄씩 스트리밍으로 읽음)
 kiwoom history list                     # 녹화 파일 목록 (심볼·날짜·건수·시작/종료 ts)
 kiwoom history query 005930 --from 2026-07-16T10:00:00 --to 2026-07-16T10:30:00 --type 0B
 
-# 3. 내보내기 — sqlite/csv (parquet은 pandas+pyarrow 설치 시)
+# 3. 내보내기: sqlite/csv (parquet은 pandas+pyarrow 설치 시)
 kiwoom history export 005930 --dest sqlite --out samsung.sqlite
 kiwoom history export 005930 --dest csv --from 2026-07-16T09:00:00 --to 2026-07-16T15:30:00
 ```
@@ -621,12 +621,12 @@ sqlite 내보내기는 `events(ts, symbol, type, price, volume, raw_json)` 테�
 ```bash
 kiwoom dashboard                        # 계좌 요약 + 거래량 상위 한눈에
 
-kiwoom api ka10001 '{"stk_cd":"005930"}'        # Raw API — 테이블 출력
+kiwoom api ka10001 '{"stk_cd":"005930"}'        # Raw API: 테이블 출력
 kiwoom api ka10001 '{"stk_cd":"005930"}' --raw   # JSON 원본
 ```
 
 주문성 API(매수/매도/정정/취소/환전)를 raw로 호출할 때도 확인 게이트가
-적용됩니다 — table 모드는 미리보기 후 y/n 프롬프트, 자동화는 `--confirm`:
+적용됩니다. table 모드는 미리보기 후 y/n 프롬프트, 자동화는 `--confirm`:
 
 ```bash
 kiwoom api kt10000 '{"stk_cd":"005930","ord_qty":"1",...}' --confirm
@@ -655,11 +655,11 @@ kiwoom -f csv stock daily 005930 > samsung_daily.csv
 
 ### JSON 응답 envelope (v1)
 
-`-f json`의 모든 응답은 성공/실패 모두 하나의 안정적인 envelope로 감쌉니다 —
+`-f json`의 모든 응답은 성공/실패 모두 하나의 안정적인 envelope로 감쌉니다.
 이 envelope 구조 자체는 table/csv 모드에는 적용되지 않습니다. 단, 호가·체결가
 등 방향지시자 필드의 부호 제거·숫자 타입 변환(`kiwoom_cli/formatters.py`의
 `_ABS_FIELDS`/`_SIGNED_FIELDS`)은 `-f json`의 `data`뿐 아니라 **table** 렌더링에도
-동일하게 적용됩니다(`_needs_fmt`가 같은 필드 분류를 공유) — `-f csv`는
+동일하게 적용됩니다(`_needs_fmt`가 같은 필드 분류를 공유). `-f csv`는
 정규화·서식 변환 없이 원본 값을 그대로 쓰므로 영향이 없습니다.
 
 ```json
@@ -672,21 +672,21 @@ kiwoom -f csv stock daily 005930 > samsung_daily.csv
 }
 ```
 
-- `data` — 기존 응답 본문 그대로 (`return_code`/`return_msg`만 제거)
-- `meta.profile` / `meta.env` — 해석된 프로필과 도메인(`prod`/`mock`)
-- `meta.cont` — 연속조회 커서. 값이 있으면 다음 페이지가 존재: `kiwoom api <api_id> <body> --next-key <meta.cont.next_key>`
+- `data`: 기존 응답 본문 그대로 (`return_code`/`return_msg`만 제거)
+- `meta.profile` / `meta.env`: 해석된 프로필과 도메인(`prod`/`mock`)
+- `meta.cont`: 연속조회 커서. 값이 있으면 다음 페이지가 존재: `kiwoom api <api_id> <body> --next-key <meta.cont.next_key>`
 - 실패 시 `ok: false`, `data: null`이고 `error`에 안정적인 코드가 담깁니다:
 
 ```json
 { "code": "TOKEN_EXPIRED", "retryable": false, "message": "Token이 유효하지 않습니다", "upstream_code": 8005 }
 ```
 
-`error.code`는 키움 오류코드/HTTP 상태를 분류한 stable enum입니다 — 에이전트는 메시지 문자열 대신 이 코드로 분기하세요:
+`error.code`는 키움 오류코드/HTTP 상태를 분류한 stable enum입니다. 에이전트는 메시지 문자열 대신 이 코드로 분기하세요:
 
 | code | retryable | 의미 (upstream) |
 | --- | :---: | --- |
 | `INVALID_INPUT` | X | 입력 값/필수 파라미터 오류 (2, 1511, 1512, 1517) |
-| `VALIDATION_FAILED` | X | `order validate` 사전점검 실패 — 실패 항목은 `error.details` (exit 1) |
+| `VALIDATION_FAILED` | X | `order validate` 사전점검 실패. 실패 항목은 `error.details` (exit 1) |
 | `CONFIRMATION_REQUIRED` | X | 변이 명령에 `--confirm`/`--yes` 없이 json/csv 모드로 실행 (exit 1) |
 | `INVALID_API` | X | 잘못된 API ID (1501, 1504, 1505) |
 | `NOT_FOUND` | X | 시장/종목 정보 없음 (1901, 1902) |
@@ -703,13 +703,13 @@ kiwoom -f csv stock daily 005930 > samsung_daily.csv
 | `KEYCHAIN_UNAVAILABLE` | X | OS 키체인 접근 불가 (샌드박스/CI) |
 | `NOT_CONFIGURED` | X | `config setup` 미실행 (CLI 로컬 감지) |
 | `DEPENDENCY_MISSING` | X | 선택적 패키지 미설치 (예: `websockets` 없이 `stream`) |
-| `IDEMPOTENCY_CONFLICT` | X | 같은 `--client-order-id`가 다른 주문 내용으로 이미 사용됨 — 전송되지 않음 (exit 1) |
-| `LEDGER_BUSY` | O | 멱등성 원장 잠금 경합 — 재시도 (exit 2) |
-| `ORDER_STATUS_UNKNOWN` | X | 이전 시도가 전송 후 응답을 받지 못함 — 재전송하지 않음, `account orders pending`으로 확인 (exit 2) |
+| `IDEMPOTENCY_CONFLICT` | X | 같은 `--client-order-id`가 다른 주문 내용으로 이미 사용됨. 전송되지 않음 (exit 1) |
+| `LEDGER_BUSY` | O | 멱등성 원장 잠금 경합. 재시도 (exit 2) |
+| `ORDER_STATUS_UNKNOWN` | X | 이전 시도가 전송 후 응답을 받지 못함. 재전송하지 않음, `account orders pending`으로 확인 (exit 2) |
 | `QUOTE_UNAVAILABLE` | X | `--dry-run` 시장가 예상비용 계산용 시세를 숫자로 해석할 수 없음 (exit 2) |
 | `UPSTREAM_ERROR` | 5xx·1999는 O | 미분류 업스트림 오류 (기본값) |
 
-CLI 수준의 인자/옵션 오류(잘못된 값, 인자 누락 등)도 json 모드에서는 `INVALID_INPUT` envelope로 출력됩니다 (`upstream_code: null`, exit 1). `kiwoom api --raw`는 json 모드에서도 envelope로 감싸되 `data`에 응답 원본을 그대로(`return_code` 포함) 담습니다. `auth login`은 json 모드에서 `{profile, token_storage, saved, token}`을 반환하며, `token` 원문은 env 모드에서만 포함됩니다.
+CLI 수준의 인자/옵션 오류(잘못된 값, 인자 누락 등)도 json 모드에서는 `INVALID_INPUT` envelope로 출력됩니다 (`upstream_code: null`, exit 1). `kiwoom api --raw`는 json 모드에서도 envelope로 감싸되 `data`에 응답 원본을 그대로(`return_code` 포함) 담습니다. `auth login`은 json 모드에서 `{profile, token_storage, saved, token}`을 반환하며 `token` 원문은 env 모드에서만 포함됩니다.
 
 exit code 계약은 그대로입니다 (0=성공, 1=입력오류, 2=API오류, 3=인증필요).
 
@@ -737,7 +737,7 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 
 ## 보안
 
-모든 인증정보(appkey, secretkey, 토큰)는 **OS 키체인**(macOS Keychain / Windows Credential Manager / Linux Secret Service)에 저장됩니다. 파일로 존재하지 않으며, 키체인이 디스크 저장 시 암호화를 담당합니다. `gh`, `aws`, `docker` CLI와 동일한 모델입니다.
+모든 인증정보(appkey, secretkey, 토큰)는 **OS 키체인**(macOS Keychain / Windows Credential Manager / Linux Secret Service)에 저장됩니다. 파일로 존재하지 않으며 키체인이 디스크 저장 시 암호화를 담당합니다. `gh`, `aws`, `docker` CLI와 동일한 모델입니다.
 
 | 항목               | 저장 방식                                  | 프롬프트 |
 | ------------------ | ------------------------------------------ | :------: |
@@ -746,13 +746,13 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 | config.toml        | 도메인, 계좌번호, 토큰 저장 방식만         |    X     |
 
 - 모든 명령어는 비밀번호/생체인증 프롬프트 없이 동작 (AI 에이전트·자동화 친화적)
-- 앱 자체 암호화 계층은 의도적으로 두지 않음 — 추가 계층은 명령마다 잠금 해제 프롬프트를 요구하게 되어 CLI 사용성을 해침
+- 앱 자체 암호화 계층은 의도적으로 두지 않음. 추가 계층은 명령마다 잠금 해제 프롬프트를 요구하게 되어 CLI 사용성을 해침
 - v2.0 이하에서 업그레이드한 경우: 암호화 저장소 형식이 제거되어 `kiwoom config setup`을 한 번 다시 실행해야 합니다
 - 주문은 기본적으로 미리보기 + 대화형 확인을 거칩니다 (`--confirm`으로 스킵)
-- `~/.kiwoom` 디렉토리는 0700, `config.toml`·주문 원장·레코딩 파일은 0600으로 생성됩니다 — 기존 설치본도 아무 명령 실행 시 자동으로 조여집니다 (`--record`로 명시한 경로는 제외)
-- 프로필 이름은 `[A-Za-z0-9_-]{1,64}` allowlist로 제한됩니다 — 원장 파일명·키링 키로의 경로 조작을 차단합니다
+- `~/.kiwoom` 디렉토리는 0700, `config.toml`·주문 원장·레코딩 파일은 0600으로 생성됩니다. 기존 설치본도 아무 명령 실행 시 자동으로 조여집니다 (`--record`로 명시한 경로는 제외)
+- 프로필 이름은 `[A-Za-z0-9_-]{1,64}` allowlist로 제한됩니다. 원장 파일명·키링 키로의 경로 조작을 차단합니다
 - raw `kiwoom api`로 주문성 API(17개)를 직접 호출하면 확인 게이트가 적용됩니다: table 모드는 body 미리보기 + y/n 프롬프트, json/csv 모드는 `--confirm` 없이 `CONFIRMATION_REQUIRED`(exit 1)
-- PyPI 배포는 Trusted Publishing(OIDC)으로 이루어집니다 — 장기 API 토큰을 저장하지 않습니다
+- PyPI 배포는 Trusted Publishing(OIDC)으로 이루어집니다. 장기 API 토큰을 저장하지 않습니다
 
 자세한 내용: [Wiki: 보안 모델](https://github.com/gejyn14/kiwoom-cli/wiki/Security) · [SECURITY.md](SECURITY.md)
 
@@ -774,12 +774,12 @@ eval (env _KIWOOM_COMPLETE=fish_source kiwoom)
 - 종목코드 6자리: `005930` (삼성전자)
 - 금현물: `M04020000` (1kg), `M04020100` (미니 100g)
 
-## License
+## 라이선스
 
-kiwoom-cli **Source-Available License, Version 1.0** — see [LICENSE](LICENSE).
+kiwoom-cli는 **Source-Available License, Version 1.0**을 따릅니다. 자세한 내용은 [LICENSE](LICENSE)를 참고하세요.
 
-- **Individuals** (natural persons, on their own behalf): free to use, modify, and distribute for any purpose, including profit (e.g. trading your own account). Attribution only; no source-disclosure obligation.
-- **Organizations, unmodified use for profit**: require a commercial license.
-- **Organizations, modified use for profit**: either buy a commercial license (source may stay closed) or publish your entire codebase under this same license — and in both cases deliver the full modified source to the Licensor.
+- **개인** (자연인 본인 명의로 사용): 영리 목적(예: 본인 계좌로 매매)을 포함해 어떤 용도로든 자유롭게 사용·수정·배포할 수 있습니다. 저작권 표시 의무만 있고 소스 공개 의무는 없습니다.
+- **기관, 무수정 영리 사용**: 상업 라이선스가 필요합니다.
+- **기관, 수정 후 영리 사용**: 상업 라이선스를 구매(이 경우 소스는 비공개 유지 가능)하거나 전체 코드베이스를 이 라이선스로 공개해야 합니다. 두 경우 모두 수정된 전체 소스를 라이선서에게 전달해야 합니다.
 
-Versions released before v2.0 remain available under the MIT License. For commercial licensing, contact ge.jyn14@gmail.com — see [COMMERCIAL.md](COMMERCIAL.md).
+v2.0 이전 릴리스는 계속 MIT 라이선스로 제공됩니다. 상업 라이선스는 ge.jyn14@gmail.com으로 문의하세요. 자세한 내용은 [COMMERCIAL.md](COMMERCIAL.md)를 참고하세요.
