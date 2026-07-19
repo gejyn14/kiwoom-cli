@@ -105,8 +105,11 @@ def build_meta() -> dict[str, Any]:
 def project_fields(data: Any, fields: list[str]) -> Any:
     """--fields 투영: 요청된 키만 유지, raw 제거.
 
-    list/dict 컨테이너는 유지하되 내부 요소를 같은 필드 목록으로 투영한다
-    (리스트 응답에서 --fields symbol,price 가 동작하도록).
+    키 자체가 fields에 있으면 값이 dict/list여도 통째로 선택된다
+    (예: --fields body가 dry-run의 body 전체를 반환).
+    그렇지 않은 dict/list 컨테이너는 내부 요소를 같은 필드 목록으로 투영한다
+    (리스트 응답에서 --fields symbol,price 가 동작하도록); 투영 결과가
+    전부 비어 있으면 그 키는 통째로 버려진다.
     """
     if isinstance(data, list):
         return [project_fields(x, fields) if isinstance(x, (dict, list)) else x for x in data]
@@ -116,14 +119,17 @@ def project_fields(data: Any, fields: list[str]) -> Any:
     for k, v in data.items():
         if k == "raw":
             continue
+        if k in fields:
+            out[k] = v
+            continue
         if isinstance(v, list):
-            out[k] = [project_fields(x, fields) if isinstance(x, dict) else x for x in v]
+            projected = [project_fields(i, fields) if isinstance(i, dict) else i for i in v]
+            if any(projected):
+                out[k] = projected
         elif isinstance(v, dict):
             sub = project_fields(v, fields)
             if sub:
                 out[k] = sub
-        elif k in fields:
-            out[k] = v
     return out
 
 

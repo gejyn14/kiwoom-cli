@@ -107,6 +107,21 @@ def test_http_401_envelope_token_expired_exit_3(runner, monkeypatch):
     assert doc["error"]["upstream_code"] == 401
 
 
+# ── project_fields: dict/list 값 키 선택 (Task 18) ─────
+
+
+def test_project_fields_selects_dict_valued_key():
+    """--fields body 처럼, 값이 dict인 키를 이름으로 통째로 선택할 수 있어야 한다.
+
+    dry-run(body)/validate(checks)가 실제로 겪는 버그: 값이 dict/list인 키는
+    isinstance(v, dict)/isinstance(v, list) 분기로 먼저 빠져 `k in fields`가
+    평가되지 않았다."""
+    from kiwoom_cli.envelope import project_fields
+
+    data = {"a": 1, "body": {"x": 1}, "rows": [{"p": 1}]}
+    assert project_fields(data, ["body"]) == {"body": {"x": 1}}
+
+
 # ── classify ──────────────────────────────────────────
 
 
