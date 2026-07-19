@@ -1197,7 +1197,7 @@ def etf_daily(code):
 @click.option("--taxable", "txon_yn", type=HumanChoice(ETF_ALL_TAXABLE), default="all",
               help="과세여부 (all,taxable,tax-free)")
 @click.option("--index", "trace_idex", default="0", help="추적지수 (0=전체)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def etf_all(txon_type, navpre, mngmcomp, txon_yn, trace_idex, stex_tp):
     """ETF 전체 시세. (ka40004)"""
 
@@ -1205,7 +1205,7 @@ def etf_all(txon_type, navpre, mngmcomp, txon_yn, trace_idex, stex_tp):
         data, _ = c.request("ka40004", {
             "txon_type": txon_type, "navpre": navpre,
             "mngmcomp": mngmcomp, "txon_yn": txon_yn,
-            "trace_idex": trace_idex, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "trace_idex": trace_idex, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "ETF전체시세")
 
