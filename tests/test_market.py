@@ -748,3 +748,95 @@ def test_rank_vol_type_no_longer_sends_bare_zero(runner, fake_client, command):
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["trde_qty_tp"] != "0"
+
+
+# ── Task 31a-fix: 형제 API 이름 거부(상위집합 오염 방지) ────────────
+#
+#  stk_cnd / sort_tp / 가격조건 코드북은 API마다 사다리가 다르다. 어떤
+#  API의 상수를 형제 상수(특히 상위집합)로 바꿔치기해도 "정상 값이 맞게
+#  나간다"는 테스트는 전부 통과한다. 그 API에 없는 이름이 거부되는지까지
+#  봐야 잡힌다. 아래 이름들은 형제 API에는 있고 이 API에는 없는 값이다.
+#  값 목록 출처: docs/미국 REST API 문서.xlsx 의 각 api_id 시트.
+
+
+@pytest.mark.parametrize("command,absent", [
+    # ka10016 stk_cnd = 0,1,3,5,6,7,8
+    ("new-highlow", "exclude-managed-preferred"),          # 4: ka10017/ka10023
+    ("new-highlow", "only-margin-20"),                     # 9: ka10017/20/21/22/23
+    ("new-highlow", "exclude-etf"),                        # 14: ka10023
+    # ka10017 stk_cnd = 0,1,3,4,5,6,7,8,9,10
+    ("limit", "exclude-liquidation"),                      # 11: ka10023
+    ("limit", "only-margin-50"),                           # 12: ka10023
+    ("limit", "exclude-etf-etn-spac"),                     # 20: ka10023
+    # ka10018 stk_cnd = 0,1,3,5,6,7,8
+    ("near-highlow", "exclude-managed-preferred"),         # 4
+    ("near-highlow", "only-margin-20"),                    # 9
+    # ka10019 stk_cnd = 0,1,3,5,6,7,8
+    ("surge", "exclude-managed-preferred"),                # 4
+    ("surge", "only-margin-20"),                           # 9
+    # ka10020 stk_cnd = 0,1,5,6,7,8,9 — 우선주제외(3)가 없다
+    ("orderbook-top", "exclude-preferred"),                # 3: ka10016/17/18/19/23
+    ("orderbook-top", "exclude-managed-preferred"),        # 4
+    # ka10021 stk_cnd = ka10020과 동일
+    ("orderbook-surge", "exclude-preferred"),              # 3
+    ("orderbook-surge", "exclude-managed-preferred"),      # 4
+    # ka10022 stk_cnd = ka10020과 동일
+    ("balance-rate-surge", "exclude-preferred"),           # 3
+    ("balance-rate-surge", "exclude-managed-preferred"),   # 4
+    # ka10023 stk_cnd = 17개 사다리지만 10(우선주+관리+환기제외)은 없다
+    ("volume-surge", "exclude-managed-preferred-alert"),   # 10: ka10017 전용
+])
+def test_rank_stk_cnd_rejects_name_absent_from_that_api(
+    runner, fake_client, command, absent
+):
+    result = runner.invoke(cli, ["market", "rank", command, "--stk-cnd", absent])
+
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("command,absent", [
+    # ka10017 sort_tp = 종목코드순/연속횟수순/등락률순
+    ("limit", "spike-quantity"),        # ka10021/ka10023
+    ("limit", "net-buy-balance"),       # ka10020
+    # ka10020 sort_tp = 순매수잔량/순매도잔량/매수비율/매도비율
+    ("orderbook-top", "spike-quantity"),
+    ("orderbook-top", "drop-rate"),     # ka10023
+    ("orderbook-top", "code"),          # ka10017
+    # ka10021 sort_tp = 급증량/급증률 뿐 — 급감 계열이 없다
+    ("orderbook-surge", "drop-quantity"),   # ka10023
+    ("orderbook-surge", "drop-rate"),       # ka10023
+    ("orderbook-surge", "net-buy-balance"),
+    # ka10023 sort_tp = 급증량/급증률/급감량/급감률
+    ("volume-surge", "code"),
+    ("volume-surge", "net-buy-balance"),
+])
+def test_rank_sort_tp_rejects_name_absent_from_that_api(
+    runner, fake_client, command, absent
+):
+    result = runner.invoke(cli, ["market", "rank", command, "--sort", absent])
+
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("command,option,absent", [
+    # ka10017 trde_gold_tp / ka10019 pric_cnd = 구간형(1천원미만~1만원이상)
+    ("limit", "--trade-gold", "over-50k"),      # ka10023 pric_tp
+    ("limit", "--trade-gold", "over-5k"),       # ka10023 pric_tp
+    ("limit", "--trade-gold", "over-100k"),     # ka10023 pric_tp
+    ("surge", "--price-cnd", "over-50k"),
+    ("surge", "--price-cnd", "over-5k"),
+    ("surge", "--price-cnd", "over-100k"),
+    # ka10023 pric_tp = 하한형(5천원이상/1만원이상/...) — 구간형이 없다
+    ("volume-surge", "--price-type", "under-1k"),
+    ("volume-surge", "--price-type", "1k-2k"),
+    ("volume-surge", "--price-type", "5k-10k"),
+])
+def test_rank_price_cnd_rejects_name_absent_from_that_api(
+    runner, fake_client, command, option, absent
+):
+    result = runner.invoke(cli, ["market", "rank", command, option, absent])
+
+    assert result.exit_code != 0
+    assert fake_client.calls == []
