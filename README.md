@@ -485,7 +485,7 @@ kiwoom order credit buy 005930 10 --type market --confirm
 kiwoom order credit sell 005930 10 --type market --confirm
 
 # 금현물
-kiwoom order gold buy M04020000 1 --type market --confirm
+kiwoom order gold buy M04020000 1 --price 145000 --confirm  # 금현물은 시장가가 없어 지정가만 가능
 kiwoom order gold balance             # 잔고
 kiwoom order gold pending             # 미체결
 
