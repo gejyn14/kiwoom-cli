@@ -13,7 +13,6 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from kiwoom_cli.commands._constants import MARKET_ALL
 from kiwoom_cli.main import cli
 from tests.fakes import FakeKiwoomClient
 
@@ -290,11 +289,19 @@ def test_credit_available_code_and_grade_options(runner, fake_client):
 # ============================================================
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(MARKET_ALL.items()))
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("all", "000"), ("kospi", "001"), ("kosdaq", "101")],
+)
 def test_analysis_volume_renewal_market_enum(
     runner, fake_client, cli_value, api_value
 ):
-    """Each MARKET_ALL key maps to correct API value in mrkt_tp field."""
+    """Each MARKET_ALL key maps to correct API value in mrkt_tp field.
+
+    하드코딩 리터럴로 고정한다 — list(MARKET_ALL.items())로 파라미터화하면
+    MARKET_ALL 자체의 극성이 뒤집혀도(all<->kospi 값 스왑 등) 테스트가
+    같이 뒤집혀 계속 통과하는 자기참조 함정에 빠진다(Task 34a가 경계하는
+    안티패턴 그 자체)."""
     result = runner.invoke(
         cli,
         ["stock", "analysis", "volume-renewal", "--market", cli_value],
@@ -647,13 +654,9 @@ def test_trader_analysis_broker_required_no_request_sent(runner, fake_client):
 
 
 def test_trader_analysis_days_5_sends_5_not_4(runner, fake_client):
-    """--days 5는 dt="5"를 보내야 한다 (ka10038의 off-by-one 코드북과 달리 5일=5).
-
-    Task 34a: --days(dt)는 I2 규칙(값→라벨이 단위접미사 부착만으로 유도되는
-    폐쇄집합은 수량 유지) 재적용으로 HumanChoice를 걷어내고 raw 텍스트로
-    되돌렸다 — market.py:503(ka10042, 동일 필드·동일 패턴)과 일관되게 맞춘
-    것이다. "5d" 같은 human 이름은 더 이상 받지 않는다(아래
-    test_trader_analysis_days_human_name_no_longer_accepted 참고)."""
+    """--days 5(raw 스펙 코드)는 dt="5"를 보내야 한다 (ka10038의 off-by-one
+    코드북과 달리 5일=5). HumanChoice는 raw API 코드를 하위호환으로 그대로
+    통과시키므로 이 경로는 영향받지 않는다."""
     result = runner.invoke(cli, [
         "stock", "analysis", "trader-analysis", "005930",
         "--from", "20260101", "--to", "20260107", "--broker", "001",
@@ -702,7 +705,8 @@ def test_trader_analysis_sort_close_human_name(runner, fake_client):
 
 
 def test_trader_analysis_days_default_unchanged(runner, fake_client):
-    """--days 기본 호출은 변경 전과 동일하게 dt="20"을 보내야 한다(전송 바이트 불변)."""
+    """--days 기본 호출은 v2.11.0과 동일하게 dt="20"을 보내야 한다(전송 바이트
+    불변, default="20d" -> "20")."""
     result = runner.invoke(cli, [
         "stock", "analysis", "trader-analysis", "005930",
         "--from", "20260101", "--to", "20260107", "--broker", "001",
@@ -712,10 +716,12 @@ def test_trader_analysis_days_default_unchanged(runner, fake_client):
     assert fake_client.calls[0][1]["dt"] == "20"
 
 
-def test_trader_analysis_days_human_name_no_longer_mapped(runner, fake_client):
-    """--days(dt)는 Task 34a에서 raw 텍스트로 되돌아갔다 — "5d" 같은 human 이름은
-    이제 매핑되지 않고 그대로(미변환) 전송된다(ka10042와 동일한 자기서술적
-    수량 취급, I2 규칙)."""
+def test_trader_analysis_days_human_name_maps_to_code(runner, fake_client):
+    """--days(dt)는 v2.11.0에 배포된 HumanChoice로 복원됐다 — "5d" 같은 human
+    이름이 dt="5"로 매핑되어 전송된다(TRADER_ANALYSIS_PERIOD_5_120, market.py의
+    ka10042 --period와 공유). Task 34a가 I2 규칙 재적용으로 raw 텍스트로
+    되돌렸던 것은 이미 배포된 검증을 걷어내는 조용한 회귀였다 — 리뷰에서
+    다시 원복했다."""
     result = runner.invoke(cli, [
         "stock", "analysis", "trader-analysis", "005930",
         "--from", "20260101", "--to", "20260107", "--broker", "001",
@@ -723,7 +729,21 @@ def test_trader_analysis_days_human_name_no_longer_mapped(runner, fake_client):
     ])
 
     assert result.exit_code == 0
-    assert fake_client.calls[0][1]["dt"] == "5d"
+    assert fake_client.calls[0][1]["dt"] == "5"
+
+
+def test_trader_analysis_days_rejects_spec_outside_value(runner, fake_client):
+    """스펙(5/10/20/40/60/120) 밖의 --days 값은 exit 1이고 요청이 나가지
+    않아야 한다 — raw 텍스트로 되돌아갔던 동안(현재 HEAD 이전)에는 "999"가
+    검증 없이 그대로 전송되며 exit 0을 반환했다(조용한 실패)."""
+    result = runner.invoke(cli, [
+        "stock", "analysis", "trader-analysis", "005930",
+        "--from", "20260101", "--to", "20260107", "--broker", "001",
+        "--days", "999",
+    ])
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
 
 
 # ============================================================
@@ -928,12 +948,33 @@ def test_open_change_include_limit_enum(runner, fake_client, cli_value, api_valu
     assert fake_client.calls[0][1]["updown_incls"] == api_value
 
 
-def test_open_change_stock_cond_rejects_sibling_only_value(runner, fake_client):
-    """OPEN_CHANGE_STK_CND(9개 값)는 RANK_CHANGE_STK_CND(ka10027,
-    15개 값)의 진짜 부분집합이다 — "exclude-liquidation"은 저쪽에만 있으므로
-    여기서는 거부돼야 한다."""
+@pytest.mark.parametrize(
+    "absent",
+    [
+        "exclude-managed-preferred-alert",  # LIMIT_MOVE_STK_CND(ka10017) 전용
+        "exclude-liquidation",   # RANK_CHANGE/EXPECTED_CHANGE/VOLUME_SURGE/AFTERHOURS_CHANGE 전용
+        "only-margin-50",        # RANK_CHANGE/EXPECTED_CHANGE/VOLUME_SURGE/AFTERHOURS_CHANGE 전용
+        "only-margin-60",        # RANK_CHANGE/EXPECTED_CHANGE/VOLUME_SURGE/AFTERHOURS_CHANGE 전용
+        "exclude-etf",           # RANK_CHANGE/EXPECTED_CHANGE/VOLUME_SURGE/AFTERHOURS_CHANGE 전용
+        "exclude-spac",          # RANK_CHANGE/EXPECTED_CHANGE/VOLUME_SURGE/AFTERHOURS_CHANGE 전용
+        "exclude-etf-etn",       # RANK_CHANGE/EXPECTED_CHANGE/VOLUME_SURGE/AFTERHOURS_CHANGE 전용
+        "exclude-etn",           # VOLUME_SURGE/AFTERHOURS_CHANGE 전용
+        "exclude-etf-etn-spac",  # VOLUME_SURGE 전용
+    ],
+)
+def test_open_change_stock_cond_rejects_sibling_only_value(runner, fake_client, absent):
+    """OPEN_CHANGE_STK_CND(9개 값)는 LIMIT_MOVE_STK_CND(ka10017)/
+    RANK_CHANGE_STK_CND(ka10027)/EXPECTED_CHANGE_STK_CND(ka10029)/
+    VOLUME_SURGE_STK_CND(ka10023)/AFTERHOURS_CHANGE_STK_CND(ka10098)
+    5개 전부의 진짜 부분집합이다(superset-closure 스크립트로 확인) —
+    이 5개 형제 상수가 OPEN_CHANGE_STK_CND에 없이 추가로 갖는 키의
+    합집합을 파라미터화했다. 형제 상수 하나로만 검증하면(예:
+    exclude-liquidation만) 다른 형제로의 오치환(예: OPEN_CHANGE_STK_CND
+    -> LIMIT_MOVE_STK_CND, 유일한 초과 키는
+    exclude-managed-preferred-alert)을 놓친다 — 실제로 그 치환은 suite를
+    통과시킨 채 stk_cnd="10"(ka10028엔 미정의)을 전송했다."""
     result = runner.invoke(
-        cli, ["stock", "analysis", "open-change", "--stock-cond", "exclude-liquidation"]
+        cli, ["stock", "analysis", "open-change", "--stock-cond", absent]
     )
 
     assert result.exit_code == 1
@@ -1414,6 +1455,26 @@ def test_daily_by_investor_type_default_unchanged(runner, fake_client):
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["invsr_tp"] == "9000"
+
+
+def test_daily_by_investor_type_rejects_name_absent_from_ka10058(runner, fake_client):
+    """"foreign-broker"는 market.py의 INVESTOR_TOP_ORGN(ka10065)에만 있고
+    DAILY_BY_INVESTOR_TYPE(ka10058)엔 없다. 두 상수는 10개 키의 값이
+    character-for-character 동일하지만(individual/private-fund는 ka10058
+    전용, foreign-broker는 ka10065 전용) 어느 쪽도 다른 쪽의 진짜
+    부분집합이 아니다 — superset-closure 스크립트의 부분집합 predicate가
+    양방향 모두 이 쌍에서 fire하지 않는다(부분 겹침, 해저드 3유형).
+    값 겹침에만 의존한 병합 리팩터는 이 테스트로만 잡힌다."""
+    result = runner.invoke(
+        cli,
+        [
+            "stock", "investor", "daily-by-investor",
+            "--from", "20260101", "--to", "20260107", "--investor-type", "foreign-broker",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
 
 
 # ── investor by-stock (ka10059) / by-stock-total (ka10061) ──

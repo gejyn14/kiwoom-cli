@@ -388,21 +388,26 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
         for path, p in _iter_options(root_cli)
         if isinstance(p.type, _constants.HumanChoice)
     ]
-    # 200 = 170(Task 33까지의 누적치, 아래 옛 주석 참고) + Task 34a(stock
+    # 202 = 170(Task 33까지의 누적치, 아래 옛 주석 참고) + Task 34a(stock
     # daily-price~by-stock-total, ka10086/84/55/24(제외)/25/28/43/52/54/11/
-    # 44/45/58/59/61)의 순증 30 = 신규 전환 31 - trader-analysis --days
-    # 1건(반환, I2 규칙 재적용) = daily-price 1[indc_tp] + today-exec
-    # 2[tdy_pred/tic_min] + today-volume 1[tdy_pred] + price-cluster
-    # 1[cur_prc_entry] + open-change 7[sort_tp/trde_qty_cnd/updown_incls/
-    # stk_cnd/crd_cnd/trde_prica_cnd/flu_cnd] + instant-volume
+    # 44/45/58/59/61)의 순증 31 + Task 34a 리뷰(trader-analysis --days
+    # 원복 + net-buyer --period 전환)의 순증 1 = daily-price 1[indc_tp] +
+    # today-exec 2[tdy_pred/tic_min] + today-volume 1[tdy_pred] +
+    # price-cluster 1[cur_prc_entry] + open-change 7[sort_tp/trde_qty_cnd/
+    # updown_incls/stk_cnd/crd_cnd/trde_prica_cnd/flu_cnd] + instant-volume
     # 2[mrkt_tp/pric_tp] + vi-trigger 5[bf_mkrt_tp/motn_tp/trde_qty_tp/
     # trde_prica_tp/motn_drc] + warrant 1[newstk_recvrht_tp] + daily-trade
     # 1[trde_tp] + stock-institution 2[orgn_prsm_unp_tp/for_prsm_unp_tp] +
     # daily-by-investor 2[trde_tp/invsr_tp] + by-stock 3[amt_qty_tp/trde_tp/
-    # unit_tp] + by-stock-total 3[amt_qty_tp/trde_tp/unit_tp] = 31, minus
-    # trader-analysis의 --days(dt) 1건 = 30. credit available/trader-analysis
-    # (--days 제외)/intraday/after-close/consecutive는 Task 34a 이전에 이미
-    # HumanChoice였다(선행 fix 커밋들) — 이 델타에 포함되지 않는다.
+    # unit_tp] + by-stock-total 3[amt_qty_tp/trde_tp/unit_tp] +
+    # trader-analysis 1[dt] = 32, minus trader-analysis --days가 이번 태스크
+    # 안에서 한 차례 raw로 되돌아갔다가(I2 규칙 재적용, -1) 리뷰에서 다시
+    # HumanChoice로 원복됐으므로(+1) net 변화는 0 = 31. 여기에 리뷰가
+    # net-buyer(ka10042) --period(dt)를 TRADER_ANALYSIS_PERIOD_5_120 공유로
+    # 새로 전환한 +1을 더해 32. credit available/trader-analysis(--pot·
+    # --sort·--date-type)/intraday/after-close/consecutive는 Task 34a
+    # 이전에 이미 HumanChoice였다(선행 fix 커밋들) — 이 델타에 포함되지
+    # 않는다.
     # volume-renewal의 --volume-type(trde_qty_tp)은 기본값 "0"이 스펙 8개
     # 값(5/10/50/100/200/300/500/1000) 어디에도 없는 결함이라 Task 31a의
     # 동일 패턴과 같은 이유로 이번에도 raw 텍스트로 남겼다(전환 안 함).
@@ -445,7 +450,7 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # 28 = ka10027 7 + ka10029 5 + ka10031 1 + ka10033 4 + ka10034 2 +
     # ka10035 2 + ka10036 1 + ka10037 3 + ka10039 3.
     # 이 수는 트리 순회로 재도출한 값이지 델타 추정이 아니다.
-    assert len(converted) == 200
+    assert len(converted) == 202
     # 금현물 주문 두 건은 이름으로도 못 박아 둔다. 개수만 맞추면 다른 곳이
     # 늘고 여기가 빠져도 통과하기 때문이다.
     assert ("cli order gold buy", "order_type") in converted
@@ -466,7 +471,14 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # 맞추면 이 커플링이 깨져도(예: ka10042가 별도 raw 텍스트로 되돌아가도)
     # 통과하기 때문이다.
     assert ("cli market rank net-buyer", "sort_base") in converted
-    assert ("cli market rank net-buyer", "dt") not in converted
+    # Task 34a 리뷰: net-buyer(ka10042) --period(dt)는 stock.py의
+    # trader-analysis(ka10043) --days(dt)와 TRADER_ANALYSIS_PERIOD_5_120을
+    # 공유하도록 함께 전환됐다 — v2.11.0에서 trader-analysis --days만
+    # HumanChoice였던 비대칭을 net-buyer 쪽을 끌어올려 해소했다(반대 방향,
+    # raw로 되돌리는 쪽은 검증을 걷어내는 조용한 회귀라 기각). 개수만
+    # 맞추면 이 커플링이 깨져도 통과하므로 양쪽 다 이름으로 못 박는다.
+    assert ("cli market rank net-buyer", "dt") in converted
+    assert ("cli stock analysis trader-analysis", "dt") in converted
     assert ("cli market rank same-net-trade", "trde_tp") in converted
     assert ("cli market rank investor-top", "orgn_tp") in converted
     assert ("cli market rank afterhours-change", "trde_prica") in converted

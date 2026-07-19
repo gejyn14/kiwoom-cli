@@ -115,6 +115,7 @@ from ._constants import (
     THEME_LOOKUP_KIND,
     THEME_LOOKUP_SORT,
     TRADER_ANALYSIS_DATE_MODE,
+    TRADER_ANALYSIS_PERIOD_5_120,
     TRADER_ANALYSIS_POSITION,
     TRADER_ANALYSIS_SORT,
     VOLUME_RANK_AMOUNT_TYPE,
@@ -729,7 +730,8 @@ def rank_major_trader(code):
               help="조회기간구분 (period=기간으로 조회, start-end=시작일자·종료일자로 조회)")
 @click.option("--pot-type", "pot_tp", type=HumanChoice(TRADER_ANALYSIS_POSITION), default="today",
               help="시점구분 (today=당일, previous=전일)")
-@click.option("--period", "dt", default="5", help="기간 (5,10,20,40,60,120)")
+@click.option("--period", "dt", type=HumanChoice(TRADER_ANALYSIS_PERIOD_5_120), default="5d",
+              help="기간 (5d/10d/20d/40d/60d/120d)")
 @click.option("--sort", "sort_base", type=HumanChoice(TRADER_ANALYSIS_SORT), default="close",
               help="정렬기준 (close=종가순, date=날짜순)")
 def rank_net_buyer(code, strt_dt, end_dt, qry_dt_tp, pot_tp, dt, sort_base):

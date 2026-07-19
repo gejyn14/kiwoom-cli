@@ -1217,11 +1217,28 @@ def test_rank_net_buyer_human_options(runner, fake_client):
     assert body["sort_base"] == "2"
 
 
-def test_rank_net_buyer_period_stays_raw_numeric(runner, fake_client):
-    """dt(--period)는 I2 규칙(단위접미사만으로 라벨 유도 가능)에 따라 전환하지 않는다."""
+def test_rank_net_buyer_period_raw_code_backcompat(runner, fake_client):
+    """dt(--period)는 34a 리뷰에서 HumanChoice(TRADER_ANALYSIS_PERIOD_5_120)로
+    전환됐다(stock.py의 ka10043 --days와 공유) — raw 스펙 코드는 하위호환으로
+    그대로 통과한다."""
     result = runner.invoke(cli, ["market", "rank", "net-buyer", "005930", "--period", "120"])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["dt"] == "120"
+
+
+def test_rank_net_buyer_period_human_name_maps_to_code(runner, fake_client):
+    """--period 5d -> dt="5" (human 이름 -> 스펙 코드)."""
+    result = runner.invoke(cli, ["market", "rank", "net-buyer", "005930", "--period", "5d"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == "5"
+
+
+def test_rank_net_buyer_period_rejects_spec_outside_value(runner, fake_client):
+    """스펙(5/10/20/40/60/120) 밖의 --period 값은 exit 1이고 요청이 나가지
+    않아야 한다."""
+    result = runner.invoke(cli, ["market", "rank", "net-buyer", "005930", "--period", "999"])
+    assert result.exit_code == 1
+    assert fake_client.calls == []
 
 
 def test_rank_same_net_trade_default_body_unchanged(runner, fake_client):
@@ -1306,6 +1323,19 @@ def test_rank_foreign_inst_human_options(runner, fake_client):
     body = fake_client.calls[0][1]
     assert body["amt_qty_tp"] == "2"
     assert body["qry_dt_tp"] == "1"
+
+
+@pytest.mark.parametrize("absent", ["individual", "private-fund"])
+def test_rank_investor_top_investor_rejects_name_absent_from_ka10065(runner, fake_client, absent):
+    """individual/private-fund는 stock.py의 DAILY_BY_INVESTOR_TYPE(ka10058)에만
+    있고 INVESTOR_TOP_ORGN(ka10065)엔 없다. 두 상수는 10개 키의 값이
+    character-for-character 동일하지만(foreign-broker는 ka10065 전용) 어느
+    쪽도 다른 쪽의 진짜 부분집합이 아니다 — superset-closure 스크립트의
+    부분집합 predicate가 양방향 모두 이 쌍에서 fire하지 않는다(부분 겹침,
+    해저드 3유형). 값 겹침에만 의존한 병합 리팩터는 이 테스트로만 잡힌다."""
+    result = runner.invoke(cli, ["market", "rank", "investor-top", "--investor", absent])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
 
 
 def test_rank_net_buyer_legacy_numeric_code_still_accepted(runner, fake_client):

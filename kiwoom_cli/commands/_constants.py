@@ -328,11 +328,20 @@ TRADER_ANALYSIS_POSITION = {"today": "0", "previous": "1"}
 # ka10042)가 공유한다.** 분리 원칙은 TRADER_ANALYSIS_DATE_MODE와 동일.
 TRADER_ANALYSIS_SORT = {"close": "1", "date": "2"}
 
-# ka10043 전용 — dt(기간)는 Task 34a에서 I2 규칙(값→라벨이 단위접미사
-# 부착만으로 유도되는 폐쇄집합은 수량 유지) 재적용으로 raw 텍스트로
-# 되돌렸다 — market.py:503(ka10042, 완전히 동일한 필드·패턴)과 일관되게
-# 맞춘 것이다. 이 자리에서 쓰던 TRADER_ANALYSIS_PERIOD_5_120 상수는 이제
-# 사용처가 없어 제거했다(stock.py --days 참고).
+# dt(기간, 5/10/20/40/60/120). Task 34a에서 한 차례 I2 규칙(값→라벨이
+# 단위접미사 부착만으로 유도되는 폐쇄집합은 수량 유지)을 적용해 raw
+# 텍스트로 되돌렸으나, v2.11.0에 이미 HumanChoice로 배포되어 있던 걸
+# 되돌린 셈이었다(제약 위반 자체보다 "배포된 검증을 걷어내 exit 0으로
+# 조용히 통과시키는" 쪽이 더 나쁘다는 판단으로 재검토 후 복원). 34a
+# 리뷰에서 다시 HumanChoice로 되돌리며 market.py의 ka10042(rank
+# net-buyer)도 워크북 값이 character-for-character 동일함을 확인해
+# 함께 전환했다 — **이 상수는 지금 2개 api_id(ka10043 stock.py, ka10042
+# market.py)가 공유한다.** 나중에 한쪽 스펙만 바뀌면 이 상수를 제자리에서
+# 고치지 말고 분리할 것 — 제자리 수정은 나머지 하나를 조용히 함께
+# 오염시킨다(TRADER_ANALYSIS_DATE_MODE와 동일한 분리 원칙).
+TRADER_ANALYSIS_PERIOD_5_120 = {
+    "5d": "5", "10d": "10", "20d": "20", "40d": "40", "60d": "60", "120d": "120",
+}
 
 # 거래종료ELW제외/거래종료제외 — 0:포함,1:제외. elw_surge(ka30001, 필드
 # trde_end_elwskip)/elw_broker_top(ka30002, trde_end_elwskip)/elw_disparity

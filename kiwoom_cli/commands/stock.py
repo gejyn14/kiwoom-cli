@@ -56,6 +56,7 @@ from ._constants import (
     TODAY_EXEC_TIC_MIN,
     TODAY_PREV_1_2,
     TRADER_ANALYSIS_DATE_MODE,
+    TRADER_ANALYSIS_PERIOD_5_120,
     TRADER_ANALYSIS_POSITION,
     TRADER_ANALYSIS_SORT,
     TRDE_TP_NET_BUY_BUY_SELL,
@@ -785,8 +786,9 @@ def open_change(
 )
 @click.option(
     "--days", "dt",
-    default="20",
-    help="기간 (5/10/20/40/60/120)",
+    type=HumanChoice(TRADER_ANALYSIS_PERIOD_5_120),
+    default="20d",
+    help="기간 (5d/10d/20d/40d/60d/120d)",
 )
 @click.option(
     "--sort", "sort_base",
