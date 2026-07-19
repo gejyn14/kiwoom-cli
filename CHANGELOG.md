@@ -170,6 +170,11 @@ human-readable 이름을 추가했습니다(하위호환).
   - `market rank amount`: `--include-managed`
   - `market rank broker-by-stock`: `--type`, `--period`
   - `market elw broker-top`: `--vol-type`, `--type`, `--period`, `--exclude-expired`
+- **자유 텍스트였던 아래 옵션들도 enum으로 좁혀져, 매핑에 없는 값을 넘기면
+  exit 1이 됩니다** (모두 `HumanChoice`라 기존 raw 숫자 코드는 계속
+  동작합니다):
+  - `market program time-trend`/`daily-trend`: `--unit`, `--tick-type`
+  - `stock investor consecutive`: `--period`, `--net-type`
 - **`market rank broker-by-stock`에서 `--period`와 `--from`/`--to`를 함께 주면
   이제 `INVALID_INPUT`으로 exit 1입니다.** 스펙상 두 조회 방식은 상호 배타적이라
   (기간 조회 시 `dt`는 빈값이어야 함) 동시 지정은 의미가 정의되지 않은 조합이었고,
@@ -292,10 +297,7 @@ human-readable 이름을 추가했습니다(하위호환).
   넘기던 스크립트는 **그대로 동작합니다** — `HumanChoice`가 raw API 코드를
   하위호환으로 계속 허용하기 때문입니다. 전송값도 이름 추가 전과 동일합니다:
   `amount`→`amt_qty_tp=1`, `quantity`→`amt_qty_tp=2`;
-  `tick`→`min_tic_tp=0`, `minute`→`min_tic_tp=1`. 다만 두 옵션 모두 이전엔
-  자유 텍스트(`type=` 없음)였으므로, 매핑에 없는 임의 문자열을 넘기던
-  호출은 이제 거부됩니다(enum 축소 — CLI로 직접 확인: 매핑에 없는 값을
-  넘기면 exit code 1).
+  `tick`→`min_tic_tp=0`, `minute`→`min_tic_tp=1`.
 - **`--exchange`가 이제 `all`(통합, `stex_tp=3`)도 받습니다.** 스펙에
   `3:통합`이 있었는데 기존 코드는 `KRX`/`NXT` 두 값만 허용했습니다. 순수
   추가라 기존 호출은 영향 없습니다(기본값 `KRX` 그대로, 실제로 CLI를
@@ -320,12 +322,6 @@ human-readable 이름을 추가했습니다(하위호환).
   `recent`→`dt=1`,
   `3d`→`dt=3`, `5d`→`dt=5`, `10d`→`dt=10`, `20d`→`dt=20`, `120d`→`dt=120`,
   `range`→`dt=0`; `stock`→`stk_inds_tp=0`, `sector`→`stk_inds_tp=1`.
-
-  다만 **`--period`는 이전에 자유 입력이라 아무 값이나 그대로 API로
-  전송했습니다.** 이제 위 7개 값만 받습니다 — `--period 7`처럼 스펙에 없는
-  값은 전송 전에 `exit 1`로 거부됩니다(이전에는 `dt=7`이 그대로 나갔고, 이
-  값은 ka10131 스펙에 정의되어 있지 않습니다). 스펙에 없던 값을 쓰던
-  스크립트만 영향을 받습니다.
 
   `--net-type`도 사람이 읽는 이름(`net-buy`)만 노출되도록 바뀌었지만 스펙상
   값이 `2`(순매수) 하나뿐이라 기존 자유 입력 `--net-type 2`도 계속
