@@ -20,7 +20,15 @@ from ..formatters import (
     print_stock_info,
 )
 from ..output import console
-from ._constants import EXCHANGE_ALL, MARKET_ALL, MARKET_PROGRAM, MARKET_TWO
+from ._constants import (
+    AMT_QTY_TP_STD,
+    EXCHANGE_ALL,
+    HumanChoice,
+    MARKET_ALL,
+    MARKET_PROGRAM,
+    MARKET_TWO,
+    TRDE_TP_NET_BUY_BUY_SELL,
+)
 from .us import stock_ops as us_stock_ops
 from .us.detect import is_us_symbol
 
@@ -1161,21 +1169,21 @@ def intraday(
 @investor.command("after-close")
 @click.option(
     "--market", "mrkt_tp",
-    type=click.Choice(["kospi", "kosdaq"]),
+    type=click.Choice(["all", "kospi", "kosdaq"]),
     default="kospi",
-    help="시장구분 (kospi/kosdaq)",
+    help="시장구분 (all=전체, kospi=코스피, kosdaq=코스닥)",
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_STD),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--trade", "trde_tp",
-    type=click.Choice(["1", "2"]),
-    default="2",
-    help="매매구분 (1=순매도, 2=순매수)",
+    type=HumanChoice(TRDE_TP_NET_BUY_BUY_SELL),
+    default="net-buy",
+    help="매매구분 (net-buy=순매수, buy=매수, sell=매도)",
 )
 @click.option(
     "--exchange", "stex_tp",
@@ -1187,7 +1195,7 @@ def after_close(mrkt_tp: str, amt_qty_tp: str, trde_tp: str, stex_tp: str):
     """장마감후투자자별매매 조회. (ka10066)"""
     with KiwoomClient() as c:
         data, _ = c.request("ka10066", {
-            "mrkt_tp": MARKET_TWO[mrkt_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp],
             "amt_qty_tp": amt_qty_tp,
             "trde_tp": trde_tp,
             "stex_tp": EXCHANGE_ALL[stex_tp],

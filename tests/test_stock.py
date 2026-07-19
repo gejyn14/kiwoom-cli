@@ -224,3 +224,77 @@ def test_analysis_volume_renewal_market_enum(
     assert fake_client.calls[0][0] == "ka10024"
     assert fake_client.calls[0][1]["mrkt_tp"] == api_value
     assert fake_client.calls[0][1]["stex_tp"] == "3"  # EXCHANGE_ALL["all"] default
+
+
+# ============================================================
+#  Investor subgroup — after-close (ka10066)
+# ============================================================
+
+
+def test_investor_after_close_default_sends_net_buy_trde_tp_zero(runner, fake_client):
+    """기본 호출은 trde_tp="0"(순매수)를 보내야 한다 (ka10066 스펙: 0:순매수, 1:매수, 2:매도).
+
+    이전 코드는 --trade Choice(["1","2"])에 default="2"였다. help는 "2=순매수"라고
+    적었지만 스펙상 2는 매도이고, 진짜 순매수 코드 0은 Choice에 없어 도달 불가능했다.
+    이 테스트는 수정 전 코드에서 trde_tp == "2"로 실패해야 한다(폴스화).
+    """
+    result = runner.invoke(cli, ["stock", "investor", "after-close"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10066",
+            {
+                "mrkt_tp": "001",
+                "amt_qty_tp": "1",
+                "trde_tp": "0",
+                "stex_tp": "3",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("net-buy", "0"), ("buy", "1"), ("sell", "2")],
+)
+def test_investor_after_close_trade_enum(runner, fake_client, cli_value, api_value):
+    """--trade net-buy/buy/sell 각각이 trde_tp 0/1/2로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "after-close", "--trade", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_tp"] == api_value
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [("amount", "1"), ("quantity", "2")],
+)
+def test_investor_after_close_amount_qty_enum(runner, fake_client, cli_value, api_value):
+    """--amount-qty amount/quantity가 amt_qty_tp 1/2로 매핑되어야 한다 (E-only, 값 불변)."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "after-close", "--amount-qty", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == api_value
+
+
+def test_investor_after_close_amount_qty_default_unchanged(runner, fake_client):
+    """--amount-qty 기본 호출은 변경 전과 동일하게 amt_qty_tp="1"을 보내야 한다."""
+    result = runner.invoke(cli, ["stock", "investor", "after-close"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["amt_qty_tp"] == "1"
+
+
+def test_investor_after_close_market_all_supported(runner, fake_client):
+    """스펙(mrkt_tp: 000:전체, 001:코스피, 101:코스닥)에 000:전체가 있으므로 --market all 지원."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "after-close", "--market", "all"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mrkt_tp"] == "000"

@@ -58,3 +58,15 @@ HOT_PERIOD = {"1m": "1", "10m": "2", "1h": "3", "today": "4", "30s": "5"}  # ka0
 # 체계를 쓰게 된다. kt50002/kt50003(정정/취소)은 trde_tp 필드 자체가 없어
 # 여기 포함하지 않는다.
 GOLD_ORDER_TYPES = {"limit": "00", "ioc": "10", "fok": "20"}
+
+# trde_tp(매매구분)는 API마다 최소 4개의 서로 다른 코드북을 쓴다(0/1/2 순서와
+# 극성이 전부 다름). "trde_tp니까 하나로 합치자"는 절대 금지 — 이름에 코드
+# 집합을 새겨서 다른 codebook과 절대 재사용되지 않게 한다.
+# 그룹③ (0:순매수, 1:매수, 2:매도) — ka10059/ka10060/ka10064/ka10066.
+# (docs/superpowers/plans/2026-07-18-humanreadable-inventory.md 참고)
+TRDE_TP_NET_BUY_BUY_SELL = {"net-buy": "0", "buy": "1", "sell": "2"}
+
+# amt_qty_tp(금액수량구분)도 API마다 극성이 다르다(표준 1:금액,2:수량 vs
+# ka10051/ka10131의 0:금액,1:수량). 이 상수는 표준 계열(13곳, ka10066 포함)
+# 전용이며 값이 다른 sector 계열과 절대 혼용 금지.
+AMT_QTY_TP_STD = {"amount": "1", "quantity": "2"}
