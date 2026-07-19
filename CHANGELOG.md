@@ -271,6 +271,12 @@ intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
   예약해 두고 있었습니다).
 - `stock chart intraday-investor`(ka10064)의 `--amount-qty`/`--trade`가
   human-readable 이름을 받습니다(위와 동일한 상수 공유).
+- `stock chart intraday-investor`(ka10064)의 `--market`이 `all`(전체,
+  `mrkt_tp`=`000`)을 받습니다. 스펙 값은 `000:전체, 001:코스피, 101:코스닥`
+  셋인데 기존 `click.Choice(["kospi","kosdaq"])`는 `전체`에 아예 도달할 방법이
+  없었습니다(34b 당시 놓친 사전 존재 결함). 기존 `kospi`/`kosdaq` 호출과
+  기본값(`kospi`)은 그대로 `001`을 보내는 순수 확대(widening)입니다 —
+  `market rank volume` 등의 `--exchange` 스윕과 같은 종류의 수정입니다.
 - `stock lending trend`(ka10068)/`lending by-stock`(ka20068)의 `--all`은
   전환하지 않았습니다. 두 API 모두 스펙에 값이 하나만 문서화돼 있어
   (각각 `1:전체표시`, `0:종목코드 입력종목만 표시`) 반대쪽 코드를 확인할
