@@ -88,7 +88,7 @@ def _output_csv(rows: list[dict], keys: list[str] | None = None) -> None:
     if not rows:
         return
     if keys is None:
-        keys = list(rows[0].keys())
+        keys = list(dict.fromkeys(k for r in rows for k in r))
     w = csv.DictWriter(sys.stdout, fieldnames=keys, extrasaction="ignore")
     w.writeheader()
     for r in rows:
@@ -934,7 +934,7 @@ def print_generic_table(data: dict[str, Any] | list, title: str = "결과") -> N
         if not data:
             console.print("[dim]데이터가 없습니다.[/]")
             return
-        all_keys = list(data[0].keys())
+        all_keys = list(dict.fromkeys(k for item in data[:_TABLE_ROW_CAP] for k in item))
         keys = [
             k for k in all_keys
             if any(str(item.get(k, "")).strip() for item in data[:_TABLE_ROW_CAP])

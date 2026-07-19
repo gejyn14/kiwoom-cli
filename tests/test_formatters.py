@@ -102,6 +102,33 @@ class TestGenericTableCsv:
         assert lines[2] == "3,4"
 
 
+class TestGenericTableColumnUnion:
+    """감사 확인 #21/N29 — 컬럼 집합을 첫 행 키만으로 정하면 이후 행에만
+    존재하는 고유 키가 모든 행에서 사라진다 (테이블·CSV 둘 다)."""
+
+    def test_table_mode_shows_key_unique_to_second_row(self, capsys):
+        data = [
+            {"a": "1"},
+            {"a": "2", "b": "unique-value"},
+        ]
+        print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        assert "unique-value" in out
+
+    def test_csv_mode_shows_key_unique_to_second_row(self, capsys):
+        data = [
+            {"a": "1"},
+            {"a": "2", "b": "unique-value"},
+        ]
+        with _make_ctx("csv"):
+            print_generic_table(data, title="test")
+        out = capsys.readouterr().out
+        lines = [line.rstrip("\r") for line in out.strip().split("\n")]
+        assert lines[0] == "a,b"
+        assert lines[1] == "1,"
+        assert lines[2] == "2,unique-value"
+
+
 class TestStockInfoJson:
     def test_json_output(self, capsys):
         data = {

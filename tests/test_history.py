@@ -156,6 +156,42 @@ class TestHistoryQuery:
         assert result.exit_code == 0
         assert json.loads(result.stdout)["data"]["items"] == []
 
+    def test_mixed_event_types_column_unique_to_later_row_survives(
+        self, runner, tmp_path, monkeypatch,
+    ):
+        """감사 확인 #21/N29 — recorder.path_for는 심볼 기준으로 파일을 나누므로
+        `stream multi`로 --record하면 0B(체결)와 0D(호가잔량)가 같은 파일에 섞여
+        쓰인다. 0D 전용 필드(호가잔량 등)가 첫 행(0B)에 없다는 이유로 모든 행에서
+        사라지면 안 된다 — csv/table 둘 다."""
+        monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", tmp_path / "config.toml")
+        d = tmp_path / "data"
+        d.mkdir()
+
+        def _dump(ev):
+            return json.dumps(ev, ensure_ascii=False)
+
+        (d / "005930_2026-07-16.ndjson").write_text("\n".join([
+            _dump({"type": "0B", "type_name": "주식체결", "symbol": "005930",
+                   "ts": "10:00:00+09:00", "price": 70000, "volume": 10}),
+            _dump({"type": "0D", "type_name": "주식호가잔량", "symbol": "005930",
+                   "ts": "10:00:05+09:00", "sel_fpr_bid": 70100, "buy_fpr_bid": 69900}),
+        ]) + "\n", encoding="utf-8")
+
+        csv_result = runner.invoke(cli, [
+            "-f", "csv", "history", "query", "005930",
+        ])
+        assert csv_result.exit_code == 0
+        lines = csv_result.stdout.strip().splitlines()
+        header = lines[0].split(",")
+        assert "sel_fpr_bid" in header, "0D 전용 필드가 첫 행(0B)에 없다고 CSV 헤더에서 누락됨"
+        assert "70100" in lines[2], "0D 행에 자신의 고유 필드 값이 채워지지 않음"
+
+        table_result = runner.invoke(cli, ["history", "query", "005930"])
+        assert table_result.exit_code == 0
+        # 숫자 포매팅으로 콤마가 붙을 수 있어 컬럼 라벨(매도호가)로 확인
+        assert "매도호가" in table_result.output, "테이블 출력에서 0D 전용 필드가 누락됨"
+        assert "70,100" in table_result.output or "70100" in table_result.output
+
 
 # ── history export ────────────────────────────────────
 
