@@ -246,6 +246,36 @@ intraday`/`after-close`/`consecutive`, `stock analysis trader-analysis`
   새 상수(`INVESTOR_BY_STOCK_UNIT`)를 씁니다.
 - `stock investor by-stock-total`(ka10061)의 `--amount-qty`/`--unit`이
   human-readable 이름을 받습니다(위와 동일한 상수 공유).
+- `stock investor program-top`(ka90003)의 `--trade`/`--amount-qty`가
+  human-readable 이름을 받습니다(`--trade net-buy`, `--amount-qty
+  quantity` 등). `--amount-qty`는 기존 `AMT_QTY_TP_1_2`를 공유합니다.
+  `--trade`(`PROGRAM_TOP_SIDE`)는 `market rank broker-top`(ka10038)의
+  `--type`과 값이 완전히 동일해 구분 불가지만, `elw broker-top`(ka30002)
+  등 여러 API의 동명 필드와는 키 집합은 같고 극성이 반대라 리터럴로 핀
+  고정했고, `market rank foreign-period`(ka10034)의 상위집합(`net-trade`
+  값 추가)이기도 해 거부 테스트로 방어했습니다.
+- `stock chart tick`(ka10079)/`minute`(ka10080)/`day`(ka10081)/
+  `week`(ka10082)/`month`(ka10083)/`year`(ka10094)의 `--adjusted`가
+  human-readable 이름을 받습니다(`raw`/`adjusted`). 여섯 API 모두
+  워크북에서 값이 character-for-character 동일함을 확인해 하나의 코드북
+  (`CHART_ADJUSTED_PRICE`)으로 수렴시켰습니다. `market gold
+  chart-tick/day/week/month`의 `GOLD_PRICE_TYPE`과도 값이 완전히
+  같지만(구분 불가) 금현물과 국내주식은 별개 상품군이라 상수는
+  분리했습니다. `--range`(`chart tick`)/`--interval`(`chart minute`)는
+  값과 라벨이 동일한 자기서술적 수량 프리셋이라 전환 대상이
+  아닙니다(raw 텍스트 유지).
+- `stock chart investor`(ka10060)의 `--amount-qty`/`--trade`/`--unit`이
+  human-readable 이름을 받습니다. 세 옵션 모두 기존
+  `AMT_QTY_TP_1_2`/`TRDE_TP_NET_BUY_BUY_SELL`/`INVESTOR_BY_STOCK_UNIT`을
+  그대로 공유합니다(세 상수 모두 이 API를 미래 확장 대상으로 이미
+  예약해 두고 있었습니다).
+- `stock chart intraday-investor`(ka10064)의 `--amount-qty`/`--trade`가
+  human-readable 이름을 받습니다(위와 동일한 상수 공유).
+- `stock lending trend`(ka10068)/`lending by-stock`(ka20068)의 `--all`은
+  전환하지 않았습니다. 두 API 모두 스펙에 값이 하나만 문서화돼 있어
+  (각각 `1:전체표시`, `0:종목코드 입력종목만 표시`) 반대쪽 코드를 확인할
+  수 없습니다 — raw 텍스트로 남겼습니다(자유 텍스트 그대로라 breaking
+  아닙니다).
 
 
 ## [2.11.0] - 2026-07-19
