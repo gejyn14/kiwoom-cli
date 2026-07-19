@@ -10,7 +10,7 @@ kiwoom-cli는 AI 에이전트가 파싱 없이 안전하게 쓰도록 설계된 
 - json/csv 모드는 **절대 대화형 프롬프트를 띄우지 않습니다** — 확인이 필요한
   명령을 `--confirm` 없이 호출하면 즉시 `CONFIRMATION_REQUIRED` 오류(exit 1)로
   응답합니다. 세션이 입력 대기로 멈추는 일이 없습니다.
-- 명령 스키마는 `kiwoom describe [명령...] -f json`으로 조회하세요 (아래 참고).
+- 명령 스키마는 `kiwoom -f json describe [명령...]`으로 조회하세요 (아래 참고).
 
 ## Envelope (schema v1)
 
@@ -74,8 +74,8 @@ kiwoom -f json --fields symbol,qty account balance --market kr
 제거). dry-run의 `body`와 `order validate`의 `checks`가 대표적인 경우입니다.
 
 ```bash
-kiwoom -f json --fields body  order buy 005930 --qty 1 --price 70000 --dry-run
-kiwoom -f json --fields checks order validate buy 005930 --qty 1 --price 70000
+kiwoom -f json --fields body order buy 005930 1 --price 70000 --dry-run
+kiwoom -f json --fields checks order validate buy 005930 1 --price 70000
 ```
 
 요청하지 않은 리스트 키는 **요청한 필드를 담은 원소가 하나라도 있을 때만**
@@ -316,10 +316,10 @@ $ kiwoom -f json stream quote 005930 --max-events 3
 ## describe — CLI 자기서술
 
 ```bash
-kiwoom describe -f json                 # 전체 명령 트리
-kiwoom describe order buy -f json       # 단일 명령 스키마
-kiwoom describe --paths -f json         # 경로+한줄설명 평면 목록 (저비용 발견)
-kiwoom describe order --depth 1 -f json # 하위 명령 재귀 깊이 제한
+kiwoom -f json describe                 # 전체 명령 트리
+kiwoom -f json describe order buy       # 단일 명령 스키마
+kiwoom -f json describe --paths         # 경로+한줄설명 평면 목록 (저비용 발견)
+kiwoom -f json describe order --depth 1 # 하위 명령 재귀 깊이 제한
 ```
 
 명령별로 `path` / `help` / `arguments[]` / `options[]`(opts, type, default,
@@ -332,8 +332,8 @@ required, choices, is_flag)를 반환합니다. 도움말 파싱 대신 이걸 �
 
 ### find / api list — 키워드 발견
 
-- `kiwoom find <키워드> -f json` → `data = {"commands": [{"path","help"}], "apis": [{"api_id","description"}]}` (결과 없음 = 빈 배열, exit 0)
-- `kiwoom api list [키워드] -f json` → `data = [{"api_id","url_path","description"}]` (토큰 불필요)
+- `kiwoom -f json find <키워드>` → `data = {"commands": [{"path","help"}], "apis": [{"api_id","description"}]}` (결과 없음 = 빈 배열, exit 0)
+- `kiwoom -f json api list [키워드]` → `data = [{"api_id","url_path","description"}]` (토큰 불필요)
 - 주문성 API(`kt10000~3`, `kt10006~9`, `kt50000~3`, `ust20000~3`, `ust31302`)를
   `kiwoom api`로 직접 호출하면 확인 게이트가 걸립니다: json/csv 모드는 `--confirm`
   없이 `CONFIRMATION_REQUIRED`(exit 1), table 모드는 body 미리보기 후 y/n 프롬프트.
