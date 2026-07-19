@@ -24,23 +24,49 @@ from ._constants import (
     AMT_QTY_TP_0_1,
     AMT_QTY_TP_1_2,
     AMT_QTY_TP_COMBINED,
+    BY_STOCK_TOTAL_TRADE_SIDE,
+    CHART_ADJUSTED_PRICE,
     CHECK_YES_1_NO_0,
     CREDIT_GRADE,
     CREDIT_MARKET,
+    DAILY_BY_INVESTOR_TRADE_SIDE,
+    DAILY_BY_INVESTOR_TYPE,
+    DAILY_PRICE_DISPLAY,
     EXCHANGE_ALL,
     HumanChoice,
+    INST_FOREIGN_PRICE_TYPE,
+    INSTANT_VOLUME_MARKET,
+    INSTANT_VOLUME_PRICE_TYPE,
     INTRADAY_INVESTOR,
+    INVESTOR_BY_STOCK_UNIT,
+    INVESTOR_DAILY_TRADE_SIDE,
     MARKET_ALL,
     MARKET_PROGRAM,
     MARKET_TWO,
     NETSLMT_TP_NET_BUY_ONLY,
+    OPEN_CHANGE_AMOUNT_CND,
+    OPEN_CHANGE_CREDIT_CND,
+    OPEN_CHANGE_DIRECTION,
+    OPEN_CHANGE_INCLUDE_LIMIT,
+    OPEN_CHANGE_QTY_CND,
+    OPEN_CHANGE_SORT,
+    OPEN_CHANGE_STK_CND,
     PERIOD_RECENT_OR_RANGE,
+    PRICE_CLUSTER_CUR_PRC_ENTRY,
+    PROGRAM_TOP_SIDE,
     STK_INDS_TP,
+    TODAY_EXEC_TIC_MIN,
+    TODAY_PREV_1_2,
     TRADER_ANALYSIS_DATE_MODE,
     TRADER_ANALYSIS_PERIOD_5_120,
     TRADER_ANALYSIS_POSITION,
     TRADER_ANALYSIS_SORT,
     TRDE_TP_NET_BUY_BUY_SELL,
+    VI_TRIGGER_DIRECTION,
+    VI_TRIGGER_SESSION,
+    VI_TRIGGER_TYPE,
+    VI_TRIGGER_USE_FILTER,
+    WARRANT_TYPE,
 )
 from .us import stock_ops as us_stock_ops
 from .us.detect import is_us_symbol
@@ -194,9 +220,9 @@ def detail(code: str):
 @click.option("--date", "qry_dt", required=True, help="조회일자 (YYYYMMDD)")
 @click.option(
     "--display", "indc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="표시구분 (0=수량, 1=금액백만원)",
+    type=HumanChoice(DAILY_PRICE_DISPLAY),
+    default="quantity",
+    help="표시구분 (quantity=수량, amount=금액백만원)",
 )
 def daily_price(code: str, qry_dt: str, indc_tp: str):
     """일별주가 조회. (ka10086)"""
@@ -421,15 +447,15 @@ def tick_strength_daily(code: str):
 @click.argument("code")
 @click.option(
     "--when", "tdy_pred",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="당일전일 (1=당일, 2=전일)",
+    type=HumanChoice(TODAY_PREV_1_2),
+    default="today",
+    help="당일전일 (today=당일, previous=전일)",
 )
 @click.option(
     "--mode", "tic_min",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="틱/분 (0=틱, 1=분)",
+    type=HumanChoice(TODAY_EXEC_TIC_MIN),
+    default="tick",
+    help="틱/분 (tick=틱, minute=분)",
 )
 @click.option("--time", "tm", default="", help="시간 (4자리, 예: 1030)")
 def today_exec(code: str, tdy_pred: str, tic_min: str, tm: str):
@@ -451,9 +477,9 @@ def today_exec(code: str, tdy_pred: str, tic_min: str, tm: str):
 @click.argument("code")
 @click.option(
     "--when", "tdy_pred",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="당일전일 (1=당일, 2=전일)",
+    type=HumanChoice(TODAY_PREV_1_2),
+    default="today",
+    help="당일전일 (today=당일, previous=전일)",
 )
 def today_volume(code: str, tdy_pred: str):
     """당일/전일 체결량 조회. (ka10055)"""
@@ -600,9 +626,9 @@ def volume_renewal(mrkt_tp: str, cycle_tp: str, trde_qty_tp: str, stex_tp: str):
 @click.option("--ratio", "prps_cnctr_rt", default="50", help="매물집중비율 (0~100)")
 @click.option(
     "--include-current", "cur_prc_entry",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="현재가진입 (0=미포함, 1=포함)",
+    type=HumanChoice(PRICE_CLUSTER_CUR_PRC_ENTRY),
+    default="no",
+    help="현재가진입 (yes=포함, no=미포함)",
 )
 @click.option("--count", "prpscnt", default="5", help="매물대수")
 @click.option(
@@ -665,11 +691,16 @@ def per_rank(pertp: str, stex_tp: str):
 @analysis.command("open-change")
 @click.option(
     "--sort", "sort_tp",
-    type=click.Choice(["1", "2", "3", "4"]),
-    default="1",
-    help="정렬구분 (1=시가, 2=고가, 3=저가, 4=기준가)",
+    type=HumanChoice(OPEN_CHANGE_SORT),
+    default="open",
+    help="정렬구분 (open=시가, high=고가, low=저가, base=기준가)",
 )
-@click.option("--volume-cond", "trde_qty_cnd", default="0", help="거래량조건")
+@click.option(
+    "--volume-cond", "trde_qty_cnd",
+    type=HumanChoice(OPEN_CHANGE_QTY_CND),
+    default="all",
+    help="거래량조건 (all=전체조회, 10k=만주이상, ..., 1000k=백만주이상)",
+)
 @click.option(
     "--market", "mrkt_tp",
     type=click.Choice(["all", "kospi", "kosdaq"]),
@@ -678,18 +709,33 @@ def per_rank(pertp: str, stex_tp: str):
 )
 @click.option(
     "--include-limit", "updown_incls",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="상하한포함 (0=미포함, 1=포함)",
+    type=HumanChoice(OPEN_CHANGE_INCLUDE_LIMIT),
+    default="no",
+    help="상하한포함 (yes=포함, no=미포함)",
 )
-@click.option("--stock-cond", "stk_cnd", default="0", help="종목조건")
-@click.option("--credit-cond", "crd_cnd", default="0", help="신용조건")
-@click.option("--amount-cond", "trde_prica_cnd", default="0", help="거래대금조건")
+@click.option(
+    "--stock-cond", "stk_cnd",
+    type=HumanChoice(OPEN_CHANGE_STK_CND),
+    default="all",
+    help="종목조건 (all, exclude-managed, exclude-preferred, ...)",
+)
+@click.option(
+    "--credit-cond", "crd_cnd",
+    type=HumanChoice(OPEN_CHANGE_CREDIT_CND),
+    default="all",
+    help="신용조건 (all, a, b, c, d, e, all-financing)",
+)
+@click.option(
+    "--amount-cond", "trde_prica_cnd",
+    type=HumanChoice(OPEN_CHANGE_AMOUNT_CND),
+    default="all",
+    help="거래대금조건 (all, 30m, 50m, ..., 50b)",
+)
 @click.option(
     "--direction", "flu_cnd",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="등락조건 (1=상위, 2=하위)",
+    type=HumanChoice(OPEN_CHANGE_DIRECTION),
+    default="top",
+    help="등락조건 (top=상위, bottom=하위)",
 )
 @click.option(
     "--exchange", "stex_tp",
@@ -795,12 +841,17 @@ def trader_analysis(
 @click.option("--code", "stk_cd", default="", help="종목코드 (선택)")
 @click.option(
     "--market", "mrkt_tp",
-    type=click.Choice(["0", "1", "2", "3"]),
-    default="0",
-    help="시장구분 (0=전체, 1=코스피, 2=코스닥, 3=종목)",
+    type=HumanChoice(INSTANT_VOLUME_MARKET),
+    default="all",
+    help="시장구분 (all=전체, kospi=코스피, kosdaq=코스닥, stock=종목)",
 )
 @click.option("--volume-type", "qty_tp", default="0", help="수량구분")
-@click.option("--price-type", "pric_tp", default="0", help="가격구분")
+@click.option(
+    "--price-type", "pric_tp",
+    type=HumanChoice(INSTANT_VOLUME_PRICE_TYPE),
+    default="all",
+    help="가격구분 (all, under-1k, over-1k, 1k-2k, 2k-5k, 5k-10k, over-10k)",
+)
 @click.option(
     "--exchange", "stex_tp",
     type=click.Choice(["KRX", "NXT", "all"]),
@@ -839,29 +890,39 @@ def instant_volume(
 )
 @click.option(
     "--session", "bf_mkrt_tp",
-    type=click.Choice(["0", "1", "2"]),
-    default="0",
-    help="장전구분 (0=전체, 1=정규시장, 2=시간외단일가)",
+    type=HumanChoice(VI_TRIGGER_SESSION),
+    default="all",
+    help="장전구분 (all=전체, regular=정규시장, after-hours=시간외단일가)",
 )
 @click.option("--code", "stk_cd", default="", help="종목코드 (선택)")
 @click.option(
     "--trigger-type", "motn_tp",
-    type=click.Choice(["0", "1", "2", "3"]),
-    default="0",
-    help="발동구분 (0=전체, 1=정적VI, 2=동적VI, 3=동적+정적)",
+    type=HumanChoice(VI_TRIGGER_TYPE),
+    default="all",
+    help="발동구분 (all=전체, static=정적VI, dynamic=동적VI, both=동적+정적)",
 )
 @click.option("--skip-stock", "skip_stk", default="0", help="제외종목")
-@click.option("--volume-type", "trde_qty_tp", default="0", help="거래량구분")
+@click.option(
+    "--volume-type", "trde_qty_tp",
+    type=HumanChoice(VI_TRIGGER_USE_FILTER),
+    default="no",
+    help="거래량구분 (yes=사용, no=사용안함)",
+)
 @click.option("--min-volume", "min_trde_qty", default="", help="최소거래량")
 @click.option("--max-volume", "max_trde_qty", default="", help="최대거래량")
-@click.option("--amount-type", "trde_prica_tp", default="0", help="거래대금구분")
+@click.option(
+    "--amount-type", "trde_prica_tp",
+    type=HumanChoice(VI_TRIGGER_USE_FILTER),
+    default="no",
+    help="거래대금구분 (yes=사용, no=사용안함)",
+)
 @click.option("--min-amount", "min_trde_prica", default="", help="최소거래대금")
 @click.option("--max-amount", "max_trde_prica", default="", help="최대거래대금")
 @click.option(
     "--direction", "motn_drc",
-    type=click.Choice(["0", "1", "2"]),
-    default="0",
-    help="발동방향 (0=전체, 1=상승, 2=하락)",
+    type=HumanChoice(VI_TRIGGER_DIRECTION),
+    default="all",
+    help="발동방향 (all=전체, rise=상승, fall=하락)",
 )
 @click.option(
     "--exchange", "stex_tp",
@@ -913,9 +974,9 @@ def vi_trigger(
 @analysis.command("warrant")
 @click.option(
     "--type", "newstk_recvrht_tp",
-    type=click.Choice(["00", "05", "07"]),
-    default="00",
-    help="신주인수권구분 (00=전체, 05=신주인수권증권, 07=신주인수권증서)",
+    type=HumanChoice(WARRANT_TYPE),
+    default="all",
+    help="신주인수권구분 (all=전체, warrant-security=신주인수권증권, warrant-certificate=신주인수권증서)",
 )
 def warrant(newstk_recvrht_tp: str):
     """신주인수권전체시세 조회. (ka10011)"""
@@ -959,9 +1020,9 @@ def investor():
 @click.option("--to", "end_dt", required=True, help="종료일자 (YYYYMMDD)")
 @click.option(
     "--trade", "trde_tp",
-    type=click.Choice(["1", "2"]),
-    default="2",
-    help="매매구분 (1=순매도, 2=순매수)",
+    type=HumanChoice(INVESTOR_DAILY_TRADE_SIDE),
+    default="net-buy",
+    help="매매구분 (net-sell=순매도, net-buy=순매수)",
 )
 @click.option(
     "--market", "mrkt_tp",
@@ -994,15 +1055,15 @@ def investor_daily_trade(strt_dt: str, end_dt: str, trde_tp: str, mrkt_tp: str, 
 @click.option("--to", "end_dt", required=True, help="종료일자 (YYYYMMDD)")
 @click.option(
     "--inst-price", "orgn_prsm_unp_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="기관추정단가구분 (1=매수단가, 2=매도단가)",
+    type=HumanChoice(INST_FOREIGN_PRICE_TYPE),
+    default="buy",
+    help="기관추정단가구분 (buy=매수단가, sell=매도단가)",
 )
 @click.option(
     "--foreign-price", "for_prsm_unp_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="외인추정단가구분 (1=매수단가, 2=매도단가)",
+    type=HumanChoice(INST_FOREIGN_PRICE_TYPE),
+    default="buy",
+    help="외인추정단가구분 (buy=매수단가, sell=매도단가)",
 )
 def stock_institution_trend(
     code: str,
@@ -1028,9 +1089,9 @@ def stock_institution_trend(
 @click.option("--to", "end_dt", required=True, help="종료일자 (YYYYMMDD)")
 @click.option(
     "--trade", "trde_tp",
-    type=click.Choice(["1", "2"]),
-    default="2",
-    help="매매구분 (1=순매도, 2=순매수)",
+    type=HumanChoice(DAILY_BY_INVESTOR_TRADE_SIDE),
+    default="net-buy",
+    help="매매구분 (net-sell=순매도, net-buy=순매수)",
 )
 @click.option(
     "--market", "mrkt_tp",
@@ -1040,8 +1101,9 @@ def stock_institution_trend(
 )
 @click.option(
     "--investor-type", "invsr_tp",
-    default="9000",
-    help="투자자구분 (8000=개인, 9000=외국인 등)",
+    type=HumanChoice(DAILY_BY_INVESTOR_TYPE),
+    default="foreign",
+    help="투자자구분 (individual=개인, foreign=외국인, institution=기관계 등)",
 )
 @click.option(
     "--exchange", "stex_tp",
@@ -1075,21 +1137,21 @@ def daily_by_investor(
 @click.option("--date", "dt", required=True, help="일자 (YYYYMMDD)")
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_1_2),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--trade", "trde_tp",
-    type=click.Choice(["0", "1", "2"]),
-    default="0",
-    help="매매구분 (0=순매수, 1=매수, 2=매도)",
+    type=HumanChoice(TRDE_TP_NET_BUY_BUY_SELL),
+    default="net-buy",
+    help="매매구분 (net-buy=순매수, buy=매수, sell=매도)",
 )
 @click.option(
     "--unit", "unit_tp",
-    type=click.Choice(["1000", "1"]),
-    default="1",
-    help="단위구분 (1000=천주, 1=단주)",
+    type=HumanChoice(INVESTOR_BY_STOCK_UNIT),
+    default="share",
+    help="단위구분 (thousand=천주, share=단주)",
 )
 def by_stock(code: str, dt: str, amt_qty_tp: str, trde_tp: str, unit_tp: str):
     """종목별투자자기관별 조회. (ka10059)"""
@@ -1110,21 +1172,21 @@ def by_stock(code: str, dt: str, amt_qty_tp: str, trde_tp: str, unit_tp: str):
 @click.option("--to", "end_dt", required=True, help="종료일자 (YYYYMMDD)")
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_1_2),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--trade", "trde_tp",
-    type=click.Choice(["0", "1", "2"]),
-    default="0",
-    help="매매구분 (0=순매수, 1=매수, 2=매도)",
+    type=HumanChoice(BY_STOCK_TOTAL_TRADE_SIDE),
+    default="net-buy",
+    help="매매구분 (net-buy=순매수, 스펙상 고정값)",
 )
 @click.option(
     "--unit", "unit_tp",
-    type=click.Choice(["1000", "1"]),
-    default="1",
-    help="단위구분 (1000=천주, 1=단주)",
+    type=HumanChoice(INVESTOR_BY_STOCK_UNIT),
+    default="share",
+    help="단위구분 (thousand=천주, share=단주)",
 )
 def by_stock_total(
     code: str,
@@ -1316,15 +1378,15 @@ def consecutive(
 @investor.command("program-top")
 @click.option(
     "--trade", "trde_upper_tp",
-    type=click.Choice(["1", "2"]),
-    default="2",
-    help="매매구분 (1=순매도, 2=순매수)",
+    type=HumanChoice(PROGRAM_TOP_SIDE),
+    default="net-buy",
+    help="매매구분 (net-sell=순매도, net-buy=순매수)",
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_1_2),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--market", "mrkt_tp",
@@ -1396,9 +1458,9 @@ def chart():
 )
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
@@ -1432,9 +1494,9 @@ def chart_tick(code: str, tic_scope: str, upd_stkpc_tp: str, exchange: str | Non
 )
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--base-date", "base_dt", default="", help="기준일자 (YYYYMMDD, 선택)")
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
@@ -1467,9 +1529,9 @@ def chart_minute(code: str, tic_scope: str, upd_stkpc_tp: str, base_dt: str, exc
 @click.option("--base-date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
@@ -1498,9 +1560,9 @@ def chart_day(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, 
 @click.option("--base-date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
@@ -1529,9 +1591,9 @@ def chart_week(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None,
 @click.option("--base-date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
@@ -1560,9 +1622,9 @@ def chart_month(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None
 @click.option("--base-date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 @click.option(
     "--adjusted", "upd_stkpc_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="수정주가구분 (0=미적용, 1=적용)",
+    type=HumanChoice(CHART_ADJUSTED_PRICE),
+    default="raw",
+    help="수정주가구분 (raw=미적용, adjusted=적용)",
 )
 @click.option("--exchange", "exchange", default=None, type=click.Choice(["nasdaq", "nyse", "amex"]), help="미국 거래소")
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
@@ -1591,21 +1653,21 @@ def chart_year(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None,
 @click.option("--date", "dt", required=True, help="일자 (YYYYMMDD)")
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_1_2),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--trade", "trde_tp",
-    type=click.Choice(["0", "1", "2"]),
-    default="0",
-    help="매매구분 (0=순매수, 1=매수, 2=매도)",
+    type=HumanChoice(TRDE_TP_NET_BUY_BUY_SELL),
+    default="net-buy",
+    help="매매구분 (net-buy=순매수, buy=매수, sell=매도)",
 )
 @click.option(
     "--unit", "unit_tp",
-    type=click.Choice(["1000", "1"]),
-    default="1",
-    help="단위구분 (1000=천주, 1=단주)",
+    type=HumanChoice(INVESTOR_BY_STOCK_UNIT),
+    default="share",
+    help="단위구분 (thousand=천주, share=단주)",
 )
 def chart_investor(code: str, dt: str, amt_qty_tp: str, trde_tp: str, unit_tp: str):
     """종목별투자자기관별 차트 조회. (ka10060)"""
@@ -1624,27 +1686,27 @@ def chart_investor(code: str, dt: str, amt_qty_tp: str, trde_tp: str, unit_tp: s
 @click.argument("code")
 @click.option(
     "--market", "mrkt_tp",
-    type=click.Choice(["kospi", "kosdaq"]),
+    type=HumanChoice(MARKET_ALL),
     default="kospi",
-    help="시장구분 (kospi/kosdaq)",
+    help="시장구분 (all=전체, kospi=코스피, kosdaq=코스닥)",
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    type=click.Choice(["1", "2"]),
-    default="1",
-    help="금액수량구분 (1=금액, 2=수량)",
+    type=HumanChoice(AMT_QTY_TP_1_2),
+    default="amount",
+    help="금액수량구분 (amount=금액, quantity=수량)",
 )
 @click.option(
     "--trade", "trde_tp",
-    type=click.Choice(["0", "1", "2"]),
-    default="0",
-    help="매매구분 (0=순매수, 1=매수, 2=매도)",
+    type=HumanChoice(TRDE_TP_NET_BUY_BUY_SELL),
+    default="net-buy",
+    help="매매구분 (net-buy=순매수, buy=매수, sell=매도)",
 )
 def chart_intraday_investor(code: str, mrkt_tp: str, amt_qty_tp: str, trde_tp: str):
     """장중투자자별매매 차트 조회. (ka10064)"""
     with KiwoomClient() as c:
         data, _ = c.request("ka10064", {
-            "mrkt_tp": MARKET_TWO[mrkt_tp],
+            "mrkt_tp": mrkt_tp,
             "amt_qty_tp": amt_qty_tp,
             "trde_tp": trde_tp,
             "stk_cd": code,
