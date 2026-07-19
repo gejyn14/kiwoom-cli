@@ -298,7 +298,10 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # market.py's rank hot --period = 19. The brief's prose summary ("17 + 1 = 18") undercounts
     # by one relative to its own itemized decorator list; this assertion pins the verified
     # ground truth instead. See task-6-report.md for the full recount.
-    assert len(converted) == 19
+    # 23, not 19: task-13 (ka90005/ka90010, program time-trend/daily-trend) converted
+    # 4 more raw-text options to HumanChoice — --unit (AMT_QTY_TP_1_2) and --tick-type
+    # (MIN_TIC_TP) on each of the two commands. 19 + 4 = 23. See task-13-report.md.
+    assert len(converted) == 23
 
 
 # ── Task 8: both-fail envelope (fail_api) ────────────────

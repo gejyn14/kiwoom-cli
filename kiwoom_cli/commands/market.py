@@ -7,11 +7,15 @@ import click
 from ..client import KiwoomClient
 from ..formatters import print_api_response
 from ._constants import (
+    AMT_QTY_TP_1_2,
+    EXCHANGE_ALL,
     EXCHANGE_TWO,
     HOT_PERIOD,
     MARKET_ALL,
     MARKET_KOSPI_KOSDAQ,
     MARKET_TWO,
+    MIN_TIC_TP,
+    PROGRAM_MARKET_BY_EXCHANGE,
     HumanChoice,
 )
 
@@ -1429,18 +1433,20 @@ def program():
 
 @program.command("time-trend")
 @click.option("--date", required=True, help="날짜 (YYYYMMDD)")
-@click.option("--unit", "amt_qty_tp", default="1", help="금액/수량 (1=금액백만원, 2=수량천주)")
-@click.option("--market", "mrkt_tp", default="0", help="시장구분")
-@click.option("--tick-type", "min_tic_tp", default="1", help="분틱구분 (0=틱, 1=분)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
-def program_time_trend(date, amt_qty_tp, mrkt_tp, min_tic_tp, stex_tp):
+@click.option("--unit", "amt_qty_tp", type=HumanChoice(AMT_QTY_TP_1_2), default="amount", help="금액/수량")
+@click.option("--market", "market", type=click.Choice(["kospi", "kosdaq"]), default="kospi", help="시장구분")
+@click.option("--tick-type", "min_tic_tp", type=HumanChoice(MIN_TIC_TP), default="minute", help="분틱구분")
+@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
+def program_time_trend(date, amt_qty_tp, market, min_tic_tp, stex_tp):
     """프로그램매매 추이 (시간대별). (ka90005)"""
 
     with KiwoomClient() as c:
+        exchange_code = EXCHANGE_ALL[stex_tp]
         data, _ = c.request("ka90005", {
             "date": date, "amt_qty_tp": amt_qty_tp,
-            "mrkt_tp": mrkt_tp, "min_tic_tp": min_tic_tp,
-            "stex_tp": EXCHANGE_TWO[stex_tp],
+            "mrkt_tp": PROGRAM_MARKET_BY_EXCHANGE[market][exchange_code],
+            "min_tic_tp": min_tic_tp,
+            "stex_tp": exchange_code,
         })
         print_api_response(data, "프로그램매매추이(시간대별)")
 
@@ -1501,18 +1507,20 @@ def program_stock_time(code, amt_qty_tp, date):
 
 @program.command("daily-trend")
 @click.option("--date", required=True, help="날짜 (YYYYMMDD)")
-@click.option("--unit", "amt_qty_tp", default="1", help="금액/수량")
-@click.option("--market", "mrkt_tp", default="0", help="시장구분")
-@click.option("--tick-type", "min_tic_tp", default="1", help="분틱구분 (0=틱, 1=분)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
-def program_daily_trend(date, amt_qty_tp, mrkt_tp, min_tic_tp, stex_tp):
+@click.option("--unit", "amt_qty_tp", type=HumanChoice(AMT_QTY_TP_1_2), default="amount", help="금액/수량")
+@click.option("--market", "market", type=click.Choice(["kospi", "kosdaq"]), default="kospi", help="시장구분")
+@click.option("--tick-type", "min_tic_tp", type=HumanChoice(MIN_TIC_TP), default="minute", help="분틱구분")
+@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
+def program_daily_trend(date, amt_qty_tp, market, min_tic_tp, stex_tp):
     """프로그램매매 추이 (일자별). (ka90010)"""
 
     with KiwoomClient() as c:
+        exchange_code = EXCHANGE_ALL[stex_tp]
         data, _ = c.request("ka90010", {
             "date": date, "amt_qty_tp": amt_qty_tp,
-            "mrkt_tp": mrkt_tp, "min_tic_tp": min_tic_tp,
-            "stex_tp": EXCHANGE_TWO[stex_tp],
+            "mrkt_tp": PROGRAM_MARKET_BY_EXCHANGE[market][exchange_code],
+            "min_tic_tp": min_tic_tp,
+            "stex_tp": exchange_code,
         })
         print_api_response(data, "프로그램매매추이(일자별)")
 

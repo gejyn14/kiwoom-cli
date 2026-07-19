@@ -140,3 +140,56 @@ def test_sector_investor_market_kospi_kosdaq_enum(
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["mrkt_tp"] == api_value
+
+
+# ============================================================
+#  Program trades (프로그램매매) — ka90005 time-trend / ka90010 daily-trend
+#
+#  mrkt_tp is a 10-char P-code keyed by BOTH the human market name AND the
+#  selected exchange (stex_tp) — see PROGRAM_MARKET_BY_EXCHANGE in
+#  _constants.py. This is distinct from the flat MARKET_PROGRAM mapping used
+#  by the sibling ka90003/ka90004 commands.
+# ============================================================
+
+
+PROGRAM_MRKT_TP_CASES = [
+    ("kospi", "KRX", "P00101", "1"),
+    ("kospi", "NXT", "P001_NX01", "2"),
+    ("kospi", "all", "P001_AL01", "3"),
+    ("kosdaq", "KRX", "P10102", "1"),
+    ("kosdaq", "NXT", "P101_NX02", "2"),
+    ("kosdaq", "all", "P101_AL02", "3"),
+]
+
+
+@pytest.mark.parametrize(
+    "subcommand,api_id",
+    [("time-trend", "ka90005"), ("daily-trend", "ka90010")],
+)
+@pytest.mark.parametrize(
+    "market,exchange,mrkt_tp,stex_tp", PROGRAM_MRKT_TP_CASES
+)
+def test_program_trend_market_exchange_linked(
+    runner, fake_client, subcommand, api_id, market, exchange, mrkt_tp, stex_tp
+):
+    """mrkt_tp (10-char P-code) is linked to stex_tp, not a standalone flag.
+
+    Regression guard for the old default `mrkt_tp="0"`, which was copy-pasted
+    from the sibling ka90007 (0:코스피,1:코스닥) codebook and undefined at
+    these two endpoints.
+    """
+    result = runner.invoke(
+        cli,
+        [
+            "market", "program", subcommand,
+            "--date", "20241101",
+            "--market", market,
+            "--exchange", exchange,
+        ],
+    )
+
+    assert result.exit_code == 0
+    sent_api_id, body = fake_client.calls[0]
+    assert sent_api_id == api_id
+    assert body["mrkt_tp"] == mrkt_tp
+    assert body["stex_tp"] == stex_tp
