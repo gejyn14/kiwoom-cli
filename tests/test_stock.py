@@ -227,6 +227,110 @@ def test_analysis_volume_renewal_market_enum(
 
 
 # ============================================================
+#  Investor subgroup — intraday (ka10063)
+# ============================================================
+
+
+def test_investor_intraday_default_sends_all_body_fields(runner, fake_client):
+    """기본 호출이 스펙(ka10063 Request Body) 값을 그대로 보내야 한다.
+
+    이전 코드는 --investor-type의 default가 "1000"이었다(ka10058 invsr_tp
+    코드북을 복붙한 값으로, ka10063 스펙 invsr는 length=1이라 애초에
+    정의되지 않은 값이었다). 이 테스트는 수정 전 코드에서 invsr == "1000"으로
+    실패해야 한다(폴스화).
+    """
+    result = runner.invoke(cli, ["stock", "investor", "intraday"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        (
+            "ka10063",
+            {
+                "mrkt_tp": "001",
+                "amt_qty_tp": "1",
+                "invsr": "6",
+                "frgn_all": "0",
+                "smtm_netprps_tp": "0",
+                "stex_tp": "3",
+            },
+        )
+    ]
+
+
+def test_investor_intraday_market_all_supported(runner, fake_client):
+    """스펙(mrkt_tp: 000:전체, 001:코스피, 101:코스닥)에 000:전체가 있으므로 --market all 지원."""
+    result = runner.invoke(cli, ["stock", "investor", "intraday", "--market", "all"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["mrkt_tp"] == "000"
+
+
+@pytest.mark.parametrize(
+    "cli_value,api_value",
+    [
+        ("foreign", "6"), ("institution", "7"), ("investment-trust", "1"),
+        ("insurance", "0"), ("bank", "2"), ("pension", "3"), ("state", "4"),
+        ("other-corporate", "5"),
+    ],
+)
+def test_investor_intraday_investor_type_enum(runner, fake_client, cli_value, api_value):
+    """--investor-type의 human 이름 8종이 invsr 코드로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "intraday", "--investor-type", cli_value]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["invsr"] == api_value
+
+
+def test_investor_intraday_investor_type_raw_code_backcompat(runner, fake_client):
+    """--investor-type 6 (원시 코드)도 하위호환으로 그대로 통과해 invsr="6"을 보내야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "intraday", "--investor-type", "6"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["invsr"] == "6"
+
+
+def test_investor_intraday_foreign_all_yes(runner, fake_client):
+    """--foreign-all yes가 frgn_all="1"로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "intraday", "--foreign-all", "yes"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["frgn_all"] == "1"
+
+
+def test_investor_intraday_simultaneous_yes(runner, fake_client):
+    """--simultaneous yes가 smtm_netprps_tp="1"로 매핑되어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "intraday", "--simultaneous", "yes"]
+    )
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["smtm_netprps_tp"] == "1"
+
+
+def test_investor_intraday_amount_qty_rejects_out_of_spec_value(runner, fake_client):
+    """--amount-qty는 스펙상 1(금액&수량) 하나뿐이라 다른 값은 exit 1이어야 한다."""
+    result = runner.invoke(
+        cli, ["stock", "investor", "intraday", "--amount-qty", "2"]
+    )
+
+    assert result.exit_code != 0
+
+
+def test_investor_intraday_exchange_unchanged(runner, fake_client):
+    """--exchange는 이미 EXCHANGE_ALL로 전환되어 있어 이번 작업에서 그대로 둔다."""
+    result = runner.invoke(cli, ["stock", "investor", "intraday"])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stex_tp"] == "3"
+
+
+# ============================================================
 #  Investor subgroup — after-close (ka10066)
 # ============================================================
 

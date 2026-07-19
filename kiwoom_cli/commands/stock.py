@@ -23,8 +23,11 @@ from ..output import console
 from ._constants import (
     AMT_QTY_TP_0_1,
     AMT_QTY_TP_1_2,
+    AMT_QTY_TP_COMBINED,
+    CHECK_YES_NO,
     EXCHANGE_ALL,
     HumanChoice,
+    INTRADAY_INVESTOR,
     MARKET_ALL,
     MARKET_PROGRAM,
     MARKET_TWO,
@@ -1121,27 +1124,37 @@ def by_stock_total(
 @investor.command("intraday")
 @click.option(
     "--market", "mrkt_tp",
-    type=click.Choice(["kospi", "kosdaq"]),
+    type=click.Choice(["all", "kospi", "kosdaq"]),
     default="kospi",
-    help="시장구분 (kospi/kosdaq)",
+    help="시장구분 (all=전체, kospi=코스피, kosdaq=코스닥)",
 )
 @click.option(
     "--amount-qty", "amt_qty_tp",
-    default="1",
-    help="금액수량구분 (1=금액&수량)",
+    type=HumanChoice(AMT_QTY_TP_COMBINED),
+    default="combined",
+    help="금액수량구분 (combined=금액&수량, 스펙상 고정값)",
 )
-@click.option("--investor-type", "invsr", default="1000", help="투자자별")
+@click.option(
+    "--investor-type", "invsr",
+    type=HumanChoice(INTRADAY_INVESTOR),
+    default="foreign",
+    help=(
+        "투자자별 (foreign=외국인, institution=기관계, investment-trust=투신, "
+        "insurance=보험, bank=은행, pension=연기금, state=국가, "
+        "other-corporate=기타법인)"
+    ),
+)
 @click.option(
     "--foreign-all", "frgn_all",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="외국계전체 (0/1)",
+    type=HumanChoice(CHECK_YES_NO),
+    default="no",
+    help="외국계전체 (yes=체크, no=미체크)",
 )
 @click.option(
     "--simultaneous", "smtm_netprps_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="동시순매수구분 (0/1)",
+    type=HumanChoice(CHECK_YES_NO),
+    default="no",
+    help="동시순매수구분 (yes=체크, no=미체크)",
 )
 @click.option(
     "--exchange", "stex_tp",
@@ -1160,7 +1173,7 @@ def intraday(
     """장중투자자별매매 조회. (ka10063)"""
     with KiwoomClient() as c:
         data, _ = c.request("ka10063", {
-            "mrkt_tp": MARKET_TWO[mrkt_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp],
             "amt_qty_tp": amt_qty_tp,
             "invsr": invsr,
             "frgn_all": frgn_all,

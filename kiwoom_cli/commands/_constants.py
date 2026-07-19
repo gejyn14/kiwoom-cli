@@ -101,3 +101,21 @@ NETSLMT_TP_NET_BUY_ONLY = {"net-buy": "2"}
 
 # ka10131(stock.py) 전용 — stk_inds_tp(종목업종구분).
 STK_INDS_TP = {"stock": "0", "sector": "1"}
+
+# ka10063(stock.py, 장중투자자별매매) 전용 — invsr(투자자별). 기존 기본값
+# "1000"은 ka10058 invsr_tp 코드북을 복붙한 것으로, ka10063 스펙(Length=1)에는
+# 존재하지 않는 값이었다. 이름은 kwcli `--investor`를 그대로 따른다.
+INTRADAY_INVESTOR = {
+    "foreign": "6", "institution": "7", "investment-trust": "1", "insurance": "0",
+    "bank": "2", "pension": "3", "state": "4", "other-corporate": "5",
+}
+
+# amt_qty_tp의 세 번째 코드북. 여기서 "1"은 금액과 수량을 동시에 주는 단일
+# 허용값이고, AMT_QTY_TP_1_2의 "1"(=금액, 수량은 2)과 의미가 다르다.
+# 키 집합이 달라 재사용하면 즉시 KeyError가 나지만, 그래도 절대 합치지 말 것.
+# 짝: AMT_QTY_TP_1_2(13곳), AMT_QTY_TP_0_1(ka10051/ka10131). 이 상수는 1곳: ka10063.
+AMT_QTY_TP_COMBINED = {"combined": "1"}
+
+# ka10063(stock.py) 전용 — frgn_all(외국계전체)/smtm_netprps_tp(동시순매수구분)
+# 공용. 둘 다 스펙상 "1:체크, 0:미체크"인 동일 코드북.
+CHECK_YES_NO = {"yes": "1", "no": "0"}
