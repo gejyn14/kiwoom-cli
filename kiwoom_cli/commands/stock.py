@@ -36,6 +36,10 @@ from ._constants import (
     NETSLMT_TP_NET_BUY_ONLY,
     PERIOD_RECENT_OR_RANGE,
     STK_INDS_TP,
+    TRADER_ANALYSIS_DATE_MODE,
+    TRADER_ANALYSIS_PERIOD_5_120,
+    TRADER_ANALYSIS_POSITION,
+    TRADER_ANALYSIS_SORT,
     TRDE_TP_NET_BUY_BUY_SELL,
 )
 from .us import stock_ops as us_stock_ops
@@ -726,29 +730,33 @@ def open_change(
 @click.option("--to", "end_dt", required=True, help="종료일자 (YYYYMMDD)")
 @click.option(
     "--date-type", "qry_dt_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="조회구분 (0=기간, 1=일자)",
+    type=HumanChoice(TRADER_ANALYSIS_DATE_MODE),
+    default="start-end",
+    help="조회기간구분 (period=기간으로 조회, start-end=시작일자·종료일자로 조회)",
 )
 @click.option(
     "--pot", "pot_tp",
-    type=click.Choice(["0", "1"]),
-    default="0",
-    help="당일/전일 (0=당일, 1=전일)",
+    type=HumanChoice(TRADER_ANALYSIS_POSITION),
+    default="today",
+    help="시점구분 (today=당일, previous=전일)",
 )
 @click.option(
     "--days", "dt",
-    type=click.Choice(["5", "10", "20", "40", "60", "120"]),
-    default="20",
-    help="기간 (5/10/20/40/60/120일)",
+    type=HumanChoice(TRADER_ANALYSIS_PERIOD_5_120),
+    default="20d",
+    help="기간 (5d/10d/20d/40d/60d/120d)",
 )
 @click.option(
     "--sort", "sort_base",
-    type=click.Choice(["1", "2"]),
-    default="2",
-    help="정렬기준 (1=종가순, 2=날짜순)",
+    type=HumanChoice(TRADER_ANALYSIS_SORT),
+    default="date",
+    help="정렬기준 (close=종가순, date=날짜순)",
 )
-@click.option("--broker", "mmcm_cd", default="", help="회원사코드")
+@click.option(
+    "--broker", "mmcm_cd",
+    required=True,
+    help="회원사코드 (조회: kiwoom stock brokers)",
+)
 @click.option(
     "--exchange", "stex_tp",
     type=click.Choice(["KRX", "NXT", "all"]),

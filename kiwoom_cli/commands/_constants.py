@@ -276,6 +276,37 @@ ELW_BROKER_SIDE = {"net-buy": "1", "net-sell": "2"}
 # 1곳: ka30002.
 ELW_BROKER_PERIOD = {"previous": "1", "5d": "5", "10d": "10", "40d": "40", "60d": "60"}
 
+# ── task-14 (stock.py 부분): ka10043(trader-analysis, 거래원매물대분석)
+# qry_dt_tp/pot_tp/sort_base/dt 파라미터 교정 ─────────────────────────────
+
+# ka10043 전용 — qry_dt_tp(조회기간구분). market.py의 ka10042(rank net-buyer)도
+# 같은 필드명·값 집합(0:기간,1:일자)을 쓰는 것으로 보이나 아직 이관 전이라
+# 이 상수를 쓰지 않는다(별도 작업 대상, market.py는 이번 태스크 범위 밖).
+# 1곳: ka10043.
+TRADER_ANALYSIS_DATE_MODE = {"period": "0", "start-end": "1"}
+
+# ka10043 전용 — pot_tp(시점구분, 0:당일,1:전일). market.py의 ka10042도 같은
+# 필드명·값 집합을 쓰는 것으로 보이나 아직 이관 전이라 이 상수를 쓰지 않는다.
+# 1곳: ka10043.
+TRADER_ANALYSIS_POSITION = {"today": "0", "previous": "1"}
+
+# ka10043 전용 — sort_base(정렬기준, 1:종가순,2:날짜순). market.py의 ka10042도
+# 같은 필드명·값 집합을 쓰는 것으로 보이나 아직 이관 전이라 이 상수를 쓰지 않는다.
+# 1곳: ka10043.
+TRADER_ANALYSIS_SORT = {"close": "1", "date": "2"}
+
+# ka10043 전용 — dt(기간). 이 API는 5일=5로 코드가 일수와 그대로 일치한다
+# (off-by-one 아님). 이름에 값 범위(5_120)를 새긴 이유: ka10038의
+# PERIOD_DAYS_OFF_BY_ONE(5일=4, 10일=9, ..., 120일=119로 하루씩 어긋남)과
+# 키 집합(5d/10d/20d/40d/60d/120d)까지 비슷해서 이름만으로는 두 코드북이
+# 구분되지 않기 때문이다 — 절대 PERIOD_DAYS_OFF_BY_ONE과 합치지 말 것.
+# ka30002의 ELW_BROKER_PERIOD(5일=5로 값은 같으나 previous 키가 섞여 있고
+# 20d/120d가 없어 키 집합이 다름)와도 값 집합이 달라 재사용 금지.
+# 1곳: ka10043.
+TRADER_ANALYSIS_PERIOD_5_120 = {
+    "5d": "5", "10d": "10", "20d": "20", "40d": "40", "60d": "60", "120d": "120",
+}
+
 # ka30002(elw broker-top) 전용 — trde_end_elwskip(거래종료ELW제외).
 # 0=포함,1=제외. elw_surge(ka30001)/elw_disparity(ka30004)/elw_change_rank
 # (ka30009)/elw_balance_rank(ka30010)도 동일한 trde_end_elwskip/trde_end_skip

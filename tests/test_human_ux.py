@@ -270,6 +270,8 @@ def test_history_transactions_human_deposit_still_kr_only(runner, isolated_env):
     "VOLUME_RANK_AMOUNT_TYPE", "VOLUME_RANK_SESSION", "BROKER_BY_STOCK_SIDE",
     "PERIOD_DAYS_OFF_BY_ONE", "ELW_BROKER_QTY_TYPE", "ELW_BROKER_SIDE",
     "ELW_BROKER_PERIOD", "ELW_BROKER_END_SKIP",
+    "TRADER_ANALYSIS_DATE_MODE", "TRADER_ANALYSIS_POSITION",
+    "TRADER_ANALYSIS_SORT", "TRADER_ANALYSIS_PERIOD_5_120",
 ])
 def test_every_mapping_converts_all_human_names(mapping_name):
     from kiwoom_cli.commands import _constants
@@ -281,11 +283,12 @@ def test_every_mapping_converts_all_human_names(mapping_name):
 
 
 def test_all_converted_decorators_use_human_choice(runner, isolated_env):
-    """18개 전환 옵션이 전부 HumanChoice로 남아있는지 데코레이터 레벨에서 고정."""
+    """전환 옵션이 전부 HumanChoice로 남아있는지 데코레이터 레벨에서 고정."""
     import click
     from kiwoom_cli.commands import _constants
     from kiwoom_cli.commands.account import account
     from kiwoom_cli.commands.market import market
+    from kiwoom_cli.commands.stock import stock
 
     def _iter_options(cmd):
         yield from ((cmd, p) for p in cmd.params if isinstance(p, click.Option))
@@ -294,7 +297,10 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
                 yield from _iter_options(sub)
 
     converted = [
-        (cmd.name, p.name) for cmd, p in list(_iter_options(account)) + list(_iter_options(market))
+        (cmd.name, p.name)
+        for cmd, p in (
+            list(_iter_options(account)) + list(_iter_options(market)) + list(_iter_options(stock))
+        )
         if isinstance(p.type, _constants.HumanChoice)
     ]
     # 19, not 18: balance's and asset's --delist are two separate physical decorators
@@ -312,8 +318,17 @@ def test_all_converted_decorators_use_human_choice(runner, isolated_env):
     # --vol-type, --price-type, --amount-type, --session), rank amount's 1
     # (--include-managed), broker-by-stock's 2 (--type, --period), elw broker-top's
     # 4 (--vol-type, --type, --period, --exclude-expired). 23 + 14 = 37.
-    # See task-14-report.md.
-    assert len(converted) == 37
+    # See task-14-report.md (market.py part).
+    # 53, not 37: this assertion previously scanned only account.py + market.py.
+    # task-14's stock.py part (ka10043 trader-analysis) adds --date-type/--pot/
+    # --sort/--days (4 new HumanChoice conversions) to stock.py, which had never
+    # been scanned by this test before — so folding stock.py in also surfaces
+    # 12 pre-existing HumanChoice decorators (CREDIT_MARKET, CREDIT_GRADE,
+    # AMT_QTY_TP_COMBINED, INTRADAY_INVESTOR, CHECK_YES_1_NO_0 x2, AMT_QTY_TP_1_2,
+    # TRDE_TP_NET_BUY_BUY_SELL, PERIOD_RECENT_OR_RANGE, NETSLMT_TP_NET_BUY_ONLY,
+    # STK_INDS_TP, AMT_QTY_TP_0_1) that predate this test and were never pinned.
+    # 37 + 12 + 4 = 53. See task-14-report.md (stock.py part) for the recount.
+    assert len(converted) == 53
 
 
 # ── Task 8: both-fail envelope (fail_api) ────────────────

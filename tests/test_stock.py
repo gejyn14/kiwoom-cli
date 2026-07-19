@@ -590,3 +590,95 @@ def test_investor_consecutive_exchange_unchanged(runner, fake_client):
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["stex_tp"] == "3"
+
+
+# ============================================================
+#  task-14: ka10043 trader-analysis — qry_dt_tp default + required broker
+# ============================================================
+
+
+def test_trader_analysis_default_sends_start_end_mode(runner, fake_client):
+    """--date-type 기본값은 이제 "1"(시작일자,종료일자로 조회)이어야 한다.
+
+    이전 기본값 "0"(기간으로 조회)은 --from/--to가 required=True인데도
+    API가 무시하고 dt(기간)로 조회하게 만들었다.
+    """
+    result = runner.invoke(cli, [
+        "stock", "analysis", "trader-analysis", "005930",
+        "--from", "20260101", "--to", "20260107", "--broker", "001",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["qry_dt_tp"] == "1"
+
+
+def test_trader_analysis_broker_required_no_request_sent(runner, fake_client):
+    """--broker(mmcm_cd) 없이 호출하면 exit 1이고 요청이 전혀 나가지 않아야 한다."""
+    result = runner.invoke(cli, [
+        "stock", "analysis", "trader-analysis", "005930",
+        "--from", "20260101", "--to", "20260107",
+    ])
+
+    assert result.exit_code == 1
+    assert fake_client.calls == []
+
+
+def test_trader_analysis_days_5d_sends_5_not_4(runner, fake_client):
+    """--days 5d는 dt="5"를 보내야 한다 (ka10038의 off-by-one 코드북과 달리 5일=5)."""
+    result = runner.invoke(cli, [
+        "stock", "analysis", "trader-analysis", "005930",
+        "--from", "20260101", "--to", "20260107", "--broker", "001",
+        "--days", "5d",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == "5"
+    assert fake_client.calls[0][1]["dt"] != "4"
+
+
+def test_trader_analysis_date_type_period_human_name(runner, fake_client):
+    """--date-type period -> qry_dt_tp="0"."""
+    result = runner.invoke(cli, [
+        "stock", "analysis", "trader-analysis", "005930",
+        "--from", "20260101", "--to", "20260107", "--broker", "001",
+        "--date-type", "period",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["qry_dt_tp"] == "0"
+
+
+def test_trader_analysis_pot_previous_human_name(runner, fake_client):
+    """--pot previous -> pot_tp="1"."""
+    result = runner.invoke(cli, [
+        "stock", "analysis", "trader-analysis", "005930",
+        "--from", "20260101", "--to", "20260107", "--broker", "001",
+        "--pot", "previous",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["pot_tp"] == "1"
+
+
+def test_trader_analysis_sort_close_human_name(runner, fake_client):
+    """--sort close -> sort_base="1"."""
+    result = runner.invoke(cli, [
+        "stock", "analysis", "trader-analysis", "005930",
+        "--from", "20260101", "--to", "20260107", "--broker", "001",
+        "--sort", "close",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["sort_base"] == "1"
+
+
+def test_trader_analysis_days_raw_code_backcompat(runner, fake_client):
+    """하위호환: --days 5(원시 코드)도 통과해 dt="5"를 보내야 한다."""
+    result = runner.invoke(cli, [
+        "stock", "analysis", "trader-analysis", "005930",
+        "--from", "20260101", "--to", "20260107", "--broker", "001",
+        "--days", "5",
+    ])
+
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["dt"] == "5"
