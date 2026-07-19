@@ -28,6 +28,7 @@ from kiwoom_cli.commands._constants import (
     ETF_ALL_TAX_TYPE,
     ETF_ALL_TAXABLE,
     ETF_RETURNS_PERIOD,
+    EXCHANGE_ALL,
     EXCHANGE_TWO,
     EXCLUDE_ENDED_ELW,
     GOLD_PRICE_TYPE,
@@ -2185,3 +2186,158 @@ def test_discover_dual_spelling_options_finds_all_twenty_sites():
     assert len(_DUAL_SPELLING_SITES) == 20
 
 
+
+
+# ============================================================
+#  구분 가능한 값 고정 (discriminating literal pins)
+# ============================================================
+#
+# 값 고정 테스트는 "샘플한 키가 형제 상수와 실제로 값이 다른 키인가"에
+# 달려 있다. 형제가 같은 값을 갖는 키만 골라 고정하면, 상수를 통째로
+# 형제와 합쳐도 테스트가 전부 통과한다 — 고정이 아무것도 고정하지 못한다.
+#
+# 실제로 그런 일이 있었다: test_rank_change_human_options는 하드코딩
+# 리터럴 테스트인데도 샘플한 세 값(exclude-etf=14, under-10k=10,
+# 10b=1000)이 전부 형제와 값이 같아, ka10027의 세 상수를 형제와 합쳐도
+# 1552개 테스트가 전부 통과했다.
+#
+# 아래 테스트들은 전부 **형제와 값이 다른 키**만 골라 고정한다. 각 고정은
+# 실제로 병합을 수행해 실패하는 것을 확인했다(mutation 검증).
+
+
+# ── ka10027 RANK_CHANGE_* — 형제와 값이 갈리는 키로 고정 ──────────────
+
+
+def test_rank_change_stk_cnd_discriminating_pins(runner, fake_client):
+    """RANK_CHANGE_STK_CND를 형제와 구분하는 두 키.
+
+    exclude-etf-etn: 여기 "16" vs VOLUME_SURGE_STK_CND "18".
+    exclude-liquidation: 여기 "11" vs AFTERHOURS_CHANGE_STK_CND "2".
+    """
+    result = runner.invoke(cli, ["market", "rank", "change",
+                                 "--stock-cond", "exclude-etf-etn"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stk_cnd"] == "16"
+    assert fake_client.calls[0][1]["stk_cnd"] != "18"   # VOLUME_SURGE_STK_CND
+
+    fake_client.calls.clear()
+    result = runner.invoke(cli, ["market", "rank", "change",
+                                 "--stock-cond", "exclude-liquidation"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stk_cnd"] == "11"
+    assert fake_client.calls[0][1]["stk_cnd"] != "2"    # AFTERHOURS_CHANGE_STK_CND
+
+
+@pytest.mark.parametrize("human,own,sibling", [
+    ("1k-2k", "2", "3"),
+    ("2k-5k", "3", "4"),
+    ("5k-10k", "4", "6"),
+    ("over-10k", "5", "7"),
+    ("over-1k", "8", "2"),
+])
+def test_rank_change_price_cnd_discriminating_pins(runner, fake_client, human, own, sibling):
+    """RANK_CHANGE_PRICE_CND(ka10027) vs VOLUME_RANK_PRICE_TYPE(ka10030).
+
+    두 상수는 키 집합이 겹치지만 다섯 키에서 값이 갈린다. 기존 테스트가
+    샘플하던 under-10k(둘 다 "10")로는 병합을 잡을 수 없었다.
+    """
+    result = runner.invoke(cli, ["market", "rank", "change", "--price-cond", human])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["pric_cnd"] == own
+    assert fake_client.calls[0][1]["pric_cnd"] != sibling
+
+
+def test_rank_change_amount_cnd_discriminating_pin(runner, fake_client):
+    """RANK_CHANGE_AMOUNT_CND(ka10027) vs VOLUME_RANK_AMOUNT_TYPE(ka10030).
+
+    50m만 값이 갈린다(여기 "5", 저쪽 "4"). 기존 테스트가 샘플하던
+    10b는 둘 다 "1000"이라 병합을 잡지 못했다.
+    """
+    result = runner.invoke(cli, ["market", "rank", "change", "--amount-cond", "50m"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["trde_prica_cnd"] == "5"
+    assert fake_client.calls[0][1]["trde_prica_cnd"] != "4"
+
+
+# ── ka10029 EXPECTED_CHANGE_STK_CND ─────────────────────────────────
+
+
+def test_rank_expected_change_stk_cnd_discriminating_pin(runner, fake_client):
+    """EXPECTED_CHANGE_STK_CND(ka10029) vs VOLUME_SURGE_STK_CND(ka10023).
+
+    exclude-etf-etn만 값이 갈린다(여기 "16", 저쪽 "18").
+    RANK_CHANGE_STK_CND와는 값이 완전히 동일해 어떤 테스트로도 구분할 수
+    없다(정의부 주석 참고) — 이 고정은 VOLUME_SURGE 쪽 병합만 방어한다.
+    """
+    result = runner.invoke(cli, ["market", "rank", "expected-change",
+                                 "--stock-cond", "exclude-etf-etn"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stk_cnd"] == "16"
+    assert fake_client.calls[0][1]["stk_cnd"] != "18"
+
+
+# ── ka10023 VOLUME_SURGE_PRICE_TYPE ─────────────────────────────────
+
+
+@pytest.mark.parametrize("human,own,sibling", [
+    ("over-50k", "2", "8"),
+    ("over-10k", "5", "7"),
+    ("over-5k", "6", "5"),
+    ("over-1k", "8", "2"),
+])
+def test_rank_volume_surge_price_type_discriminating_pins(
+    runner, fake_client, human, own, sibling
+):
+    """VOLUME_SURGE_PRICE_TYPE(ka10023) vs VOLUME_RANK_PRICE_TYPE(ka10030).
+
+    네 키 전부 값이 갈린다 — 라벨이 같아 보여도 코드북 스케일이 다르다.
+    """
+    result = runner.invoke(cli, ["market", "rank", "volume-surge",
+                                 "--price-type", human])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["pric_tp"] == own
+    assert fake_client.calls[0][1]["pric_tp"] != sibling
+
+
+# ── ka90001 THEME_LOOKUP_KIND ───────────────────────────────────────
+
+
+def test_theme_groups_kind_stock_discriminating_pin(runner, fake_client):
+    """THEME_LOOKUP_KIND의 stock은 "2"다 — ALL_STOCK_QRY/PRODUCT_TYPE의
+    stock("1")이나 INSTANT_VOLUME_MARKET의 stock("3")과 값이 다르다."""
+    result = runner.invoke(cli, ["market", "theme", "groups", "--type", "stock"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["qry_tp"] == "2"
+    assert fake_client.calls[0][1]["qry_tp"] != "1"   # ALL_STOCK_QRY / PRODUCT_TYPE
+    assert fake_client.calls[0][1]["qry_tp"] != "3"   # INSTANT_VOLUME_MARKET
+
+
+# ── EXCHANGE_TWO vs EXCHANGE_ALL — 키 집합 확장 방어 ────────────────
+#
+# 이 관계는 값이 아니라 **키 집합**이 위험하다. EXCHANGE_TWO의 두 값은
+# EXCHANGE_ALL과 동일해서 값만 비교하는 병합 테스트로는 잡히지 않는다.
+# 위험은 EXCHANGE_ALL이 "all"->"3"을 하나 더 갖고 있다는 것 — 합치면
+# KRX/NXT만 문서화된 23개 사이트가 전부 stex_tp="3"을 받아들이게 된다.
+
+
+def test_exchange_two_has_no_all_key():
+    """EXCHANGE_TWO는 KRX/NXT 두 키뿐이어야 한다. "all"이 들어오는 순간
+    23개 EXCHANGE_TWO 사이트가 스펙에 없는 stex_tp="3"을 전송하게 된다."""
+    assert set(EXCHANGE_TWO) == {"KRX", "NXT"}
+    assert "all" not in EXCHANGE_TWO
+    assert EXCHANGE_TWO != EXCHANGE_ALL
+
+
+def test_exchange_two_site_rejects_all(runner, fake_client):
+    """EXCHANGE_TWO 사이트는 --exchange all을 거부해야 한다."""
+    result = runner.invoke(cli, ["market", "theme", "groups", "--exchange", "all"])
+    assert result.exit_code != 0
+    assert fake_client.calls == []
+
+
+def test_exchange_all_site_still_accepts_all(runner, fake_client):
+    """반대쪽 짝: EXCHANGE_ALL 사이트는 all을 받아 "3"을 전송한다 —
+    위 거부 테스트가 EXCHANGE_ALL까지 잘못 좁히면 여기서 드러난다."""
+    result = runner.invoke(cli, ["market", "rank", "volume", "--exchange", "all"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["stex_tp"] == "3"

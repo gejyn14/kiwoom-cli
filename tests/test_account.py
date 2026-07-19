@@ -263,3 +263,87 @@ def test_history_transactions_exchange_sor_rejected(runner, fake_client):
 
     assert result.exit_code == 1
     assert fake_client.calls == []
+
+
+# ============================================================
+#  구분 가능한 값 고정 (discriminating literal pins)
+# ============================================================
+#
+# 형제 상수와 값이 **갈리는** 키만 골라 고정한다. 형제가 같은 값을 갖는
+# 키만 샘플하면 상수를 통째로 합쳐도 테스트가 통과해 고정이 무의미해진다
+# (tests/test_market.py 같은 이름의 섹션 주석 참고). 아래 고정은 전부
+# 실제 병합을 수행해 실패하는 것을 확인했다.
+
+
+def test_orders_pending_all_stocks_stock_discriminating_pin(runner, fake_client):
+    """ALL_STOCK_QRY의 stock은 "1"이다 — INSTANT_VOLUME_MARKET의
+    stock("3"), THEME_LOOKUP_KIND의 stock("2")과 값이 다르다."""
+    result = runner.invoke(cli, ["account", "orders", "pending",
+                                 "--all-stocks", "stock"])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["all_stk_tp"] == "1"
+    assert body["all_stk_tp"] != "3"   # INSTANT_VOLUME_MARKET
+    assert body["all_stk_tp"] != "2"   # THEME_LOOKUP_KIND
+
+
+def test_orders_executed_qry_type_stock_discriminating_pin(runner, fake_client):
+    """같은 ALL_STOCK_QRY를 쓰는 두 번째 사이트(ka10076 qry_tp)."""
+    result = runner.invoke(cli, ["account", "orders", "executed",
+                                 "--qry-type", "stock"])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["qry_tp"] == "1"
+    assert body["qry_tp"] != "3"
+    assert body["qry_tp"] != "2"
+
+
+def test_history_transactions_product_stock_discriminating_pin(runner, fake_client):
+    """PRODUCT_TYPE의 stock도 "1"이다 — 위 두 형제와 값이 다르다."""
+    result = runner.invoke(cli, ["account", "history", "transactions",
+                                 "--from", "20260101", "--to", "20260131",
+                                 "--product", "stock"])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["gds_tp"] == "1"
+    assert body["gds_tp"] != "3"   # INSTANT_VOLUME_MARKET
+    assert body["gds_tp"] != "2"   # THEME_LOOKUP_KIND
+
+
+@pytest.mark.parametrize("human,own,literal_sibling", [
+    ("all", "0", "%"),
+    ("KRX", "1", "KRX"),
+    ("NXT", "2", "NXT"),
+])
+def test_returns_summary_exchange_numeric_codes_pinned(
+    runner, fake_client, human, own, literal_sibling
+):
+    """EXCHANGE_ALL_ZERO는 숫자코드("0"/"1"/"2")를 전송한다.
+
+    ACCOUNT_EXCHANGE_WITH_SOR/NO_SOR은 키 집합이 같아 보이지만 리터럴
+    ("%"/"KRX"/"NXT")을 전송한다 — 스킴 자체가 다르다. 셋 다 값이 갈리는
+    키라 어느 쪽으로 합쳐도 여기서 잡힌다. EXCHANGE_ALL(all="3")과도
+    all에서 갈린다.
+    """
+    result = runner.invoke(cli, ["account", "returns", "summary",
+                                 "--exchange", human])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["stex_tp"] == own
+    assert body["stex_tp"] != literal_sibling   # ACCOUNT_EXCHANGE_WITH_SOR/NO_SOR
+    if human == "all":
+        assert body["stex_tp"] != "3"           # EXCHANGE_ALL
+
+
+@pytest.mark.parametrize("human,own", [("all", "0"), ("kospi", "1"), ("kosdaq", "2")])
+def test_orders_status_market_discriminating_pins(runner, fake_client, human, own):
+    """MARKET_STATUS_KOSPI(0/1/2)는 표준 MARKET_ALL(000/001/101)과도
+    CREDIT_MARKET(all="%", kosdaq="0")과도 값이 갈린다 — mrkt_tp의 또
+    다른 코드북이다. 세 키 전부 MARKET_ALL과 값이 다르다."""
+    result = runner.invoke(cli, ["account", "orders", "status", "--market", human])
+    assert result.exit_code == 0
+    body = fake_client.calls[0][1]
+    assert body["mrkt_tp"] == own
+    assert body["mrkt_tp"] not in {"000", "001", "101"}   # MARKET_ALL
+    if human == "all":
+        assert body["mrkt_tp"] != "%"                     # CREDIT_MARKET
