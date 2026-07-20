@@ -301,12 +301,15 @@ def _save_stock_cache(data: list[dict]) -> None:
 
 def _sync_stocks() -> list[dict]:
     """Fetch all stocks from Kiwoom API across all markets and save to cache."""
-    _api_map = {"0": "코스피", "10": "코스닥", "8": "ETF", "3": "ELW"}
-    _market_label = {"거래소": "코스피", "코스닥": "코스닥", "ETF": "ETF", "ELW": "ELW"}
+    _api_map = {"0": "코스피", "10": "코스닥", "8": "ETF", "3": "ELW", "60": "ETN"}
+    _market_label = {"거래소": "코스피", "코스닥": "코스닥", "ETF": "ETF",
+                     "ELW": "ELW", "ETN": "ETN"}
     _kind_label = {"A": "주식", "Q": "ETN", "J": "ELW"}
     all_items: list[dict] = []
     with KiwoomClient() as c:
-        for mrkt_code in ["0", "10", "8", "3"]:
+        # "60"(ETN)이 빠져 있어 --market etn이 구조적으로 항상 빈 결과였다.
+        # ka10099 스펙의 mrkt_tp는 "60 : ETN"을 문서화한다.
+        for mrkt_code in ["0", "10", "8", "3", "60"]:
             data, _ = c.request("ka10099", {"mrkt_tp": mrkt_code})
             items = _find_list(data) or []
             for item in items:

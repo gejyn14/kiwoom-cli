@@ -8,6 +8,7 @@ parametrization for non-trivial CLI -> API mappings.
 
 from __future__ import annotations
 
+import inspect
 import json
 
 import pytest
@@ -2001,3 +2002,69 @@ def test_prefixed_code_routes_kr_and_strips_prefix(runner, fake_client, argv, ap
     called_id, body = fake_client.calls[0]
     assert called_id == api_id
     assert body["stk_cd"] == "005930"
+
+
+# ============================================================
+#  Task 29-2: stock search --market etn (ka10099 시장코드 60)
+# ============================================================
+
+
+def test_sync_requests_etn_market_code(runner, fake_client, tmp_stock_cache):
+    """sync는 ETN 시장코드 "60"도 조회해야 한다.
+
+    ka10099 스펙(docs/미국 REST API 문서.xlsx + kwcli 0.1.1 번들
+    kiwoom_api_spec.json)의 mrkt_tp는 "60 : ETN"을 문서화한다. 종전 루프는
+    ["0","10","8","3"]이라 60을 한 번도 요청하지 않았고, 그래서
+    `--market etn`(Choice에 광고돼 있고 _filter_map에도 있음)이 구조적으로
+    **항상 빈 결과**였다 — 캐시에 ETN이 들어올 경로 자체가 없었다.
+    """
+    result = runner.invoke(cli, ["stock", "sync"])
+
+    assert result.exit_code == 0
+    requested = [body["mrkt_tp"] for api, body in fake_client.calls if api == "ka10099"]
+    assert "60" in requested, f"ETN(60) 미요청: {requested}"
+    assert requested == ["0", "10", "8", "3", "60"]
+
+
+def test_search_market_etn_can_return_rows(runner, fake_client, tmp_stock_cache):
+    """--market etn 필터가 실제로 행을 돌려줄 수 있어야 한다.
+
+    ka10099가 ETN 종목(kind="Q")을 돌려주면 _kind_label이 type="ETN"으로
+    분류하고, --market etn 필터가 그 행을 잡아야 한다. 이 테스트는 60을
+    루프에서 다시 빼면 즉시 실패한다(캐시가 비어 검색 결과가 0행).
+    """
+    # ETN 행은 mrkt_tp="60" 요청에만 돌려준다. 이 조건이 없으면 fake가 모든
+    # 시장코드에 같은 응답을 주기 때문에, 루프에서 60을 빼도 테스트가 통과한다
+    # (실제로 그렇게 짰다가 무력한 테스트임을 확인하고 고쳤다).
+    real_request = fake_client.request
+
+    def request_by_market(api_id, body=None, **kw):
+        real_request(api_id, body, **kw)
+        if api_id == "ka10099" and (body or {}).get("mrkt_tp") == "60":
+            return (
+                {"list": [{"code": "500001", "name": "ETN테스트",
+                           "marketName": "ETN", "kind": "Q"}]},
+                {"cont-yn": "", "next-key": ""},
+            )
+        return ({"list": []}, {"cont-yn": "", "next-key": ""})
+
+    fake_client.request = request_by_market
+    assert runner.invoke(cli, ["stock", "sync"]).exit_code == 0
+
+    result = runner.invoke(cli, ["stock", "search", "--market", "etn"])
+
+    assert result.exit_code == 0
+    assert "ETN테스트" in result.output
+
+
+def test_kind_label_still_maps_all_three_kinds():
+    """_kind_label의 A/Q/J 세 분기를 전부 유지한다.
+
+    "Q"(ETN) 분기만 도달 불가였고 A(주식)/J(ELW)는 살아 있었다 — 도달 불가를
+    이유로 룩업을 지우면 살아 있는 두 분기까지 함께 날아간다.
+    """
+    from kiwoom_cli.commands import stock as stock_mod
+    src = inspect.getsource(stock_mod._sync_stocks)
+    assert '"A": "주식"' in src
+    assert '"Q": "ETN"' in src
+    assert '"J": "ELW"' in src
