@@ -216,10 +216,13 @@ def test_dashboard_top_volume_uses_same_exchange_as_market_rank_volume(
         f"dashboard={dash_body['stex_tp']!r} vs market rank volume="
         f"{rank_body['stex_tp']!r} — 같은 목록이 두 명령에서 갈린다"
     )
-    # 남아 있는 차이를 **명시적으로** 고정한다. 조용히 두면 다음 드리프트가
-    # "원래 다르던 것"에 섞여 안 보인다. mang_stk_incls 차이는 D7 이전부터
-    # 있던 dashboard의 선택이고, 그 외 필드는 전부 같아야 한다.
-    assert dash_body["mang_stk_incls"] == "1"   # exclude-managed (dashboard 선택)
-    assert rank_body["mang_stk_incls"] == "0"   # include-managed (market 기본값)
-    assert {k: v for k, v in dash_body.items() if k != "mang_stk_incls"} == \
-           {k: v for k, v in rank_body.items() if k != "mang_stk_incls"}
+    # 예외 없이 **전 필드 동일**이어야 한다. 예전에는 mang_stk_incls만
+    # 달랐고(dashboard "1"=exclude-managed vs market 기본값 "0"=include-managed)
+    # 그 차이를 명시적으로 고정해 뒀었지만, 같은 질문("당일 거래량 상위")에
+    # 두 명령이 다른 답을 주는 상태 자체를 없앴다. 예외 키를 다시 만들지 말 것 —
+    # 하나 허용하는 순간 다음 드리프트가 "원래 다르던 것"에 섞여 안 보인다.
+    assert dash_body["mang_stk_incls"] == rank_body["mang_stk_incls"], (
+        f"dashboard={dash_body['mang_stk_incls']!r} vs market rank volume="
+        f"{rank_body['mang_stk_incls']!r} — 관리종목 포함 여부가 갈린다"
+    )
+    assert dash_body == rank_body
