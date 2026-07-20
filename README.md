@@ -167,7 +167,17 @@ kiwoom auth login
 
 # 3. 끝. 이후 모든 명령은 프롬프트 없이 동작
 kiwoom stock info 005930
+
+# 토큰 폐기
+kiwoom auth logout
+kiwoom auth logout --force   # 서버 폐기가 실패해도 로컬 토큰은 지웁니다
 ```
+
+`auth logout`은 서버 폐기 응답을 확인한 뒤에만 성공을 보고합니다. 폐기가
+실패하면 exit 2로 끝나고 **로컬 토큰을 지우지 않습니다** — 지워버리면 서버에
+살아 있는 토큰을 두 번 다시 폐기할 수 없기 때문입니다. 서버에 도달할 수 없어
+로컬 정리가 막히는 상황에서만 `--force`를 쓰세요. 이때도 `revoked`는 `false`로
+보고됩니다(확인하지 않은 것을 성공이라 하지 않습니다).
 
 ### 모의투자 vs 실거래
 
@@ -220,7 +230,8 @@ kiwoom -p isa config set domain mock    # 특정 프로필
 
 # 프로필 전환 / 목록
 kiwoom config use isa
-kiwoom config profiles
+kiwoom config profiles                  # -f json이면 domain_override로
+                                        # KIWOOM_DOMAIN 덮어쓰기를 함께 알립니다
 
 # 특정 프로필로 사용
 kiwoom -p isa account balance

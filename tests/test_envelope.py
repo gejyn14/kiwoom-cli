@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 
+import click
 import httpx
 import pytest
 from click.testing import CliRunner
@@ -490,7 +491,9 @@ def test_auth_logout_json_envelope(runner, monkeypatch, configured_default):
     # revoke_token은 어느 토큰을 폐기했는지를 돌려준다 (envelope에 그대로 실림)
     monkeypatch.setattr(
         RealClient, "revoke_token",
-        lambda self: {"token_source": "keychain", "keychain_token_deleted": True},
+        lambda self, force=False: {
+            "revoked": True, "token_source": "keychain", "keychain_token_deleted": True,
+        },
     )
     result = runner.invoke(cli, ["-f", "json", "auth", "logout"])
     assert result.exit_code == 0, result.output
@@ -573,3 +576,82 @@ def test_api_raw_json_mode_enveloped_unstripped(runner, monkeypatch):
     assert doc["ok"] is True
     assert doc["data"]["return_code"] == 0
     assert doc["data"]["stk_nm"] == "삼성전자"
+
+
+def test_meta_env_reports_domain_client_actually_used(runner, monkeypatch, tmp_path):
+    """meta.env는 클라이언트가 실제로 쓴 도메인의 '보고'여야 한다.
+
+    종전에는 KiwoomClient와 build_meta가 ctx.obj['profile']를 각자 읽고 각자
+    해석했다. 값이 같은 것은 우연이지 보장이 아니었다. AGENTS.md가 에이전트에게
+    주문 전 meta.env로 prod/mock을 확인하라고 지시하므로, 우연히 맞는 값은
+    잘못된 보장이다.
+    """
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        '[general]\ndefault_profile = "sim"\n'
+        '[profiles.sim]\ndomain = "mock"\n'
+        '[profiles.live]\ndomain = "prod"\n'
+    )
+    monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+    monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+    monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+
+    result = runner.invoke(cli, ["-p", "live", "-f", "json", "auth", "status"])
+    doc = json.loads(result.stdout)
+    assert doc["meta"]["profile"] == "live"
+    assert doc["meta"]["env"] == "prod"
+
+
+def test_client_domain_and_meta_env_cannot_diverge(monkeypatch, tmp_path):
+    """meta.env와 KiwoomClient.domain은 같은 해석 결과를 공유해야 한다.
+
+    auth status는 KiwoomClient를 만들지 않으므로 위 테스트만으로는 '보고한
+    값'과 '실제로 접속한 값'이 같다는 보장이 안 된다. 여기서 둘을 직접
+    맞대어 고정한다 — 이 불변식이 Task 2의 존재 이유다.
+    """
+    from kiwoom_cli import envelope
+    from kiwoom_cli.client import KiwoomClient
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        '[general]\ndefault_profile = "sim"\n'
+        '[profiles.sim]\ndomain = "mock"\n'
+        '[profiles.live]\ndomain = "prod"\n'
+    )
+    monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+    monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+    monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+    monkeypatch.setattr("kiwoom_cli.auth.load_token", lambda profile=None: "tok")
+
+    obj = {"profile": "live", "resolved_profile": "live", "domain_key": "prod"}
+    with click.Context(click.Command("x"), obj=obj):
+        with KiwoomClient() as c:
+            meta = envelope.build_meta()
+            assert c.domain == config.DOMAINS[meta["env"]], (
+                f"보고한 env={meta['env']} 인데 실제 접속 도메인은 {c.domain}"
+            )
+            assert c.profile == meta["profile"]
+
+
+def test_partial_failures_appears_only_when_supplied(capsys):
+    """envelope.py에 build_doc 헬퍼가 없어 계획이 예고한 capsys 경로를 쓴다."""
+    from kiwoom_cli import envelope as env
+
+    env.emit(data={"kr": None}, partial_failures={"kr": "NOT_FOUND"})
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["meta"]["partial_failures"] == {"kr": "NOT_FOUND"}
+    assert doc["ok"] is True, "부분 실패는 ok를 뒤집지 않는다 (ok ≡ error is None 불변식)"
+
+    env.emit(data={"kr": {}})
+    plain = json.loads(capsys.readouterr().out)
+    assert "partial_failures" not in plain["meta"], \
+        "성공 시에는 키 자체가 없어야 한다 (meta.fields_unmatched 선례)"
+
+
+def test_partial_failures_empty_dict_is_omitted(capsys):
+    """빈 dict는 '실패한 레그 없음'이므로 키를 만들지 않는다."""
+    from kiwoom_cli import envelope as env
+
+    env.emit(data={"kr": {}}, partial_failures={})
+    doc = json.loads(capsys.readouterr().out)
+    assert "partial_failures" not in doc["meta"]

@@ -234,6 +234,24 @@ exit 2로 하드 실패하지 않고) `checks.price_known`이 `false`가 되어 
 `data.top_volume`은 계좌와 달리 토큰 유무로 게이팅되지 않고 항상 시도되므로,
 실패 시에는 (조회를 아예 안 하는 경우가 없어) 언제나 `null`로 나타납니다.
 
+**v2.14.0부터 `meta.partial_failures`가 실패한 레그를 이름과 오류 코드로
+알립니다.** 위의 exit 0 + `null` 계약은 그대로입니다 — 바뀐 것은 그 `null`을
+해석할 수 있게 된 것뿐입니다. 한쪽만 실패하면:
+
+```json
+{"ok": true, "data": {"kr": {...}, "us": null},
+ "meta": {"partial_failures": {"us": "UPSTREAM_ERROR"}}}
+```
+
+`ok`는 여전히 `true`이고(불변식: `ok ≡ error === null`) exit code도 0입니다.
+성공했거나 실패한 레그가 없으면 **키 자체가 없습니다**(`meta.fields_unmatched`와
+같은 규약). 값은 `{레그이름: 오류코드}`이고 코드는 위 표와 같은 집합입니다.
+레그 이름은 계좌 계열이 `kr`/`us`, `dashboard`가 `account`/`top_volume`입니다.
+
+이것이 필요한 이유: `"us": null` 하나만으로는 **미국 계좌가 없는 것**과
+**조회가 실패한 것**을 구분할 수 없었습니다. 국내 계좌만 쓰는 사용자는 미국
+레그가 늘 실패하므로 이 구분이 특히 중요합니다.
+
 ## 주문 안전장치
 
 | 플래그 | 효과 |

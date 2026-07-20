@@ -299,3 +299,128 @@ def test_non_json_response_returns_upstream_error_envelope(runner, monkeypatch, 
     doc = json.loads(result.output)
     assert doc["ok"] is False
     assert doc["error"]["code"] == "UPSTREAM_ERROR"
+
+
+class TestDomainDisplayTruthfulness:
+    """KIWOOM_DOMAIN이 설정되면 요청은 그 도메인으로 가는데 표시 명령은
+    config.toml 값을 읽어 다른 도메인을 출력했다. 사용자가 config show로
+    '모의'를 확인하고 실거래 주문을 넣을 수 있었다."""
+
+    @pytest.fixture
+    def two_domains(self, monkeypatch, tmp_path):
+        cfg = tmp_path / "config.toml"
+        cfg.write_text('[general]\ndefault_profile = "default"\n'
+                       '[profiles.default]\ndomain = "mock"\n')
+        monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+        monkeypatch.setattr("kiwoom_cli.config.CONFIG_DIR", tmp_path)
+        monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+        return cfg
+
+    def test_config_show_reports_env_override(self, runner, two_domains, monkeypatch):
+        monkeypatch.setenv("KIWOOM_DOMAIN", "prod")
+        doc = json.loads(runner.invoke(cli, ["-f", "json", "config", "show"]).stdout)
+        assert doc["data"]["domain"] == "prod", "config show가 실제 접속 도메인과 다른 값을 출력한다"
+
+    def test_auth_status_reports_env_override(self, runner, two_domains, monkeypatch):
+        monkeypatch.setenv("KIWOOM_DOMAIN", "prod")
+        doc = json.loads(runner.invoke(cli, ["-f", "json", "auth", "status"]).stdout)
+        assert doc["data"]["domain"] == "prod"
+
+    def test_auth_status_domain_matches_meta_env(self, runner, two_domains, monkeypatch):
+        """같은 문서 안에서 data.domain과 meta.env가 모순되면 안 된다."""
+        monkeypatch.setenv("KIWOOM_DOMAIN", "prod")
+        doc = json.loads(runner.invoke(cli, ["-f", "json", "auth", "status"]).stdout)
+        assert doc["data"]["domain"] == doc["meta"]["env"]
+
+    def test_config_profiles_keeps_configured_value_and_marks_override(
+        self, runner, two_domains, monkeypatch
+    ):
+        """목록은 '설정된 값'을 보여주는 것이 맞다 — 모든 행을 prod로 덮어쓰면
+        오히려 정보가 사라진다. 대신 override를 명시한다."""
+        monkeypatch.setenv("KIWOOM_DOMAIN", "prod")
+        doc = json.loads(runner.invoke(cli, ["-f", "json", "config", "profiles"]).stdout)
+        row = doc["data"][0]
+        assert row["domain"] == "mock"
+        assert row["domain_override"] == "prod"
+
+    def test_no_override_means_null(self, runner, two_domains, monkeypatch):
+        monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+        doc = json.loads(runner.invoke(cli, ["-f", "json", "config", "profiles"]).stdout)
+        assert doc["data"][0]["domain_override"] is None
+
+
+class TestResolutionIsStashedNotRecomputed:
+    """루트에서 한 번 해석한 값을 공유하는 것과, 소비자가 각자 다시
+    계산하는 것의 관측 가능한 차이를 고정한다. 값이 우연히 같은 것과
+    구조적으로 같은 것은 다르다."""
+
+    def test_meta_env_describes_the_run_not_the_post_run_state(
+        self, runner, monkeypatch, tmp_path
+    ):
+        """config set domain prod는 config.toml을 바꾼 뒤 envelope을 낸다.
+
+        meta.env가 그 시점에 파일을 다시 읽으면 '이번 실행에서 한 번도
+        유효한 적 없는 도메인'을 보고하게 된다. meta.env는 이 명령이 어떤
+        환경에서 돌았는지를 말해야 한다 — AGENTS.md가 주문 전 meta.env로
+        prod/mock을 확인하라고 지시하기 때문이다.
+        """
+        cfg = tmp_path / "config.toml"
+        cfg.write_text('[general]\ndefault_profile = "default"\n'
+                       '[profiles.default]\ndomain = "mock"\n')
+        monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+        monkeypatch.setattr("kiwoom_cli.config.CONFIG_DIR", tmp_path)
+        monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+        monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+
+        doc = json.loads(runner.invoke(
+            cli, ["-f", "json", "config", "set", "domain", "prod"]).stdout)
+        assert doc["data"]["value"] == "prod"
+        assert doc["meta"]["env"] == "mock", (
+            "meta.env가 방금 쓴 값을 다시 읽었다 — 이번 실행은 mock에서 돌았다"
+        )
+
+    def test_client_profile_is_the_resolved_name_under_env_var(
+        self, monkeypatch, tmp_path
+    ):
+        """KIWOOM_PROFILE만 있고 -p가 없으면 ctx.obj['profile']는 None이다.
+
+        KiwoomClient가 그 원시 플래그를 읽으면 self.profile이 None이 되어
+        meta.profile과 갈린다. 루트가 해석해 둔 이름을 읽어야 한다.
+        """
+        import click as _click
+
+        from kiwoom_cli import envelope
+        from kiwoom_cli.client import KiwoomClient
+
+        cfg = tmp_path / "config.toml"
+        cfg.write_text('[general]\ndefault_profile = "default"\n'
+                       '[profiles.envprof]\ndomain = "prod"\n')
+        monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+        monkeypatch.setenv("KIWOOM_PROFILE", "envprof")
+        monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+        monkeypatch.setattr("kiwoom_cli.auth.load_token", lambda profile=None: "tok")
+
+        # 루트 콜백이 만들어 두는 상태를 그대로 재현한다: -p 미지정이므로
+        # profile은 None, resolved_profile은 env가 해석된 이름.
+        obj = {"profile": None, "resolved_profile": "envprof", "domain_key": "prod"}
+        with _click.Context(_click.Command("x"), obj=obj):
+            with KiwoomClient() as c:
+                assert c.profile == "envprof", \
+                    "클라이언트가 원시 플래그(None)를 읽어 프로필을 잃었다"
+                assert c.profile == envelope.build_meta()["profile"]
+
+    def test_config_show_table_mode_also_reports_effective_domain(
+        self, runner, monkeypatch, tmp_path
+    ):
+        """json만 고치고 사람이 읽는 출력을 놓치면, 정작 눈으로 확인하는
+        사용자가 계속 틀린 도메인을 본다."""
+        cfg = tmp_path / "config.toml"
+        cfg.write_text('[general]\ndefault_profile = "default"\n'
+                       '[profiles.default]\ndomain = "mock"\n')
+        monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+        monkeypatch.setattr("kiwoom_cli.config.CONFIG_DIR", tmp_path)
+        monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+        monkeypatch.setenv("KIWOOM_DOMAIN", "prod")
+
+        out = runner.invoke(cli, ["config", "show"]).output
+        assert "도메인: prod" in out, f"표 모드가 실제 접속 도메인을 숨긴다:\n{out}"

@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from .. import envelope
 from ..client import KiwoomClient, KiwoomAPIError
 from ..formatters import (
     _calc_eval_pl,
@@ -80,6 +81,9 @@ def dashboard():
     movers_items: list[dict[str, Any]] = []
     acct_failed = False
     movers_failed = False
+    # 문서화된 3상태를 유지한다: 키 없음 = 시도조차 안 함(토큰 없음),
+    # null = 시도했고 실패. partial_failures에는 후자만 들어간다.
+    failures: dict[str, str] = {}
 
     with KiwoomClient() as c:
         # Account balance -- skip gracefully when not logged in
@@ -89,6 +93,7 @@ def dashboard():
             except KiwoomAPIError as e:
                 acct_data = None
                 acct_failed = True
+                failures["account"] = envelope.classify(upstream_code=e.code)[0]
                 err_console.print(f"[dim]계좌 조회 실패: {e}[/]")
         else:
             acct_data = None
@@ -127,6 +132,7 @@ def dashboard():
         except KiwoomAPIError as e:
             movers_data = None
             movers_failed = True
+            failures["top_volume"] = envelope.classify(upstream_code=e.code)[0]
             err_console.print(f"[dim]거래량 상위 조회 실패: {e}[/]")
 
     if acct_failed and movers_failed:
@@ -145,7 +151,8 @@ def dashboard():
             combined["top_volume"] = movers_items
         elif movers_data:
             combined["top_volume"] = movers_data
-        print_generic_table(combined, title="대시보드")
+        print_generic_table(combined, title="대시보드",
+                            partial_failures=failures or None)
         return
 
     # ── Rich table output ─────────────────────────────────

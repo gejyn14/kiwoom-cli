@@ -86,13 +86,20 @@ def _unified_structured(market: str, kr_fetch, us_fetch) -> bool:
     fmt = _get_format()
     if fmt != "json":
         return False
+    from .. import envelope
+
     kr_data = us_data = None
+    # 실패한 레그를 코드와 함께 모은다 — null이 '그 계좌가 없다'인지
+    # '조회가 깨졌다'인지 구별할 방법이 이것뿐이다. 코드는 지어내지 않고
+    # envelope.classify가 쓰는 것과 같은 분류를 쓴다.
+    failures: dict[str, str] = {}
     if market in ("all", "kr"):
         try:
             kr_data = kr_fetch()
         except KiwoomAPIError as e:
             if market == "kr":
                 raise
+            failures["kr"] = envelope.classify(upstream_code=e.code)[0]
             err_console.print(f"[dim]국내 조회 실패: {e}[/]")
     if market in ("all", "us"):
         try:
@@ -100,10 +107,11 @@ def _unified_structured(market: str, kr_fetch, us_fetch) -> bool:
         except KiwoomAPIError as e:
             if market == "us":
                 raise
+            failures["us"] = envelope.classify(upstream_code=e.code)[0]
             err_console.print(f"[dim]미국 조회 실패: {e}[/]")
     if market == "all" and kr_data is None and us_data is None:
         fail_api("국내/미국 조회가 모두 실패했습니다.")
-    _output_json({"kr": kr_data, "us": us_data})
+    _output_json({"kr": kr_data, "us": us_data}, partial_failures=failures or None)
     return True
 
 
@@ -137,7 +145,10 @@ def account_list():
 @click.option("--delist", "qry_tp", default="all", type=HumanChoice(DELIST_QRY), help="상장폐지조회구분 (all=전체, exclude=제외)")
 def balance(market: str, dmst_stex_tp: str, qry_tp: str):
     """계좌 평가현황 — 국내+미국 통합. (kt00004 + ust21070)"""
+    from .. import envelope
+
     kr_data = us_data = None
+    failures: dict[str, str] = {}
     with KiwoomClient() as c:
         if market in ("all", "kr"):
             try:
@@ -145,6 +156,7 @@ def balance(market: str, dmst_stex_tp: str, qry_tp: str):
             except KiwoomAPIError as e:
                 if market == "kr":
                     raise
+                failures["kr"] = envelope.classify(upstream_code=e.code)[0]
                 err_console.print(f"[dim]국내 잔고 조회 실패: {e}[/]")
         if market in ("all", "us"):
             try:
@@ -152,13 +164,14 @@ def balance(market: str, dmst_stex_tp: str, qry_tp: str):
             except KiwoomAPIError as e:
                 if market == "us":
                     raise
+                failures["us"] = envelope.classify(upstream_code=e.code)[0]
                 err_console.print(f"[dim]미국 잔고 조회 실패 (미국주식 미개설 계좌일 수 있음): {e}[/]")
     if market == "all" and kr_data is None and us_data is None:
         fail_api("국내/미국 잔고 조회가 모두 실패했습니다.")
     if market == "kr":
         print_account_eval(kr_data or {})
     else:
-        print_unified_balance(kr_data, us_data)
+        print_unified_balance(kr_data, us_data, partial_failures=failures or None)
 
 
 @account.command("deposit")

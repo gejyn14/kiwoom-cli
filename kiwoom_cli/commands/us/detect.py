@@ -10,7 +10,11 @@ from ...normalize import strip_kr_market_prefix
 from ._constants import KR_EXCHANGE, US_EXCHANGE
 
 # 거래소 캐시는 도메인(prod/mock)별로 파일이 갈린다 — 아래 _cache_file 주석 참고.
-_CACHE_PREFIX = "us_exchanges"
+# 세대 표식 "2": v2.13.0의 도메인 분리가 -p 축을 놓쳐, prod에서 학습한 거래소가
+# us_exchanges-mock.json에 기록됐을 수 있다. 그 파일들은 마이그레이션하지 않고
+# 읽지 않는다 (v2.12 평문 형식을 폐기한 선례와 동일). 최악의 비용은 usa10098
+# 재조회 1회다.
+_CACHE_PREFIX = "us_exchanges2"
 _CACHE_TTL_SEC = 24 * 60 * 60
 
 
@@ -33,15 +37,18 @@ class UsExchangeError(Exception):
 
 
 def _cache_file():
-    """도메인별 캐시 파일 경로 (us_exchanges-prod.json / us_exchanges-mock.json).
+    """도메인별 캐시 파일 경로 (us_exchanges2-prod.json / us_exchanges2-mock.json).
 
     파일이 하나뿐이면 모의투자에서 학습한 거래소가 실거래 주문의 stex_tp로
     그대로 나간다 — 잘못된 거래소로 실주문이 나가는 경로다.
 
     프로필로는 나누지 않는다. 'NVDA가 나스닥 상장'은 계좌가 아니라 시장의
-    사실이라, 같은 도메인의 프로필끼리는 공유해도 틀릴 여지가 없다. 반면
-    도메인은 응답을 주는 상단 서버 자체가 다르다. 프로필별 도메인 차이는
-    get_domain_key(profile 해석 포함)가 이미 흡수한다.
+    사실이라, 같은 도메인의 프로필끼리는 공유해도 틀릴 여지가 없다. 도메인은
+    응답을 주는 서버 자체가 다르므로 반드시 나눈다.
+
+    get_domain_key()를 인자 없이 호출하지만, resolve_profile이 Click 컨텍스트의
+    --profile을 읽으므로 -p로 고른 프로필의 도메인이 반영된다. v2.13.0까지는
+    그렇지 않아 모의 학습값이 실주문에 실릴 수 있었다.
     """
     return config.CACHE_DIR / f"{_CACHE_PREFIX}-{config.get_domain_key()}.json"
 

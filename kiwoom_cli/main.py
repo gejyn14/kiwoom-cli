@@ -184,6 +184,19 @@ def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
             "영문자/숫자/하이픈/언더스코어 1~64자만 허용됩니다."
         )
 
+    # 루트에서 한 번만 해석해 저장한다. KiwoomClient와 envelope.build_meta가
+    # 각자 ctx.obj["profile"]를 다시 해석하면 두 값이 갈릴 수 있고, meta.env는
+    # "클라이언트가 실제로 쓴 도메인"이어야지 "같은 입력으로 다시 계산한 값"이면
+    # 안 된다 (AGENTS.md가 주문 전 meta.env 확인을 지시한다).
+    ctx.obj["resolved_profile"] = resolved_profile
+    try:
+        ctx.obj["domain_key"] = config.get_domain_key(resolved_profile)
+    except click.ClickException:
+        # config.toml 손상. 위 resolved_profile 폴백과 같은 이유로 여기서 죽지
+        # 않는다. env를 지어내지 않고 None으로 둔다 — envelope.build_meta의
+        # 기존 정책과 동일하다.
+        ctx.obj["domain_key"] = None
+
     if next_key and all_pages:
         raise click.UsageError("--next-key와 --all-pages는 함께 사용할 수 없습니다.")
     ctx.obj["next_key"] = next_key
@@ -329,7 +342,10 @@ def config_show(ctx):
         envelope.emit(data={
             "profile": profile,
             "config_file": str(config.CONFIG_FILE),
-            "domain": profile_cfg.get("domain", "mock"),
+            # 설정 파일 값이 아니라 실제 접속 도메인 — KIWOOM_DOMAIN이 이것을
+            # 덮는다. 종전에는 config show가 '모의'라고 답하는 동안 요청은
+            # 실서버로 갔다.
+            "domain": config.get_domain_key(profile),
             "configured": configured,
             "account": profile_cfg.get("account", ""),
             "token_storage": token_storage,
@@ -337,7 +353,7 @@ def config_show(ctx):
         return
     human(f"  프로필: [bold]{profile}[/]")
     human(f"  설정 파일: {config.CONFIG_FILE}")
-    human(f"  도메인: {profile_cfg.get('domain', 'mock')}")
+    human(f"  도메인: {config.get_domain_key(profile)}")
     human(f"  App Key: {'[dim]설정됨 (키체인)[/]' if configured else '(미설정)'}")
     human(f"  계좌번호: {profile_cfg.get('account', '(미설정)')}")
     human(f"  토큰 저장: {'환경변수 (KIWOOM_TOKEN)' if token_storage == 'env' else 'OS 키체인'}")
@@ -399,11 +415,17 @@ def config_profiles():
     cfg = config.load_config()
     profiles = cfg.get("profiles", {})
     default = config.get_default_profile()
+    override = os.environ.get("KIWOOM_DOMAIN")
+    override = override if override in config.DOMAINS else None
     if _get_format() == "json":
         envelope.emit(data=[
             {
                 "name": name,
                 "domain": settings.get("domain", "mock"),
+                # KIWOOM_DOMAIN은 모든 프로필을 한꺼번에 덮으므로, 행마다
+                # 유효 도메인을 계산하면 전부 같은 값이 되어 설정 정보가
+                # 사라진다. 설정값은 그대로 두고 덮어쓰기를 별도로 알린다.
+                "domain_override": override,
                 "account": settings.get("account", ""),
                 "default": name == default,
             }
@@ -414,6 +436,8 @@ def config_profiles():
         human("[yellow]등록된 프로필이 없습니다.[/]")
         return
     human(f"  현재 프로필: [bold green]{default}[/]")
+    if override:
+        human(f"  [yellow]KIWOOM_DOMAIN={override} 가 모든 프로필의 도메인을 덮고 있습니다.[/]")
     human("")
     for name, settings in profiles.items():
         marker = " [green]*[/]" if name == default else "  "
@@ -498,24 +522,32 @@ def auth_login(ctx):
 
 
 @auth_cmd.command("logout")
+@click.option("--force", is_flag=True,
+              help="서버 폐기에 실패해도 로컬 토큰을 지웁니다 (서버 도달 불가 시 탈출구).")
 @click.pass_context
-def auth_logout(ctx):
+def auth_logout(ctx, force):
     """접근토큰 폐기."""
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     if not config.is_configured(profile):
         _fail_not_configured()
     # 폐기 실패(KiwoomAPIError)는 전역 핸들러가 envelope/exit 2로 처리
     with KiwoomClient() as c:
-        outcome = c.revoke_token()
+        outcome = c.revoke_token(force=force)
     if _get_format() == "json":
         envelope.emit(data={
             "profile": profile,
-            "revoked": True,
+            "revoked": outcome["revoked"],
             "token_source": outcome["token_source"],
             "keychain_token_deleted": outcome["keychain_token_deleted"],
         })
         return
-    human("[green]토큰 폐기 완료.[/]")
+    if outcome["revoked"]:
+        human("[green]토큰 폐기 완료.[/]")
+    else:
+        # --force 경로. 서버 폐기는 실패했고 로컬만 정리했다 — 성공이라
+        # 뭉뚱그리면 사용자는 서버에 살아 있는 토큰을 모르고 지나간다.
+        human("[yellow]서버 폐기 실패.[/] 로컬 토큰만 삭제했습니다 (--force).")
+        human("  [yellow]서버에는 토큰이 아직 유효할 수 있습니다.[/]")
     if outcome["token_source"] == "env":
         # 폐기된 것은 env 토큰이다. 예전에는 여기서 키체인 토큰까지 지워
         # 폐기한 적 없는 토큰을 폐기 불가능하게 만들었다 — 무엇을 하지
@@ -541,10 +573,10 @@ def auth_status(ctx):
     if token is not None:
         token_source = "env" if os.environ.get("KIWOOM_TOKEN") else "keyring"
     if _get_format() == "json":
-        cfg = config.load_config()
         envelope.emit(data={
             "profile": profile,
-            "domain": cfg.get("profiles", {}).get(profile, {}).get("domain", "mock"),
+            # config show와 같은 이유로 실제 접속 도메인을 보고한다.
+            "domain": config.get_domain_key(profile),
             "configured": configured,
             "has_token": token is not None,
             "token_source": token_source,

@@ -226,3 +226,49 @@ def test_dashboard_top_volume_uses_same_exchange_as_market_rank_volume(
         f"{rank_body['mang_stk_incls']!r} — 관리종목 포함 여부가 갈린다"
     )
     assert dash_body == rank_body
+
+
+def test_dashboard_names_failed_leg_with_code(runner, monkeypatch):
+    """dashboard의 3상태를 지킨다: 키 없음=미시도, null=실패.
+    partial_failures에는 실패한 것만 들어간다."""
+    import json as _json
+
+    from kiwoom_cli.client import KiwoomAPIError
+    from tests.fakes import FakeKiwoomClient
+
+    fake = FakeKiwoomClient()
+    fake.token = "t"
+    fake.set_response("kt00004", {"return_code": 0, "entr": "1000"})
+
+    orig = fake.request
+
+    def failing(api_id, body=None, **kw):
+        if api_id == "ka10030":
+            raise KiwoomAPIError(500, "boom")
+        return orig(api_id, body, **kw)
+
+    monkeypatch.setattr(fake, "request", failing)
+    monkeypatch.setattr("kiwoom_cli.commands.dashboard.KiwoomClient", lambda *a, **k: fake)
+
+    result = runner.invoke(cli, ["-f", "json", "dashboard"])
+    assert result.exit_code == 0, result.output
+    doc = _json.loads(result.stdout)
+    assert doc["data"]["top_volume"] is None
+    assert doc["meta"]["partial_failures"] == {"top_volume": "UPSTREAM_ERROR"}
+
+
+def test_dashboard_no_token_omits_key_and_has_no_partial_failures(runner, monkeypatch):
+    """토큰이 없어 시도조차 안 한 계좌는 실패가 아니다 — 키 자체가 없고
+    partial_failures에도 들어가지 않는다."""
+    import json as _json
+
+    from tests.fakes import FakeKiwoomClient
+
+    fake = FakeKiwoomClient()
+    fake.token = None
+    fake.set_response("ka10030", {"return_code": 0, "trde_qty_upper": [{"stk_cd": "005930"}]})
+    monkeypatch.setattr("kiwoom_cli.commands.dashboard.KiwoomClient", lambda *a, **k: fake)
+
+    doc = _json.loads(runner.invoke(cli, ["-f", "json", "dashboard"]).stdout)
+    assert "account" not in doc["data"]
+    assert "partial_failures" not in doc["meta"]

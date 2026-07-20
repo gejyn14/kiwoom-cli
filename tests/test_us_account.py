@@ -351,3 +351,56 @@ def test_balance_both_fail_exits_2(runner, acct_fake, monkeypatch):
     monkeypatch.setattr(acct_fake, "request", failing)
     result = runner.invoke(cli, ["account", "balance"])
     assert result.exit_code == 2
+
+
+# ============================================================
+#  meta.partial_failures — null이 '계좌 없음'인지 '조회 실패'인지
+# ============================================================
+
+
+def _fail_api(fake, monkeypatch, api_id, code=500, msg="fail"):
+    from kiwoom_cli.client import KiwoomAPIError
+
+    orig = fake.request
+
+    def failing(aid, body=None, **kw):
+        if aid == api_id:
+            raise KiwoomAPIError(code, msg)
+        return orig(aid, body, **kw)
+
+    monkeypatch.setattr(fake, "request", failing)
+
+
+def test_us_leg_failure_is_named_with_its_error_code(runner, acct_fake, monkeypatch):
+    """kr/us의 null이 '그 계좌가 없다'인지 '조회가 깨졌다'인지 구별되지 않던
+    자리. 이 프로젝트 저자 본인이 이것을 반대로 읽었다."""
+    _fail_api(acct_fake, monkeypatch, "ust21070")
+    result = runner.invoke(cli, ["-f", "json", "account", "balance"])
+    assert result.exit_code == 0
+    doc = json.loads(result.stdout)
+    assert doc["ok"] is True
+    assert doc["data"]["us"] is None
+    assert doc["meta"]["partial_failures"]["us"] == "UPSTREAM_ERROR"
+    assert "kr" not in doc["meta"]["partial_failures"]
+
+
+def test_both_legs_ok_has_no_partial_failures_key(runner, acct_fake):
+    result = runner.invoke(cli, ["-f", "json", "account", "balance"])
+    assert result.exit_code == 0
+    doc = json.loads(result.stdout)
+    assert "partial_failures" not in doc["meta"]
+
+
+def test_data_key_set_is_unchanged_by_partial_failures(runner, acct_fake, monkeypatch):
+    """새 키는 meta에 산다 — data 모양을 고정한 기존 테스트들이 움직이면 안 된다."""
+    _fail_api(acct_fake, monkeypatch, "ust21070")
+    doc = json.loads(runner.invoke(cli, ["-f", "json", "account", "balance"]).stdout)
+    assert set(doc["data"]) == {"kr", "us", "raw"}
+
+
+def test_unified_structured_leg_failure_named(runner, acct_fake_full, monkeypatch):
+    """_unified_structured 경로(deposit 등 6개 명령)도 같이 알린다."""
+    _fail_api(acct_fake_full, monkeypatch, "ust21160")
+    doc = json.loads(runner.invoke(cli, ["-f", "json", "account", "deposit"]).stdout)
+    assert doc["data"]["us"] is None
+    assert doc["meta"]["partial_failures"]["us"] == "UPSTREAM_ERROR"
