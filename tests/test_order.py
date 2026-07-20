@@ -1388,3 +1388,20 @@ def test_litmus_loop_json_driven(runner, fake_everywhere, isolated_home, market_
     assert r7.exit_code == 0
     assert _doc(r7)["data"]["idempotent_replay"] is True
     assert len(fake.calls) == calls_before
+
+
+@pytest.mark.parametrize("side,api_id", [("buy", "kt10000"), ("sell", "kt10001")])
+def test_prefixed_code_order_dry_run_strips_prefix(runner, fake_client, side, api_id):
+    """주문 경로도 'A005930'을 국내로 보내고 접두사를 벗긴다.
+
+    dry-run이라 전송은 없고 출력된 body만 본다 — 라우팅이 틀리면 미국
+    주문 미리보기(ust2000x)가 나와 api_id가 달라진다.
+    """
+    result = runner.invoke(cli, [
+        "-f", "json", "order", side, "A005930", "10",
+        "--price", "70000", "--dry-run",
+    ])
+    assert result.exit_code == 0
+    doc = json.loads(result.output)
+    assert doc["data"]["api_id"] == api_id
+    assert doc["data"]["body"]["stk_cd"] == "005930"

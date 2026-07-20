@@ -11,9 +11,30 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .formatters import _ABS_FIELDS, _SIGNED_FIELDS, _USD_FIELDS
+
+# 국내 종목코드의 시장구분 접두사: 영문 1자 + 숫자 6자리 ("A005930").
+# 잔고/체결 응답이 이 모양으로 stk_cd를 돌려주는 경우가 있다.
+_KR_PREFIXED_SYMBOL_RE = re.compile(r"^[A-Za-z][0-9]{6}$")
+
+
+def strip_kr_market_prefix(code: str) -> str:
+    """'A005930' -> '005930'. 그 외 입력은 손대지 않는다.
+
+    **선행 영문자를 무조건 벗기면 안 된다.** 미국 티커가 그대로 깨진다
+    (NVDA -> VDA, TSLA -> SLA, F -> ''). 그래서 "영문 정확히 1자 +
+    숫자 정확히 6자리"라는 완성된 모양에만 적용하고, 길이가 하나라도 어긋나면
+    (A00593 / A0059301 / AB005930 / M04020000) 원본을 돌려준다. 미국 티커는
+    숫자로 끝나지 않으므로 이 정규식에 걸릴 수 없다.
+
+    normalize_ws_values의 "9001" 처리는 지금도 선행 영문자를 무조건 벗기는
+    버그가 있다 (그쪽은 별도 작업 범위). 이 함수를 그 자리에 쓰면 낫겠지만
+    여기서는 건드리지 않는다 — 다만 그 패턴을 이쪽으로 복사해 오지 말 것.
+    """
+    return code[1:] if _KR_PREFIXED_SYMBOL_RE.fullmatch(code) else code
 
 # 키움 필드명 -> 정규 필드명 (나머지 키는 그대로 통과)
 CANONICAL_NAMES: dict[str, str] = {
@@ -241,6 +262,11 @@ def normalize_record(d: dict[str, Any]) -> dict[str, Any]:
             out[canon] = normalize_record(v)
         elif isinstance(v, list):
             out[canon] = [normalize_record(x) if isinstance(x, dict) else x for x in v]
+        elif k == "stk_cd" and isinstance(v, str):
+            # 잔고 응답의 'A005930'은 시장구분 접두사가 붙은 국내 종목코드다.
+            # 그대로 두면 이 값을 --code에 다시 넣은 사용자가 미국 경로로
+            # 라우팅된다. 원본은 data.raw에 남으므로 손실되지 않는다.
+            out[canon] = strip_kr_market_prefix(v)
         elif k in _DATETIME_KEYS:
             out[canon] = _iso_datetime(k, v)
         elif isinstance(v, str) and k in _NUMERIC_FIELDS:

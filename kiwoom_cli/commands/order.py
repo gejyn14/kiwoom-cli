@@ -42,6 +42,7 @@ from ._mutation import (
 )
 from .us import order_ops as us_order_ops
 from .us._constants import US_ORDER_TYPES
+from ..normalize import strip_kr_market_prefix
 from .us.detect import is_us_symbol
 
 ORDER_TYPES = {
@@ -307,6 +308,7 @@ def buy(code: str, qty: int, price: float, order_type: str | None, exchange: str
         kiwoom order buy NVDA 10 --price 213.04 --confirm
     """
     order_type = _resolve_order_type(order_type, price)
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         if cond_uv:
             fail_input("--cond-price는 국내 주문에서만 사용합니다.")
@@ -351,6 +353,7 @@ def sell(code: str, qty: int, price: float, order_type: str | None, exchange: st
         kiwoom order sell NVDA 5 --type stop-limit --price 200.5 --stop 199.99 --confirm
     """
     order_type = _resolve_order_type(order_type, price)
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         if cond_uv:
             fail_input("--cond-price는 국내 주문에서만 사용합니다.")
@@ -396,6 +399,7 @@ def modify(orig_order_no: str, code: str, qty: int, price: float, exchange: str 
     예: kiwoom order modify 0000139 005930 1 70000 --confirm
         kiwoom order modify 000000123 NVDA 5 215.5 --confirm
     """
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         if mdfy_cond_uv:
             fail_input("--cond-price는 국내 주문에서만 사용합니다.")
@@ -437,6 +441,7 @@ def cancel(orig_order_no: str, code: str, qty: int, exchange: str | None, confir
     예: kiwoom order cancel 0000140 005930 --confirm
         kiwoom order cancel 000000123 NVDA --confirm
     """
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_order_ops.cancel(orig_order_no, code, qty, exchange, confirm,
                                    dry_run=dry_run, client_order_id=client_order_id)
@@ -499,6 +504,7 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
     예: kiwoom order validate buy 005930 10 --price 70000 -f json
     """
     order_type = _resolve_order_type(order_type, price)
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code):
         raise click.ClickException("validate는 국내 종목만 지원합니다 (미국주식 미지원).")
 
@@ -544,7 +550,13 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
             held = sum(
                 _strip_signed_int(h.get("rmnd_qty"))
                 for h in balance.get("stk_acnt_evlt_prst", []) or []
-                if str(h.get("stk_cd", "")).removeprefix("A") == code
+                # 여기 stk_cd는 kt00004의 **원본** 응답이라 'A005930' 형태다
+                # (normalize_record는 출력 단계에서만 걸린다). 따라서 이 접두사
+                # 제거는 죽은 코드가 아니다 — 빼면 보유수량이 0으로 잡힌다.
+                # removeprefix("A")였던 것을 가드 있는 헬퍼로 바꿨다: 국내
+                # 코드에 대해서는 동작이 같고, 혹시 미국 티커가 흘러들어와도
+                # AAPL -> APL로 망가뜨리지 않는다.
+                if strip_kr_market_prefix(str(h.get("stk_cd", ""))) == code
             )
             sufficient = held >= qty
 

@@ -93,11 +93,38 @@ def test_normalize_record_recurses_into_lists():
         ],
     })
     h = out["stk_acnt_evlt_prst"][0]
-    assert h["symbol"] == "A005930"
+    # 잔고 응답의 'A005930'은 시장구분 접두사가 붙은 국내 종목코드다. 여기서
+    # 접두사를 벗기지 않으면 이 값을 그대로 --code에 넣은 사용자가 미국 경로로
+    # 라우팅된다 (원본은 data.raw에 그대로 남는다).
+    assert h["symbol"] == "005930"
     assert h["qty"] == 10
     assert h["avg_price"] == 68000
     assert h["pl_amount"] == -500
     assert h["pl_pct"] == -0.7
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("A005930", "005930"),   # 영문 1자 + 숫자 6자리 → 접두사 제거
+    ("Q123456", "123456"),
+    ("005930", "005930"),    # 접두사 없음 → 그대로
+    ("NVDA", "NVDA"),        # 미국 티커 — 선행 영문자를 벗기면 VDA가 된다
+    ("TSLA", "TSLA"),
+    ("F", "F"),              # 1글자 티커 — 무조건 벗기면 빈 문자열이 된다
+    ("A", "A"),
+    ("BRK.B", "BRK.B"),
+    ("A00593", "A00593"),    # 숫자 5자리 → 국내 모양 아님
+    ("A0059301", "A0059301"),  # 숫자 7자리
+    ("AB005930", "AB005930"),  # 영문 2자
+    ("M04020000", "M04020000"),  # 금현물 코드 (영문 1자 + 숫자 8자리)
+])
+def test_normalize_record_strips_only_kr_market_prefix(raw, expected):
+    """접두사 제거는 '영문 1자 + 숫자 6자리' 모양에만 적용된다.
+
+    normalize_ws_values의 '9001' 처리처럼 선행 영문자를 무조건 벗기면
+    NVDA -> VDA, F -> '' 로 미국 티커가 깨진다. 그 패턴을 여기로 옮겨오지
+    않았는지 티커 쪽 케이스가 감시한다.
+    """
+    assert normalize_record({"stk_cd": raw})["symbol"] == expected
 
 
 def test_normalize_record_unknown_keys_pass_through():

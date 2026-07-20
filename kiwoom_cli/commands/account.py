@@ -43,6 +43,7 @@ from ._constants import (
 from .us import account_ops as us_account_ops
 from .us import order_ops as us_order_ops
 from .us._constants import US_EXCHANGE
+from ..normalize import strip_kr_market_prefix
 from .us.detect import is_us_symbol
 from .us.exchange import exchange_group
 
@@ -274,6 +275,9 @@ def pnl():
 @click.option("--krw", "fc_krw", is_flag=True, help="미국 손익을 원화로 표시")
 def pnl_today(code: str | None, market: str, fc_krw: bool):
     """당일 실현손익 — 국내(종목코드 필수 ka10077) + 미국(ust21170)."""
+    # 잔고 응답에서 복사한 'A005930' 형태를 국내 코드로 되돌린다. 미국 티커는
+    # 이 모양에 걸리지 않으므로 아래 is_us_symbol 판정에 영향이 없다.
+    code = strip_kr_market_prefix(code) if code else code
     if market == "kr":
         if not code:
             fail_input("국내 당일 실현손익은 종목코드가 필요합니다.")
@@ -330,6 +334,7 @@ def pnl_by_date(stk_cd: str, strt_dt: str):
 @click.option("--krw", "fc_krw", is_flag=True, help="미국 손익을 원화로 표시")
 def pnl_by_period(market: str, stk_cd: str, strt_dt: str, end_dt: str, fc_krw: bool):
     """일자별 종목별 실현손익 (기간 기준) — 국내(ka10073) + 미국(ust21530)."""
+    stk_cd = strip_kr_market_prefix(stk_cd) if stk_cd else stk_cd
 
     with KiwoomClient() as c:
         def kr_fetch():
@@ -384,6 +389,7 @@ def orders():
 @click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="국내 거래소구분")
 def orders_pending(market: str, all_stk_tp: str, trde_tp: str, stk_cd: str, stex_tp: str):
     """미체결 주문 — 국내(ka10075) + 미국(ust21050)."""
+    stk_cd = strip_kr_market_prefix(stk_cd) if stk_cd else stk_cd
 
     with KiwoomClient() as c:
         def kr_fetch():
@@ -428,6 +434,7 @@ def orders_pending(market: str, all_stk_tp: str, trde_tp: str, stk_cd: str, stex
 @click.option("--exchange", "stex_tp", default="all", type=click.Choice(["all", "KRX", "NXT"]), help="국내 거래소구분")
 def orders_executed(market: str, stk_cd: str, qry_tp: str, sell_tp: str, ord_no: str, stex_tp: str):
     """체결 내역 — 국내(ka10076) + 미국(ust21510)."""
+    stk_cd = strip_kr_market_prefix(stk_cd) if stk_cd else stk_cd
 
     with KiwoomClient() as c:
         def kr_fetch():
@@ -606,6 +613,7 @@ def orderable_amount(code: str, trde_tp: str, uv: str, io_amt: str, trde_qty: st
 @click.option("--exchange", "exchange", default=None, type=click.Choice(list(US_EXCHANGE)), help="미국 거래소")
 def orderable_margin_qty(code: str, uv: str, exchange: str | None):
     """증거금율별 주문가능 수량 조회 (국내 kt00011 / 미국 ust31490)."""
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         if not uv:
             fail_input("미국주식 주문가능수량 조회에는 --price가 필요합니다.")
