@@ -553,7 +553,7 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
     price_known이 false이면 est_cost=0에 대해 계산한 결과를 true로 보고하지
     않는다(checks만 읽는 에이전트가 미수행 점검을 참으로 오인하지 않도록).
 
-    예: kiwoom order validate buy 005930 10 --price 70000 -f json
+    예: kiwoom -f json order validate buy 005930 10 --price 70000
     """
     order_type = _resolve_order_type(order_type, price)
     code = strip_kr_market_prefix(code)
