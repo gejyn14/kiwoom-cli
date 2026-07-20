@@ -1100,7 +1100,8 @@ def test_validate_buy_happy_path(runner, fake_client, market_open):
     assert data["valid"] is True
     assert data["checks"] == {
         "symbol_ok": True, "market_open": True,
-        "sufficient_balance": True, "price_ok": True, "price_known": True,
+        "sufficient_balance": True, "qty_ok": True, "price_ok": True,
+        "price_known": True,
     }
     assert data["est_cost"] == 700000
     assert data["heuristic"] is True

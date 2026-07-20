@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -310,3 +311,171 @@ def test_us_modify_rejects_negative_price(runner):
     )
     assert sent == []
     assert result.exit_code == 1
+
+
+# ════════════════════════════════════════════════════════
+#  D5b — order validate가 실주문 경로와 같은 하한을 쓰는가
+# ════════════════════════════════════════════════════════
+#
+# validate는 실주문이 무엇을 할지 예측하는 read-only 프리플라이트다. D5가 주문
+# 경로에 하한을 넣으면서 둘이 어긋났다 — validate는 qty=0/음수 가격에 대해
+# valid: true를 보고하는데 실주문은 거부한다. 프리플라이트를 믿은 에이전트가
+# 자금 이동 직전에 거부당한다.
+#
+# 실패는 기존 계약대로 나타나야 한다: 해당 check가 false → VALIDATION_FAILED
+# → exit 1. 새 오류 코드를 만들거나 fail_input으로 빠지지 않는다.
+
+_KST = timezone(timedelta(hours=9))
+
+
+@pytest.fixture
+def validate_env(monkeypatch):
+    """validate의 qty/price 외 모든 체크를 통과시킨다 — 그래야 실패가
+    qty/price 때문임이 확정된다 (market_open은 시계 휴리스틱이라 고정 필수)."""
+    monkeypatch.setattr(
+        "kiwoom_cli.commands.order._now_kst",
+        lambda: datetime(2020, 1, 6, 10, 0, tzinfo=_KST),  # 월요일 10:00 장중
+    )
+
+
+def _validate(runner, args):
+    """validate 실행 → (exit_code, doc). 요청은 전부 read-only(ka10001/kt00001/kt00004)."""
+    def capture(api_id, body=None, **kwargs):
+        return {
+            "stk_nm": "삼성전자", "cur_prc": "+70000",
+            "ord_alow_amt": "999999999999",
+            "stk_acnt_evlt_prst": [{"stk_cd": "A005930", "rmnd_qty": "1000"}],
+            "return_code": 0,
+        }, {}
+
+    mc = MagicMock()
+    mc.request = capture
+    mc.__enter__ = lambda s: s
+    mc.__exit__ = MagicMock(return_value=False)
+    with patch(KR) as cls:
+        cls.return_value = mc
+        result = runner.invoke(cli, args)
+    return result
+
+
+def test_validate_rejects_zero_qty(runner, validate_env):
+    """이전에는 qty=0에 valid: true + 전체 체크 통과를 보고했다."""
+    result = _validate(runner, ["-f", "json", "order", "validate", "buy",
+                                "005930", "0", "--price", "70000"])
+    doc = json.loads(result.stdout)
+    # exit code와 payload를 함께 단언한다 — exit 1만 보면 VALIDATION_FAILED와
+    # 입력 파싱 오류를 구분할 수 없다.
+    assert result.exit_code == 1
+    assert doc["error"]["code"] == "VALIDATION_FAILED"
+    assert doc["data"]["valid"] is False
+    assert doc["data"]["checks"]["qty_ok"] is False
+    assert doc["error"]["details"] == {"qty_ok": False}
+
+
+def test_validate_sell_rejects_zero_qty(runner, validate_env):
+    """매도 경로도 같다 — held >= 0이 공허하게 참이 되어 통과하던 자리."""
+    result = _validate(runner, ["-f", "json", "order", "validate", "sell",
+                                "005930", "0", "--price", "70000"])
+    doc = json.loads(result.stdout)
+    assert result.exit_code == 1
+    assert doc["error"]["code"] == "VALIDATION_FAILED"
+    assert doc["data"]["checks"]["qty_ok"] is False
+
+
+def test_validate_rejects_negative_price(runner, validate_env):
+    """이전에는 price=-70000에 valid: true를 보고했다."""
+    result = _validate(runner, ["-f", "json", "order", "validate", "buy",
+                                "005930", "10", "--price", "-70000"])
+    doc = json.loads(result.stdout)
+    assert result.exit_code == 1
+    assert doc["error"]["code"] == "VALIDATION_FAILED"
+    assert doc["data"]["checks"]["price_ok"] is False
+    assert doc["data"]["checks"]["qty_ok"] is True   # qty는 멀쩡하다
+
+
+@pytest.mark.parametrize("bad", ["nan", "inf"])
+def test_validate_nonfinite_price_is_envelope_not_traceback(runner, validate_env, bad):
+    """이전에는 `price == int(price)`가 ValueError/OverflowError를 던져 stdout이
+    비었다 — envelope-항상 계약 위반. 실주문 경로는 이미 envelope를 냈으므로
+    프리플라이트만 더 나쁜 상태였다."""
+    result = _validate(runner, ["-f", "json", "order", "validate", "buy",
+                                "005930", "10", "--price", bad])
+    assert result.exception is None or isinstance(result.exception, SystemExit), (
+        f"처리되지 않은 예외: {result.exception!r}")
+    doc = json.loads(result.stdout)
+    assert result.exit_code == 1
+    assert doc["error"]["code"] == "VALIDATION_FAILED"
+    assert doc["data"]["checks"]["price_ok"] is False
+
+
+def test_validate_still_passes_good_input(runner, validate_env):
+    """대조군: 가드가 정상 입력까지 막지 않는지 + payload 형태가 그대로인지."""
+    result = _validate(runner, ["-f", "json", "order", "validate", "buy",
+                                "005930", "10", "--price", "70000"])
+    doc = json.loads(result.stdout)
+    assert result.exit_code == 0
+    assert doc["data"]["valid"] is True
+    assert doc["data"]["checks"] == {
+        "symbol_ok": True, "market_open": True, "sufficient_balance": True,
+        "qty_ok": True, "price_ok": True, "price_known": True,
+    }
+    assert doc["data"]["est_cost"] == 700000
+    assert doc["data"]["heuristic"] is True
+
+
+def test_validate_market_order_zero_price_still_allowed(runner, validate_env):
+    """대조군: price=0은 시장가 센티널 — validate도 계속 통과시켜야 한다."""
+    result = _validate(runner, ["-f", "json", "order", "validate", "buy",
+                                "005930", "10"])
+    doc = json.loads(result.stdout)
+    assert result.exit_code == 0
+    assert doc["data"]["checks"]["price_ok"] is True
+    assert doc["data"]["checks"]["qty_ok"] is True
+
+
+# ── 드리프트 방지: validate와 실주문이 같은 입력에 같은 판정을 내는가 ──
+
+_AGREEMENT_GRID = [
+    ("0", "70000"),        # qty 0
+    ("-5", "70000"),       # qty 음수 (--qty 형태가 아니라 위치인자라 Click이 먼저 막을 수 있다)
+    ("1", "70000"),        # 정상
+    ("10", "70000"),       # 정상
+    ("10", "0"),           # 시장가 센티널
+    ("10", "-70000"),      # 음수 가격
+    ("10", "nan"),         # 비유한
+    ("10", "inf"),         # 비유한
+    ("10", "70000.5"),     # 국내 정수 위반
+    ("10", "1"),           # 하한 경계
+]
+
+
+@pytest.mark.parametrize("qty,price", _AGREEMENT_GRID)
+def test_validate_agrees_with_order_path(runner, validate_env, qty, price):
+    """프리플라이트와 실주문이 **같은 입력에 같은 판정**을 내야 한다.
+
+    한쪽 임계값만 바뀌면(=상수를 두 벌 두면) 이 테스트가 깨진다. 실주문 쪽은
+    exit code가 아니라 **body가 실제로 전송됐는지**로 판정한다 — confirm 게이트나
+    인증 실패로 인한 exit 1을 '거부'로 오독하지 않기 위함이다.
+    """
+    order_result, sent = _invoke(
+        runner,
+        ["-f", "json", "order", "buy", "005930", qty, "--price", price, "--confirm"],
+        KR,
+    )
+    order_accepts = bool(sent)
+
+    v = _validate(runner, ["-f", "json", "order", "validate", "buy",
+                           "005930", qty, "--price", price])
+    try:
+        validate_accepts = v.exit_code == 0 and json.loads(v.stdout)["data"]["valid"] is True
+    except (json.JSONDecodeError, TypeError, KeyError):
+        validate_accepts = False
+
+    # 이 테스트가 고정하는 것은 **판정 일치**다. 판정을 어떤 형태로 전달하는지
+    # (envelope냐 traceback이냐)는 test_validate_nonfinite_price_is_envelope_not_traceback가
+    # 따로 잡는다 — 두 관심사를 한 단언에 섞으면 어느 쪽이 깨졌는지 알 수 없다.
+    assert order_accepts == validate_accepts, (
+        f"qty={qty} price={price}: 실주문 accepts={order_accepts} "
+        f"(sent={sent}) 인데 validate accepts={validate_accepts} "
+        f"(exit={v.exit_code}, stdout={v.stdout[:160]!r})"
+    )

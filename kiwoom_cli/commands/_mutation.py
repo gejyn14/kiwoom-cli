@@ -60,9 +60,41 @@ def parse_quote_price(value: Any) -> float:
     return f
 
 
+def is_valid_order_qty(qty: int, *, allow_zero: bool = False) -> bool:
+    """주문 수량 유효성 **술어** — 순수 함수이며 종료하지 않는다.
+
+    이 함수가 "유효한 수량"의 **유일한 정의**다. 두 소비자가 공유한다:
+      - `validate_order_qty` (실주문 경로 — 위반 시 fail_input으로 exit 1)
+      - `order validate`의 `checks.qty_ok` (사전점검 — 위반 시 체크가 false)
+
+    임계값을 양쪽에 각각 적어 두면 반드시 어긋난다. 실제로 어긋났었다: D5가
+    주문 경로에만 하한을 넣어, 사전점검이 `valid: true`라고 답한 수량을 실주문이
+    거부하는 상태가 됐다(D5b). 프리플라이트의 존재 이유가 실주문 결과 예측이므로
+    이 드리프트는 그 자체로 결함이다. 새 임계값을 넣을 일이 있으면 반드시
+    여기에만 넣을 것.
+    """
+    return qty > 0 or (qty == 0 and allow_zero)
+
+
+def is_valid_order_price(price: float, *, allow_zero: bool = True) -> bool:
+    """주문 가격 유효성 **술어** — 순수 함수이며 종료하지 않는다.
+
+    `is_valid_order_qty`와 같은 이유로 존재한다: `validate_order_price`(실주문)와
+    `order validate`의 `checks.price_ok`(사전점검)가 이 정의 하나를 공유한다.
+
+    국내 경로의 "정수(원)" 규칙은 여기 없다 — 그건 국내 전용이라 order.py의
+    `_is_kr_integer_price`가 갖고 있고, 그쪽도 같은 이유로 단일 정의다.
+    """
+    if not math.isfinite(price):
+        return False
+    return price > 0 or (price == 0 and allow_zero)
+
+
 def validate_order_qty(qty: int, *, allow_zero: bool = False,
                        label: str = "주문수량") -> int:
     """주문 수량 하한 검증. 위반 시 fail_input(exit 1)이며 요청은 전송되지 않는다.
+
+    판정은 `is_valid_order_qty`에 위임한다 — 임계값 정의는 그쪽 한 곳뿐이다.
 
     근거는 키움이 직접 배포하는 kwcli 0.1.1의 `maps/arguments.csv`다 —
     주문·정정 수량(ord_qty/mdfy_qty)은 `type=quantity`, 취소 수량(cncl_qty)은
@@ -79,7 +111,7 @@ def validate_order_qty(qty: int, *, allow_zero: bool = False,
     형제 명령들과 어긋나는데, 그쪽을 따르면 우리 기본값 0이 항상 거부되므로
     따르지 않는다 — kwcli 내부 불일치로 보고 우리 계약을 유지한다.
     """
-    if qty < 0 or (qty == 0 and not allow_zero):
+    if not is_valid_order_qty(qty, allow_zero=allow_zero):
         limit = "0 이상" if allow_zero else "1 이상"
         fail_input(f"{label}은(는) {limit}이어야 합니다 (입력값: {qty}).")
     return qty
@@ -107,10 +139,14 @@ def validate_order_price(price: float, *, allow_zero: bool = True,
     _mutation.py의 `parse_quote_price`와 혼동하지 말 것 — 그쪽은 **시세 응답**을
     검증하고 이쪽은 **사용자 입력**을 검증한다. 계약도 다르다(그쪽은 0 이하를
     "시세 없음"으로 거부한다).
+
+    판정은 `is_valid_order_price`에 위임한다 — 임계값 정의는 그쪽 한 곳뿐이다.
+    비유한 값은 메시지를 구분하기 위해서만 따로 검사한다(판정 자체는 술어가 이미
+    False를 준다).
     """
     if not math.isfinite(price):
         fail_input(f"{label}이(가) 유효한 숫자가 아닙니다 (입력값: {price}).")
-    if price < 0 or (price == 0 and not allow_zero):
+    if not is_valid_order_price(price, allow_zero=allow_zero):
         limit = "0 이상이어야" if allow_zero else "0보다 커야"
         fail_input(f"{label}은(는) {limit} 합니다 (입력값: {price:g}).")
     return price

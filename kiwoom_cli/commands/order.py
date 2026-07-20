@@ -37,6 +37,8 @@ from ._mutation import (
     dry_run_payload,
     finish_dry_run,
     parse_quote_price,
+    is_valid_order_price,
+    is_valid_order_qty,
     send_order,
     suppress_pagination,
     validate_order_price,
@@ -74,6 +76,30 @@ ALL_ORDER_TYPES = sorted(set(ORDER_TYPES) | set(US_ORDER_TYPES))
 ORDER_EXCHANGES = ["KRX", "NXT", "SOR", "nasdaq", "nyse", "amex"]
 
 
+def _is_kr_integer_price(price: float) -> bool:
+    """국내 주문 가격은 정수(원)인가 — 이 규칙의 **유일한 정의**.
+
+    실주문(`_kr_price_or_exit`)과 사전점검(`_kr_price_ok` → `checks.price_ok`)이
+    이 함수를 공유한다. 비유한 값에 `int()`를 쓰면 터지므로, 호출부는 반드시
+    `is_valid_order_price`로 먼저 걸러 낸 뒤에 호출해야 한다 — 두 호출부 모두
+    그렇게 되어 있다.
+    """
+    return price == int(price)
+
+
+def _kr_price_ok(price: float) -> bool:
+    """국내 주문 가격 전체 유효성 술어 (유한·음수 아님·정수). 종료하지 않는다.
+
+    `order validate`의 `checks.price_ok`가 쓴다. `_kr_price_or_exit`와 **같은 두
+    규칙**(공용 술어 + 정수 규칙)을 같은 순서로 조합하므로, 사전점검과 실주문의
+    가격 판정이 구조적으로 어긋날 수 없다.
+
+    `is_valid_order_price`가 먼저 와야 한다 — and의 단축평가가 NaN/Inf를 걸러
+    `_is_kr_integer_price`의 `int()`가 터지지 않게 한다.
+    """
+    return is_valid_order_price(price) and _is_kr_integer_price(price)
+
+
 def _kr_price_or_exit(price: float) -> int:
     """국내 주문 가격은 정수(원). 소수점 입력 시 exit 1.
 
@@ -83,7 +109,7 @@ def _kr_price_or_exit(price: float) -> int:
     여기 한 곳에서 세 계열을 모두 덮는다.
     """
     validate_order_price(price, label="국내 주문가격")
-    if price != int(price):
+    if not _is_kr_integer_price(price):
         fail_input("국내 주문 가격은 정수(원)여야 합니다.")
     return int(price)
 
@@ -528,7 +554,12 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
     if is_us_symbol(code):
         raise click.ClickException("validate는 국내 종목만 지원합니다 (미국주식 미지원).")
 
-    price_ok = price == int(price)  # 국내 지정가는 정수(원)
+    # 실주문 경로와 **같은 술어**를 쓴다 (_mutation.is_valid_order_qty /
+    # _kr_price_ok). 사전점검은 실주문 결과를 예측하는 것이 존재 이유이므로,
+    # 임계값이 두 벌이 되면 그 자체가 결함이다 — D5b 이전에는 실제로 qty=0과
+    # 음수 가격에 valid: true를 답했고 실주문은 거부했다.
+    qty_ok = is_valid_order_qty(qty)
+    price_ok = _kr_price_ok(price)  # 유한 + 음수 아님 + 국내 정수(원)
     with KiwoomClient() as c:
         quote_price: float | None = None
         try:
@@ -545,9 +576,17 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
             except QuoteUnavailable:
                 quote_price = None
             symbol_ok = bool(str(quote.get("stk_nm") or "").strip() or quote_price)
-        if price:
+        if price and is_valid_order_price(price):
             est_price = int(price)
             price_known = True
+        elif price:
+            # --price가 주어졌지만 유효하지 않다(비유한/음수). `if price:`만 보고
+            # 곧장 int(price)를 하면 NaN에서 ValueError, Inf에서 OverflowError가
+            # 나 envelope 없이 죽는다 — NaN은 truthy라 이 분기를 통과한다.
+            # price_ok가 이미 false라 valid는 false로 확정이므로, 예상비용은
+            # 계산하지 않고 "가격 모름"으로 둔다.
+            est_price = 0
+            price_known = False
         elif quote_price is not None:
             # parse_quote_price는 f > 0만 보장한다(> 0, >= 1이 아님) — (0, 1) 구간의
             # 소수는 여기서 int() 절삭으로 0이 될 수 있다. 그 경우 price_known을
@@ -584,6 +623,10 @@ def validate(side: str, code: str, qty: int, price: float, order_type: str | Non
         "symbol_ok": symbol_ok,
         "market_open": _market_open_kr(),
         "sufficient_balance": sufficient,
+        # qty_ok는 D5b에서 추가됐다. 잘못된 수량을 기존 체크에 얹지 않은 이유:
+        # 유일하게 그럴듯한 후보인 sufficient_balance는 "잔고 부족"으로 읽히므로,
+        # 수량이 0인 사용자에게 입금하라고 안내하는 **틀린 진단**이 된다.
+        "qty_ok": qty_ok,
         "price_ok": price_ok,
         "price_known": price_known,
     }

@@ -241,7 +241,7 @@ exit 2로 하드 실패하지 않고) `checks.price_known`이 `false`가 되어 
 | `--confirm` / `--yes` | 확인 게이트 통과 (없으면 json/csv에서 `CONFIRMATION_REQUIRED`) |
 | `--dry-run` | 전송될 body를 그대로 출력, **아무것도 전송하지 않음**. `--confirm`보다 우선 |
 | `--client-order-id KEY` | 멱등키. 같은 키 재실행 → 재전송 없이 이전 응답 + `idempotent_replay: true` |
-| `order validate buy\|sell CODE QTY` | read-only 사전점검: `symbol_ok` / `market_open`(KST 시계 휴리스틱, `heuristic: true`) / `sufficient_balance` / `price_ok` / `price_known`(현재가 조회로 예상비용을 계산할 수 있었는지) |
+| `order validate buy\|sell CODE QTY` | read-only 사전점검: `symbol_ok` / `market_open`(KST 시계 휴리스틱, `heuristic: true`) / `sufficient_balance` / `qty_ok` / `price_ok` / `price_known`(현재가 조회로 예상비용을 계산할 수 있었는지). `qty_ok`/`price_ok`는 실주문 경로와 **같은 술어**를 쓰므로 사전점검이 통과한 수량·가격은 실주문에서도 거부되지 않는다 |
 
 멱등키는 주문 내용(api_id+body)의 fingerprint에 바인딩되며, 조회→전송→기록
 구간은 원장 파일 잠금으로 프로세스 간 직렬화된다. 같은 키로 다른 내용을
@@ -366,7 +366,7 @@ $ kiwoom -f json --fields symbol,price,change_direction stock info 005930
 # 2. 사전점검 (read-only, 주문 미전송)
 $ kiwoom -f json order validate buy 005930 10 --price 70000
 {"ok": true, "data": {"valid": true, "checks": {"symbol_ok": true, "market_open": true,
- "sufficient_balance": true, "price_ok": true, "price_known": true}, "est_cost": 700000,
+ "sufficient_balance": true, "qty_ok": true, "price_ok": true, "price_known": true}, "est_cost": 700000,
  "heuristic": true}, ...}
 
 # 3. dry-run: 전송될 body 확인 (미전송)
