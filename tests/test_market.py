@@ -1609,10 +1609,16 @@ def test_program_cumulative_unit_human_options(runner, fake_client, cli_value, a
 
 
 def test_program_stock_time_default_body_unchanged(runner, fake_client):
-    result = runner.invoke(cli, ["market", "program", "stock-time", "005930"])
+    """--date를 지정한 호출의 body 고정.
+
+    (D9/M2에서 미지정 시 빈 문자열 대신 키를 빼도록 바뀌었다 — date는
+    스펙상 Required=Y다. 기본 호출의 body는
+    test_program_stock_time_omits_date_key_when_unset가 고정한다.)"""
+    result = runner.invoke(
+        cli, ["market", "program", "stock-time", "005930", "--date", "20241125"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka90008", {
-        "amt_qty_tp": "1", "stk_cd": "005930", "date": "",
+        "amt_qty_tp": "1", "stk_cd": "005930", "date": "20241125",
     })
 
 
@@ -1644,10 +1650,15 @@ def test_program_stock_daily_unit_still_raw_text(runner, fake_client):
 
 
 def test_etf_returns_default_body_unchanged(runner, fake_client):
-    result = runner.invoke(cli, ["market", "etf", "returns", "069500"])
+    """--index를 지정한 호출의 body 고정.
+
+    (D9/M2에서 미지정 시 빈 문자열 대신 키를 빼도록 바뀌었다 —
+    etfobjt_idex_cd는 스펙상 Required=Y다. 기본 호출의 body는
+    test_etf_returns_omits_index_key_when_unset가 고정한다.)"""
+    result = runner.invoke(cli, ["market", "etf", "returns", "069500", "--index", "207"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka40001", {
-        "stk_cd": "069500", "etfobjt_idex_cd": "", "dt": "0",
+        "stk_cd": "069500", "dt": "0", "etfobjt_idex_cd": "207",
     })
 
 
@@ -2574,3 +2585,51 @@ def test_sector_index_option_name_unchanged(runner):
     assert result.exit_code == 0, result.output
     assert "--sector-code" in result.output
     assert "SECTOR_CODE" not in result.output.split("Options:")[0]
+
+
+# ── D9/M2: Required=Y 필드에 빈 문자열을 보내지 않는다 ────────────
+#
+# 위 D8 항목은 Required=N 필드였다. 여기 둘은 스펙상 **Required=Y**인데
+# default=""가 그대로 body에 실려 빈 문자열이 전송되고 있었다. 두 워크북
+# (docs/미국 REST API 문서.xlsx, docs/키움 REST API 문서.xlsx)이 일치한다:
+#   ka40001 etfobjt_idex_cd — Required=Y, Length 3
+#   ka90008 date            — Required=Y, Length 8
+# 빈 문자열도 "보내지 않음"도 스펙 위반이지만, 빈 값을 명시적으로 주장하는
+# 대신 키를 빼면 서버가 자기 필수필드 오류로 답한다. 같은 파일의
+# ka10038/ka50080/ka90013 선례와 동일한 처리다.
+
+
+def test_etf_returns_omits_index_key_when_unset(runner, fake_client):
+    result = runner.invoke(cli, ["market", "etf", "returns", "069500"])
+    assert result.exit_code == 0, result.output
+    api_id, body = fake_client.calls[0]
+    assert api_id == "ka40001"
+    assert "etfobjt_idex_cd" not in body, f'빈 문자열이 전송되고 있다: {body!r}'
+    assert body["stk_cd"] == "069500"
+    assert body["dt"] == "0"  # --period 기본값 week
+
+
+def test_etf_returns_sends_index_when_given(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "etf", "returns", "069500", "--index", "207",
+    ])
+    assert result.exit_code == 0, result.output
+    assert fake_client.calls[0][1]["etfobjt_idex_cd"] == "207"
+
+
+def test_program_stock_time_omits_date_key_when_unset(runner, fake_client):
+    result = runner.invoke(cli, ["market", "program", "stock-time", "005930"])
+    assert result.exit_code == 0, result.output
+    api_id, body = fake_client.calls[0]
+    assert api_id == "ka90008"
+    assert "date" not in body, f'빈 문자열이 전송되고 있다: {body!r}'
+    assert body["stk_cd"] == "005930"
+    assert body["amt_qty_tp"] == "1"  # --unit 기본값 amount
+
+
+def test_program_stock_time_sends_date_when_given(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "program", "stock-time", "005930", "--date", "20250408",
+    ])
+    assert result.exit_code == 0, result.output
+    assert fake_client.calls[0][1]["date"] == "20250408"

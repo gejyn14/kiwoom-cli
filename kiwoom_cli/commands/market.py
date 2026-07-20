@@ -1150,15 +1150,20 @@ def etf():
 
 @etf.command("returns")
 @click.argument("code")
-@click.option("--index", "etfobjt_idex_cd", default="", help="ETF대상지수코드")
+@click.option("--index", "etfobjt_idex_cd", default="",
+              help="ETF대상지수코드 (3자리, 스펙상 필수)")
 @click.option("--period", "dt", type=HumanChoice(ETF_RETURNS_PERIOD), default="week",
               help="기간 (week=1주,month=1달,six-months=6개월,year=1년)")
 def etf_returns(code, etfobjt_idex_cd, dt):
     """ETF 수익율 조회. (ka40001)"""
+    # 스펙: etfobjt_idex_cd는 Required=Y, Length 3 (두 워크북 일치). 빈 문자열은
+    # "빈 값을 명시했다"는 신호라 길이 검증에 걸린다. 미지정이면 키를 빼서
+    # 서버가 자기 필수필드 오류로 답하게 한다 (ka10038/ka50080/ka90013 선례).
+    body = {"stk_cd": code, "dt": dt}
+    if etfobjt_idex_cd:
+        body["etfobjt_idex_cd"] = etfobjt_idex_cd
     with KiwoomClient() as c:
-        data, _ = c.request("ka40001", {
-            "stk_cd": code, "etfobjt_idex_cd": etfobjt_idex_cd, "dt": dt,
-        })
+        data, _ = c.request("ka40001", body)
         print_api_response(data, f"ETF수익율 ({code})")
 
 
@@ -1767,13 +1772,16 @@ def program_cumulative(date, amt_qty_tp, mrkt_tp, stex_tp):
 @program.command("stock-time")
 @click.argument("code")
 @click.option("--unit", "amt_qty_tp", type=HumanChoice(AMT_QTY_TP_1_2), default="amount", help="금액/수량")
-@click.option("--date", default="", help="날짜 (YYYYMMDD)")
+@click.option("--date", default="", help="날짜 (YYYYMMDD, 스펙상 필수)")
 def program_stock_time(code, amt_qty_tp, date):
     """종목 시간별 프로그램매매 추이. (ka90008)"""
+    # 스펙: date는 Required=Y, Length 8 (두 워크북 일치). ka40001과 같은 이유로
+    # 빈 문자열 대신 키를 뺀다.
+    body = {"amt_qty_tp": amt_qty_tp, "stk_cd": code}
+    if date:
+        body["date"] = date
     with KiwoomClient() as c:
-        data, _ = c.request("ka90008", {
-            "amt_qty_tp": amt_qty_tp, "stk_cd": code, "date": date,
-        })
+        data, _ = c.request("ka90008", body)
         print_api_response(data, f"종목시간별프로그램매매추이 ({code})")
 
 
