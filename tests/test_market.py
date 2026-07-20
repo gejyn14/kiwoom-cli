@@ -2536,3 +2536,41 @@ def test_program_stock_daily_sends_optional_keys_when_given(runner, fake_client)
     assert body["amt_qty_tp"] == "1"
     assert body["date"] == "20250408"
 
+
+# ── D8/29-6: sector 위치인자 metavar ──────────────────
+#
+# sector index만 --sector-code 옵션이고 나머지 9개는 위치인자라 --help에
+# 파라미터 이름 INDS_CD가 그대로 노출된다. wire 값·파라미터 이름은 그대로 두고
+# **표시되는 metavar만** SECTOR_CODE로 맞춘다.
+#
+# 렌더된 help 텍스트를 본다. "명령이 여전히 돈다"는 테스트는 아무것도 증명하지 않는다.
+
+_SECTOR_POSITIONAL_CMDS = [
+    ("market", "sector", "current"),
+    ("market", "sector", "stocks"),
+    ("market", "sector", "daily"),
+    ("market", "sector", "chart", "tick"),
+    ("market", "sector", "chart", "minute"),
+    ("market", "sector", "chart", "day"),
+    ("market", "sector", "chart", "week"),
+    ("market", "sector", "chart", "month"),
+    ("market", "sector", "chart", "year"),
+]
+
+
+@pytest.mark.parametrize("path", _SECTOR_POSITIONAL_CMDS,
+                         ids=[" ".join(p) for p in _SECTOR_POSITIONAL_CMDS])
+def test_sector_positional_help_shows_sector_code_metavar(runner, path):
+    result = runner.invoke(cli, [*path, "--help"])
+    assert result.exit_code == 0, result.output
+    assert "SECTOR_CODE" in result.output, result.output
+    assert "INDS_CD" not in result.output, result.output
+
+
+def test_sector_index_option_name_unchanged(runner):
+    """sector index는 옵션 형태가 맞다 (전체 업종 반환 → 기본값이 의미 있음).
+    9개를 옵션으로 바꾸지 않았음을 함께 고정한다."""
+    result = runner.invoke(cli, ["market", "sector", "index", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "--sector-code" in result.output
+    assert "SECTOR_CODE" not in result.output.split("Options:")[0]

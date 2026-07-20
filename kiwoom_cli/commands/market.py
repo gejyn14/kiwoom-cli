@@ -915,7 +915,7 @@ def sector_investor(mrkt_tp, amt_qty_tp, base_dt, stex_tp):
 
 
 @sector.command("current")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--market", "mrkt_tp", default="kospi", type=HumanChoice(SECTOR_PRICE_MARKET), help="시장구분")
 def sector_current(inds_cd, mrkt_tp):
     """업종 현재가 조회. (ka20001)"""
@@ -930,7 +930,7 @@ def sector_current(inds_cd, mrkt_tp):
 
 
 @sector.command("stocks")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--market", "mrkt_tp", default="kospi", type=HumanChoice(SECTOR_PRICE_MARKET), help="시장구분")
 @click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def sector_stocks(inds_cd, mrkt_tp, stex_tp):
@@ -959,7 +959,7 @@ def sector_index(inds_cd):
 
 
 @sector.command("daily")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--market", "mrkt_tp", default="kospi", type=HumanChoice(SECTOR_PRICE_MARKET), help="시장구분")
 def sector_daily(inds_cd, mrkt_tp):
     """업종 현재가 일별. (ka20009)"""
@@ -995,7 +995,7 @@ def sector_chart():
 
 
 @sector_chart.command("tick")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--scope", "tic_scope", default="1", help="틱범위 (1,3,5,10,30)")
 def sector_chart_tick(inds_cd, tic_scope):
     """업종 틱차트. (ka20004)"""
@@ -1010,7 +1010,7 @@ def sector_chart_tick(inds_cd, tic_scope):
 
 
 @sector_chart.command("minute")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--scope", "tic_scope", default="1", help="틱범위 (1,3,5,10,30)")
 @click.option("--date", "base_dt", default="", help="기준일자 (YYYYMMDD)")
 def sector_chart_minute(inds_cd, tic_scope, base_dt):
@@ -1026,7 +1026,7 @@ def sector_chart_minute(inds_cd, tic_scope, base_dt):
 
 
 @sector_chart.command("day")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 def sector_chart_day(inds_cd, base_dt):
     """업종 일봉 차트. (ka20006)"""
@@ -1041,7 +1041,7 @@ def sector_chart_day(inds_cd, base_dt):
 
 
 @sector_chart.command("week")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 def sector_chart_week(inds_cd, base_dt):
     """업종 주봉 차트. (ka20007)"""
@@ -1056,7 +1056,7 @@ def sector_chart_week(inds_cd, base_dt):
 
 
 @sector_chart.command("month")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 def sector_chart_month(inds_cd, base_dt):
     """업종 월봉 차트. (ka20008)"""
@@ -1071,7 +1071,7 @@ def sector_chart_month(inds_cd, base_dt):
 
 
 @sector_chart.command("year")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 def sector_chart_year(inds_cd, base_dt):
     """업종 년봉 차트. (ka20019)"""
