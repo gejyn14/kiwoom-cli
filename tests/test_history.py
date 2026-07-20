@@ -358,3 +358,158 @@ class TestHistoryExport:
         ])
         assert result.exit_code == 1
         assert "pandas" in result.stderr
+
+
+# ── export: 출력 경로 생성 ──────────────────────────────
+
+
+class TestExportParentDir:
+    """--out의 상위 디렉터리가 없을 때. recorder.NdjsonRecorder.write와 같은
+    패턴(parents=True, exist_ok=True)을 따라야 한다 — 유일하게 빠져 있었다."""
+
+    @pytest.mark.parametrize("dest", ["sqlite", "csv"])
+    def test_creates_missing_parent_dirs(self, runner, data_setup, tmp_path, dest):
+        # 두 단계 깊이: mkdir(parents=True)가 아니면 못 만든다
+        out = tmp_path / "exports" / "nested" / f"out.{dest}"
+        assert not out.parent.exists()
+        result = runner.invoke(cli, [
+            "history", "export", "005930", "--dest", dest, "--out", str(out),
+        ])
+        # exit_code만 보면 안 된다: CliRunner는 잡히지 않은 예외도 exit 1로
+        # 바꾸므로, 파일이 실제로 생겼는지가 판별 기준이다.
+        assert result.exit_code == 0, result.output
+        assert out.exists(), "상위 디렉터리를 만들지 않아 파일이 생성되지 않았다"
+
+    def test_unmakeable_parent_is_input_error_not_traceback(
+        self, runner, data_setup, tmp_path,
+    ):
+        """상위 경로가 '파일'이면 mkdir이 NotADirectoryError를 던진다.
+        raw traceback(json 모드에서 envelope 없음) 대신 INVALID_INPUT이어야 한다."""
+        blocker = tmp_path / "blocker"
+        blocker.write_text("not a directory", encoding="utf-8")
+        out = blocker / "sub" / "out.csv"
+        result = runner.invoke(cli, [
+            "-f", "json", "history", "export", "005930",
+            "--dest", "csv", "--out", str(out),
+        ])
+        assert result.exit_code == 1
+        # 판별 기준: stdout에 envelope이 실제로 있고 code가 INVALID_INPUT인지.
+        # 수정 전에는 OSError가 그대로 튀어 stdout이 비어 있었다.
+        assert result.exception is None or isinstance(result.exception, SystemExit), (
+            f"처리되지 않은 예외가 남았다: {result.exception!r}"
+        )
+        doc = json.loads(result.stdout)
+        assert doc["ok"] is False
+        assert doc["error"]["code"] == "INVALID_INPUT"
+
+
+# ── export: sqlite 중복 ────────────────────────────────
+
+
+def _events_ddl(con) -> str:
+    return con.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='events'"
+    ).fetchone()[0]
+
+
+class TestExportSqliteDedup:
+    """sqlite는 csv/parquet(덮어쓰기)과 달리 append다. 같은 내용을 다시
+    내보내면 행이 배로 늘었다 (PK도 UNIQUE도 없는 무조건 INSERT)."""
+
+    def test_reexport_same_file_does_not_duplicate(self, runner, data_setup, tmp_path):
+        out = tmp_path / "out.sqlite"
+        args = ["history", "export", "005930", "--dest", "sqlite", "--out", str(out)]
+        first = runner.invoke(cli, args)
+        assert first.exit_code == 0, first.output
+        second = runner.invoke(cli, args)
+        assert second.exit_code == 0, second.output
+        con = sqlite3.connect(out)
+        try:
+            # 핵심 판별: 행 "수". 두 번째 export가 성공했다는 것만으로는
+            # 제약 유무를 구분할 수 없다.
+            assert con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 4
+        finally:
+            con.close()
+
+    def test_new_events_still_append_across_exports(
+        self, runner, data_setup, tmp_path,
+    ):
+        """dedup이 'append 자체를 막는' 것으로 과잉되면 안 된다 — 새 이벤트는
+        여전히 추가되어야 한다 (덮어쓰기가 아니라 중복만 무시)."""
+        out = tmp_path / "out.sqlite"
+        args = ["history", "export", "005930", "--dest", "sqlite", "--out", str(out)]
+        assert runner.invoke(cli, args).exit_code == 0
+
+        with open(data_setup / "005930_2026-07-17.ndjson", "w", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "type": "0B", "type_name": "주식체결", "symbol": "005930",
+                "ts": "09:05:00+09:00", "price": 71000, "volume": 7,
+            }, ensure_ascii=False) + "\n")
+
+        assert runner.invoke(cli, args).exit_code == 0
+        con = sqlite3.connect(out)
+        try:
+            assert con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 5
+            assert con.execute(
+                "SELECT COUNT(*) FROM events WHERE price = 71000").fetchone()[0] == 1
+        finally:
+            con.close()
+
+    def test_preexisting_legacy_table_is_upgraded_and_deduped(
+        self, runner, data_setup, tmp_path,
+    ):
+        """구 DDL(제약 없음)로 만들어진 기존 파일. CREATE TABLE IF NOT EXISTS는
+        무시되므로 새 제약이 적용되지 않고 INSERT OR IGNORE가 그냥 INSERT로
+        퇴화한다 — 조용히 계속 중복된다. 스키마를 승격해야 한다."""
+        out = tmp_path / "legacy.sqlite"
+        con = sqlite3.connect(out)
+        try:
+            con.execute(
+                "CREATE TABLE events (ts TEXT, symbol TEXT, type TEXT, "
+                "price REAL, volume INTEGER, raw_json TEXT)"
+            )
+            con.execute(
+                "CREATE INDEX idx_events_symbol_ts ON events (symbol, ts)"
+            )
+            # 구 버전 버그로 이미 쌓인 중복 2건 + 보존되어야 할 고유 행 1건
+            dup = ("09:00:00+09:00", "005930", "0B", 1.0, 1, '{"a": 1}')
+            con.executemany("INSERT INTO events VALUES (?,?,?,?,?,?)", [dup, dup])
+            con.execute("INSERT INTO events VALUES (?,?,?,?,?,?)",
+                        ("09:00:01+09:00", "005930", "0B", 2.0, 2, '{"a": 2}'))
+            con.commit()
+        finally:
+            con.close()
+
+        args = ["history", "export", "005930", "--dest", "sqlite", "--out", str(out)]
+        result = runner.invoke(cli, args)
+        assert result.exit_code == 0, result.output
+        assert result.exception is None, f"처리되지 않은 예외: {result.exception!r}"
+
+        con = sqlite3.connect(out)
+        try:
+            # 스키마가 실제로 승격됐는지
+            assert "UNIQUE" in _events_ddl(con).upper(), "구 스키마가 그대로 남았다"
+            # 기존 고유 행 2종은 보존되고 중복 1건만 접힘 + 신규 4건
+            assert con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 2 + 4
+            assert con.execute(
+                "SELECT COUNT(*) FROM events WHERE ts = '09:00:00+09:00'"
+            ).fetchone()[0] == 1
+            # 임시 테이블이 남지 않았는지
+            names = {r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            assert names == {"events"}, f"잔여 테이블: {names}"
+            # (symbol, ts) 인덱스는 승격 후에도 살아 있어야 한다
+            idx = con.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' "
+                "AND name='idx_events_symbol_ts'").fetchall()
+            assert idx, "승격 과정에서 (symbol, ts) 인덱스가 사라졌다"
+        finally:
+            con.close()
+
+        # 승격 후 재-export도 중복되지 않아야 한다
+        assert runner.invoke(cli, args).exit_code == 0
+        con = sqlite3.connect(out)
+        try:
+            assert con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 2 + 4
+        finally:
+            con.close()

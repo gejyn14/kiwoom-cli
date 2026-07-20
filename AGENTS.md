@@ -310,6 +310,14 @@ $ kiwoom -f json stream quote 005930 --max-events 3
 - `kiwoom history export CODE --dest sqlite|csv|parquet [--out 경로] [--from --to]`:
   sqlite는 `events(ts, symbol, type, price, volume, raw_json)` + `(symbol, ts)`
   인덱스. parquet은 pandas+pyarrow 필요 (없으면 stderr 안내 + exit 1).
+  `--out`의 상위 디렉터리는 없으면 만들어집니다(만들 수 없으면 `INVALID_INPUT`,
+  exit 1).
+- csv/parquet은 매번 파일을 덮어쓰지만 **sqlite는 기존 파일에 append**합니다.
+  중복은 `UNIQUE(ts, symbol, type, raw_json)` + `INSERT OR IGNORE`로 걸러지므로
+  같은 구간을 다시 내보내도 행이 늘지 않습니다(재실행 안전). 제약이 없던
+  구버전 파일에 내보내면 스키마를 자동 승격하며, 이때 이미 쌓여 있던 중복
+  행은 한 건으로 접힙니다. 네 컬럼이 모두 같은 서로 다른 이벤트는 한 건으로
+  취급됩니다(`raw_json`이 이벤트 전체를 담으므로 실질적으로 동일한 이벤트).
 - json 모드 출력: list/query는 `data.items`(raw 없음), export는
   `{out, format, events}` 요약.
 

@@ -29,6 +29,22 @@ _FILE_RE = re.compile(r"^(?P<key>.+)_(?P<date>\d{4}-\d{2}-\d{2})\.ndjson$")
 
 EXPORT_COLUMNS = ("ts", "symbol", "type", "price", "volume", "raw_json")
 
+# sqlite는 csv/parquet(매번 덮어쓰기)과 달리 append이므로 재-export가 행을
+# 배로 늘렸다. 아래 4개 컬럼으로 중복을 판정한다 — raw_json이 이벤트 전체를
+# 담으므로 price/volume까지 넣을 필요가 없고, 0D처럼 price/volume이 NULL인
+# 타입에서 NULL != NULL 때문에 제약이 무력해지는 것도 피한다.
+DEDUP_COLUMNS = ("ts", "symbol", "type", "raw_json")
+
+_EVENTS_DDL = (
+    "CREATE TABLE IF NOT EXISTS events "
+    "(ts TEXT, symbol TEXT, type TEXT, price REAL, volume INTEGER, raw_json TEXT, "
+    f"UNIQUE({', '.join(DEDUP_COLUMNS)}))"
+)
+
+_EVENTS_INDEX_DDL = (
+    "CREATE INDEX IF NOT EXISTS idx_events_symbol_ts ON events (symbol, ts)"
+)
+
 
 @click.group("history")
 def history():
@@ -231,18 +247,58 @@ def _export_row(ev: dict[str, Any]) -> tuple:
     )
 
 
+def _has_dedup_constraint(con: sqlite3.Connection) -> bool:
+    """events 테이블에 DEDUP_COLUMNS UNIQUE 제약이 걸려 있는지.
+
+    sqlite_master의 SQL 문자열을 grep하지 않는다 — 공백/대소문자/컬럼 순서에
+    따라 오판한다. 실제 인덱스 메타데이터로 판정한다.
+    """
+    for row in con.execute("PRAGMA index_list('events')"):
+        name, is_unique = row[1], row[2]
+        if not is_unique:
+            continue
+        cols = [r[2] for r in con.execute(f"PRAGMA index_info('{name}')")]
+        if cols == list(DEDUP_COLUMNS):
+            return True
+    return False
+
+
+def _upgrade_legacy_events_table(con: sqlite3.Connection) -> None:
+    """구 DDL(UNIQUE 없음)로 만들어진 events를 제약 있는 스키마로 승격.
+
+    `CREATE TABLE IF NOT EXISTS`는 기존 테이블이 있으면 아무것도 하지 않으므로,
+    구 파일에 재-export하면 새 제약이 붙지 않고 `INSERT OR IGNORE`가 사실상
+    `INSERT`로 퇴화한다 — 조용히 계속 중복된다. 그래서 승격이 필요하다.
+
+    기존 행 중 DEDUP_COLUMNS가 겹치는 것(=구 버전 버그로 쌓인 중복)은 이 과정에서
+    한 건으로 접힌다. 의도된 것이다: 그 중복은 원래 같은 이벤트를 두 번 쓴 결과다.
+    sqlite의 DDL은 트랜잭션 안에서 동작하므로 중간에 죽어도 반쪽 스키마로 남지 않는다.
+    """
+    con.execute("ALTER TABLE events RENAME TO events_legacy_migration")
+    # 인덱스는 rename을 따라가므로 이름 충돌을 피하려면 먼저 지운다
+    con.execute("DROP INDEX IF EXISTS idx_events_symbol_ts")
+    con.execute(_EVENTS_DDL)
+    cols = ", ".join(EXPORT_COLUMNS)
+    con.execute(
+        f"INSERT OR IGNORE INTO events ({cols}) "
+        f"SELECT {cols} FROM events_legacy_migration"
+    )
+    con.execute("DROP TABLE events_legacy_migration")
+
+
 def _export_sqlite(rows: list[dict[str, Any]], out: Path) -> None:
     con = sqlite3.connect(out)
     try:
-        con.execute(
-            "CREATE TABLE IF NOT EXISTS events "
-            "(ts TEXT, symbol TEXT, type TEXT, price REAL, volume INTEGER, raw_json TEXT)"
-        )
-        con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_symbol_ts ON events (symbol, ts)"
-        )
+        exists = con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='events'"
+        ).fetchone()
+        if exists and not _has_dedup_constraint(con):
+            _upgrade_legacy_events_table(con)
+        con.execute(_EVENTS_DDL)
+        con.execute(_EVENTS_INDEX_DDL)
+        # OR IGNORE: 같은 이벤트를 다시 내보내도 행이 늘지 않는다 (재-export 멱등)
         con.executemany(
-            "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO events VALUES (?, ?, ?, ?, ?, ?)",
             [_export_row(ev) for ev in rows],
         )
         con.commit()
@@ -287,6 +343,16 @@ def history_export(code: str, dest: str, out: str | None,
     end = _parse_bound(to, "--to")
     rows = _collect(code, start, end)
     out_path = Path(out) if out else Path(f"{code}.{dest}")
+    # recorder.NdjsonRecorder.write와 같은 패턴 — 상위 디렉터리를 만들어 둔다.
+    # 없으면 sqlite/csv/parquet 각자 다른 예외를 raw traceback으로 던졌고,
+    # json 모드에서는 envelope 없이 죽었다.
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        fail_input(
+            f"출력 경로의 디렉터리를 만들 수 없습니다: {out_path.parent} ({e})",
+            code="INVALID_INPUT",
+        )
     if dest == "sqlite":
         _export_sqlite(rows, out_path)
     elif dest == "csv":
