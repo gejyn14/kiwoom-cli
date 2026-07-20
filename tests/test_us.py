@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 from click.testing import CliRunner
@@ -80,6 +81,16 @@ from kiwoom_cli.commands.us.detect import is_us_symbol  # noqa: E402
     ("NVDA", "KRX", False),           # explicit KR override wins
     ("NVDA", "SOR", False),
     ("TSLA", "amex", True),
+    # 잔고 응답이 돌려주는 시장구분 접두사 형태 (영문 1자 + 숫자 6자리) → 국내
+    ("A005930", None, False),
+    ("Q123456", None, False),
+    ("a005930", None, False),
+    # 접두사를 무조건 벗기면 안 되는 것들 — 여기서 True가 유지돼야 한다
+    ("F", None, True),          # 1글자 미국 티커
+    ("A", None, True),
+    ("A00593", None, True),     # 숫자 5자리 → 국내 모양 아님
+    ("A0059301", None, True),   # 숫자 7자리 → 국내 모양 아님
+    ("AB005930", None, True),   # 영문 2자 → 국내 모양 아님
 ])
 def test_is_us_symbol(code, exchange, expected):
     assert is_us_symbol(code, exchange) is expected
@@ -118,9 +129,15 @@ from kiwoom_cli.commands.us import detect  # noqa: E402
 
 @pytest.fixture
 def tmp_cache(tmp_path, monkeypatch):
-    """Point the exchange cache at a temp dir."""
+    """거래소 캐시를 임시 디렉터리로 돌리고 도메인을 mock으로 고정한다.
+
+    KIWOOM_DOMAIN을 명시해 두면 get_domain_key가 사용자의 실제
+    ~/.kiwoom/config.toml을 읽지 않는다 (테스트가 실사용 상태에 의존/오염되지
+    않도록).
+    """
     monkeypatch.setattr("kiwoom_cli.config.CACHE_DIR", tmp_path)
-    return tmp_path / "us_exchanges.json"
+    monkeypatch.setenv("KIWOOM_DOMAIN", "mock")
+    return tmp_path / "us_exchanges-mock.json"
 
 
 def _fake_with_10098(entries):
@@ -179,9 +196,70 @@ def test_resolve_ignores_non_dict_cache_and_falls_back_to_api(tmp_cache):
 
 
 def test_resolve_ignores_invalid_cached_value(tmp_cache):
-    tmp_cache.write_text('{"NVDA": "bogus"}', encoding="utf-8")
+    tmp_cache.write_text(
+        json.dumps({"NVDA": {"exchange": "bogus", "ts": time.time()}}), encoding="utf-8"
+    )
     fake = _fake_with_10098([{"stex_tp": "ND", "stk_cd": "NVDA"}])
     assert detect.resolve_us_exchange(fake, "NVDA") == "ND"
+    assert fake.calls == [("usa10098", {"stk_cd": "NVDA"})]
+
+
+# ── 캐시 도메인 분리 + TTL (Task 25) ─────────────────
+#
+# 아래 네 테스트는 "쓰고 곧바로 읽는" 기존 캐시 테스트가 잡지 못하는 축을 노린다.
+# 같은 도메인 안에서만 왕복하면 스코프가 있든 없든 전부 통과하므로, 반드시
+# 도메인을 바꿔 가며 교차로 읽어야 한다.
+
+
+def test_exchange_cache_is_not_shared_across_domains(tmp_path, monkeypatch):
+    """mock에서 학습한 거래소가 prod 주문 라우팅에 재사용되면 안 된다.
+
+    파일이 하나뿐이던 시절에는 두 번째 호출이 캐시에 적중해 fake2.calls == []가
+    되고 결과도 'ND'가 나왔다. 도메인별로 파일이 갈리면 prod는 캐시 미스라
+    자기 도메인의 API를 다시 타야 한다.
+    """
+    monkeypatch.setattr("kiwoom_cli.config.CACHE_DIR", tmp_path)
+
+    monkeypatch.setenv("KIWOOM_DOMAIN", "mock")
+    fake_mock = _fake_with_10098([{"stex_tp": "ND", "stk_cd": "NVDA"}])
+    assert detect.resolve_us_exchange(fake_mock, "NVDA") == "ND"
+
+    monkeypatch.setenv("KIWOOM_DOMAIN", "prod")
+    fake_prod = _fake_with_10098([{"stex_tp": "NY", "stk_cd": "NVDA"}])
+    assert detect.resolve_us_exchange(fake_prod, "NVDA") == "NY"
+    assert fake_prod.calls == [("usa10098", {"stk_cd": "NVDA"})]
+
+
+def test_exchange_cache_entry_expires_after_ttl(tmp_cache):
+    """24시간이 지난 항목은 무시하고 다시 조회한다 (틀린 값이 영구화되지 않게)."""
+    stale = time.time() - (24 * 60 * 60 + 60)
+    tmp_cache.write_text(
+        json.dumps({"NVDA": {"exchange": "NY", "ts": stale}}), encoding="utf-8"
+    )
+    fake = _fake_with_10098([{"stex_tp": "ND", "stk_cd": "NVDA"}])
+    assert detect.resolve_us_exchange(fake, "NVDA") == "ND"
+    assert fake.calls == [("usa10098", {"stk_cd": "NVDA"})]
+
+
+def test_exchange_cache_fresh_entry_within_ttl_is_used(tmp_cache):
+    """TTL 안쪽 항목은 그대로 쓴다 — TTL 검사가 '항상 만료'로 퇴화하지 않았는지."""
+    tmp_cache.write_text(
+        json.dumps({"NVDA": {"exchange": "NY", "ts": time.time() - 3600}}),
+        encoding="utf-8",
+    )
+    fake = FakeKiwoomClient()
+    assert detect.resolve_us_exchange(fake, "NVDA") == "NY"
+    assert fake.calls == []
+
+
+def test_exchange_cache_ignores_legacy_flat_format(tmp_cache):
+    """v2.12 이하의 평문 형식 {"NVDA": "ND"}는 마이그레이션 없이 무시한다.
+
+    ts가 없어 신선도를 판단할 수 없고, 어느 도메인에서 학습한 값인지도 모른다.
+    """
+    tmp_cache.write_text('{"NVDA": "ND"}', encoding="utf-8")
+    fake = _fake_with_10098([{"stex_tp": "NY", "stk_cd": "NVDA"}])
+    assert detect.resolve_us_exchange(fake, "NVDA") == "NY"
     assert fake.calls == [("usa10098", {"stk_cd": "NVDA"})]
 
 
