@@ -30,9 +30,9 @@ def strip_kr_market_prefix(code: str) -> str:
     (A00593 / A0059301 / AB005930 / M04020000) 원본을 돌려준다. 미국 티커는
     숫자로 끝나지 않으므로 이 정규식에 걸릴 수 없다.
 
-    normalize_ws_values의 "9001" 처리는 지금도 선행 영문자를 무조건 벗기는
-    버그가 있다 (그쪽은 별도 작업 범위). 이 함수를 그 자리에 쓰면 낫겠지만
-    여기서는 건드리지 않는다 — 다만 그 패턴을 이쪽으로 복사해 오지 말 것.
+    REST 경로(normalize_record의 stk_cd)와 WS 경로(normalize_ws_values의
+    "9001") 양쪽이 이 함수를 쓴다 — 접두사 규칙의 단일 소스다. 어느 한쪽에
+    `s[1:] if s[:1].isalpha()` 같은 무조건 스트립을 다시 심지 말 것.
     """
     return code[1:] if _KR_PREFIXED_SYMBOL_RE.fullmatch(code) else code
 
@@ -218,7 +218,7 @@ def normalize_ws_values(values: dict[str, Any]) -> dict[str, Any]:
 
     - WS_CANONICAL에 있는 ID는 영문명, 아니면 WS_FIELD_NAMES 한글명, 둘 다 없으면 ID 유지
     - "20"/"908" (체결시간) -> ISO-8601 (+09:00), 키는 "ts"
-    - "9001" (종목코드) -> 선행 시장구분 문자(A 등) 제거
+    - "9001" (종목코드) -> strip_kr_market_prefix (REST의 stk_cd와 같은 규칙)
     - 숫자 분류는 formatters의 _ABS_FIELDS/_SIGNED_FIELDS를 그대로 따름
       (ABS: 절대값 + 방향 동반 키, SIGNED: 부호 유지)
     """
@@ -228,8 +228,7 @@ def normalize_ws_values(values: dict[str, Any]) -> dict[str, Any]:
         if k in _WS_TIME_IDS:
             out[canon] = _iso_datetime("tm", v)
         elif k == "9001":
-            s = str(v).strip()
-            out[canon] = s[1:] if s[:1].isalpha() else s
+            out[canon] = strip_kr_market_prefix(str(v).strip())
         elif isinstance(v, str) and k in _NUMERIC_FIELDS:
             num, direction = parse_signed(v)
             if num is None:
