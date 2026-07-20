@@ -1062,3 +1062,19 @@ def test_order_path_lock_still_blocks(isolated_env):
 
     assert entered.wait(timeout=2.0), "잠금 해제 후에도 진입하지 못했다"
     t.join(timeout=2.0)
+
+
+def test_ledger_path_unchanged_by_resolution_refactor(monkeypatch, tmp_path):
+    """원장 경로가 움직이면 기록된 멱등키가 전부 안 보이게 되고, send_order가
+    이미 체결됐을 수 있는 주문을 재전송한다. 해석 방식을 바꾸는 작업에서
+    가장 위험한 부작용이라 값 자체를 리터럴로 고정한다."""
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[general]\ndefault_profile = "default"\n[profiles.default]\ndomain = "mock"\n')
+    monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+    monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+    monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+    assert idempotency._ledger_file().name == "default-mock.jsonl"
+
+    with click.Context(click.Command("x"), obj={"profile": "live", "resolved_profile": "live",
+                                                "domain_key": "prod"}):
+        assert idempotency._ledger_file().name == "live-prod.jsonl"
