@@ -487,3 +487,20 @@ class TestLogoutVerifiesRevoke:
         assert result.exit_code == 0, result.output
         doc = _json.loads(result.stdout)
         assert doc["data"]["revoked"] is True
+
+
+def test_force_logout_json_reports_revoked_false(logout_ready, revoke_fails):
+    """--force는 로컬 정리를 허용하는 탈출구일 뿐, 폐기 성공의 선언이 아니다.
+
+    여기서 revoked:true를 내보내면 이 릴리스가 없애려는 결함(확인하지 않은
+    것을 성공이라 보고)을 --force 경로에 그대로 남기는 셈이다.
+    """
+    import json as _json
+
+    keyring.set_password(config.KEYRING_SERVICE, "default:token", "keychain-token")
+    result = CliRunner().invoke(cli, ["-f", "json", "auth", "logout", "--force"])
+    assert result.exit_code == 0, result.output
+    doc = _json.loads(result.stdout)
+    assert doc["data"]["revoked"] is False, \
+        "서버 폐기에 실패했는데 revoked:true로 보고했다"
+    assert keyring.get_password(config.KEYRING_SERVICE, "default:token") is None
