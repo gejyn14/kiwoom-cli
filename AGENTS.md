@@ -215,7 +215,8 @@ exit 2로 하드 실패하지 않고) `checks.price_known`이 `false`가 되어 
 | `RATE_LIMITED` | ✓(1700) | 호출 제한. backoff 후 재시도 |
 | `ENV_MISMATCH` | ✗ | 실전/모의 불일치 (appkey/token) |
 | `IP_MISMATCH` | ✗ | 발급 IP와 요청 IP 다름 |
-| `INVALID_CREDENTIALS` / `TOKEN_ISSUE_FAILED` / `TOKEN_REVOKE_FAILED` | ✗ | 키/발급 문제 |
+| `DEVICE_AUTH_FAILED` | ✗ | 단말기 인증 실패 (upstream 8040, 8050, 8103) |
+| `INVALID_CREDENTIALS` / `TOKEN_ISSUE_FAILED` / `TOKEN_REVOKE_FAILED` | ✗ | 키/발급 문제. `TOKEN_REVOKE_FAILED`는 `auth logout`이 상단 폐기 실패를 감지했을 때 — **로컬 토큰은 지워지지 않았으므로 재시도 가능**하다. 서버에 도달할 수 없어 로컬 정리가 막히면 `--force`(그때 `data.revoked`는 `false`) |
 | `NOT_CONFIGURED` | ✗ | 설정 필요. 먼저 `kiwoom config setup` 실행. exit 1 |
 | `KEYCHAIN_UNAVAILABLE` | ✗ | OS 키체인 접근 불가. `KIWOOM_TOKEN` 사용. exit 1 |
 | `NETWORK_ERROR` | ✓ | 연결 실패·타임아웃 등 전송 오류 (`httpx.RequestError` 전반을 포괄) |
