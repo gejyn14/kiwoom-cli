@@ -502,6 +502,7 @@ kiwoom order condition search 001 --confirm
 
 - `--dry-run`: 실제 전송될 request body를 그대로 출력하고 아무것도 전송하지 않습니다. `--confirm`보다 우선합니다. 시장가 주문은 현재가를 조회해 예상비용(`est_cost`)을 계산합니다.
 - `--client-order-id KEY`: 멱등성 키. 같은 키로 재실행하면 재전송 없이 이전 응답을 반환합니다(`idempotent_replay: true`). 네트워크 단절·에이전트 재시도로 인한 중복 주문을 방지합니다. 원장: `~/.kiwoom/idempotency/<프로필>-<환경>.jsonl`
+- `kiwoom config prune-ledger [--days 90] [--dry-run]`: 원장은 append-only라 계속 자랍니다. 종결된 지 지정 기간이 지난 키를 제거합니다. 결과 불명(in-flight) 기록은 나이와 무관하게 남습니다 — 주문이 브로커에 닿았을 수 있다는 유일한 증거라 지우면 재실행이 실제 주문을 다시 보냅니다. 임시 파일에 쓰고 원자적으로 교체하므로 도중에 중단돼도 원장이 잘리지 않습니다.
 - `order validate buy|sell CODE QTY`: read-only 사전점검. `symbol_ok` / `market_open`(KST 시계 휴리스틱, 공휴일 미감지) / `sufficient_balance` / `qty_ok` / `price_ok` / `price_known`(--price 미지정 시 현재가로 예상비용을 계산할 수 있었는지)를 점검하고 실패 시 `VALIDATION_FAILED` + 실패 항목을 `error.details`에 담아 exit 1. 국내 주식 전용.
 
 ---

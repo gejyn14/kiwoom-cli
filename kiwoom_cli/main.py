@@ -10,7 +10,7 @@ import click
 import httpx
 import keyring
 
-from . import __version__, auth, config, envelope
+from . import __version__, auth, config, envelope, idempotency
 from .client import KiwoomClient, KiwoomAPIError, KiwoomAuthError
 from .commands.account import account
 from .commands.dashboard import dashboard
@@ -420,6 +420,34 @@ def config_profiles():
         domain = settings.get("domain", "mock")
         account = settings.get("account", "") or "(미설정)"
         human(f"  {marker} {name:15s} 도메인={domain}  계좌={account}")
+
+
+@config_cmd.command("prune-ledger")
+@click.option("--days", default=idempotency.DEFAULT_MAX_AGE_DAYS, type=int, show_default=True,
+              help="보존기간 (이보다 오래된 종결 키를 제거)")
+@click.option("--dry-run", is_flag=True, help="제거하지 않고 대상만 보고")
+def config_prune_ledger(days: int, dry_run: bool):
+    """멱등성 원장에서 오래된 종결 키를 제거.
+
+    in-flight(결과 불명) 기록은 나이와 무관하게 남는다 — 주문이 브로커에
+    닿았을 수 있다는 유일한 증거라 지우면 재실행이 실제 주문을 다시 쏜다.
+    임시 파일 + os.replace로 갈아끼우므로 도중에 죽어도 원장은 잘리지 않는다.
+    """
+    if days < 1:
+        fail_input("--days는 1 이상이어야 합니다.")
+    try:
+        stats = idempotency.prune(days, dry_run=dry_run)
+    except idempotency.LedgerLockBusy:
+        fail_input("원장이 다른 프로세스에 잠겨 있습니다. 잠시 후 다시 시도하세요.")
+    if _get_format() == "json":
+        envelope.emit(data=stats)
+        return
+    prefix = "[dim](--dry-run: 실제로 지우지 않음)[/] " if dry_run else ""
+    console.print(
+        f"{prefix}[green]원장 정리:[/] 키 {stats['removed_keys']}개 제거, "
+        f"{stats['kept_keys']}개 유지 (줄 {stats['removed_lines']}개 제거)"
+    )
+    console.print(f"[dim]{stats['ledger']}[/]")
 
 
 # ── Auth ──────────────────────────────────────────────
