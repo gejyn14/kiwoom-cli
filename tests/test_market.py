@@ -20,13 +20,9 @@ from kiwoom_cli.commands._constants import (
     ELW_RANK_RIGHT_TYPE_3DIGIT,
     ELW_RIGHT_TYPE_1DIGIT,
     ELW_RIGHT_TYPE_3DIGIT,
-    ELW_SEARCH_SORT,
     ELW_SURGE_DIRECTION,
     ELW_SURGE_QTY_TYPE,
     ELW_SURGE_TIME_UNIT,
-    ETF_ALL_NAV,
-    ETF_ALL_TAX_TYPE,
-    ETF_ALL_TAXABLE,
     EXCHANGE_ALL,
     EXCHANGE_ALL_ZERO,
     EXCLUDE_ENDED_ELW,
@@ -34,10 +30,8 @@ from kiwoom_cli.commands._constants import (
     MARKET_ALL,
     MARKET_KOSPI_KOSDAQ,
     MARKET_TWO,
-    SECTOR_CODES_MARKET,
     SECTOR_PRICE_MARKET,
     THEME_LOOKUP_KIND,
-    THEME_LOOKUP_SORT,
 )
 from kiwoom_cli.main import cli
 from tests.fakes import FakeKiwoomClient
@@ -1465,10 +1459,17 @@ def test_sector_codes_default_body_unchanged(runner, fake_client):
     assert fake_client.calls[0] == ("ka10101", {"mrkt_tp": "0"})
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(SECTOR_CODES_MARKET.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("kospi", "0"), ("kosdaq", "1"), ("kospi200", "2"),
+    ("kospi100", "4"), ("krx100", "7"),  # 3/5/6은 결번 — 연속이 아니다
+])
 def test_sector_codes_market_human_options(runner, fake_client, cli_value, api_value):
     """SECTOR_CODES_MARKET(ka10101)의 5개 값 전부 고정 — kospi100(4)/krx100(7)까지
-    포함해 SECTOR_PRICE_MARKET(3값)의 진짜 상위집합임을 못 박는다."""
+    포함해 SECTOR_PRICE_MARKET(3값)의 진짜 상위집합임을 못 박는다.
+
+    기대값은 리터럴이다. 상수에서 가져오면(예전 형태) kospi100↔krx100을
+    맞바꿔도 스위트가 green이었다 — 결번이 있는 매핑이라 더더욱 고정이 필요하다.
+    """
     result = runner.invoke(cli, ["market", "sector", "codes", "--market", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["mrkt_tp"] == api_value
@@ -1496,8 +1497,13 @@ def test_theme_groups_type_human_options(runner, fake_client, cli_value, api_val
     assert fake_client.calls[0][1]["qry_tp"] == api_value
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(THEME_LOOKUP_SORT.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("profit-top", "1"), ("profit-bottom", "2"),
+    ("change-top", "3"), ("change-bottom", "4"),
+])
 def test_theme_groups_sort_human_options(runner, fake_client, cli_value, api_value):
+    """ka90001 flu_pl_amt_tp. 리터럴 고정 — 상수 참조 시 change-top↔change-bottom
+    맞바꿈(정렬 방향 역전)이 스위트를 그대로 통과했다."""
     result = runner.invoke(cli, ["market", "theme", "groups", "--sort", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["flu_pl_amt_tp"] == api_value
@@ -1714,22 +1720,35 @@ def test_etf_all_exchange_existing_values_unchanged(
     assert fake_client.calls[0][1]["stex_tp"] == exchange_code
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ETF_ALL_TAX_TYPE.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("all", "0"), ("tax-free", "1"), ("holding-tax", "2"),
+    ("company", "3"), ("foreign", "4"), ("foreign-tax-free", "5"),
+])
 def test_etf_all_tax_type_human_options(runner, fake_client, cli_value, api_value):
+    """ka40004 txon_type. 리터럴 고정 — 상수 참조 시 foreign↔foreign-tax-free
+    맞바꿈(과세 구분 오분류)이 스위트를 그대로 통과했다."""
     result = runner.invoke(cli, ["market", "etf", "all", "--tax-type", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["txon_type"] == api_value
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ETF_ALL_NAV.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("all", "0"), ("nav-gt-close", "1"), ("nav-lt-close", "2"),
+])
 def test_etf_all_nav_human_options(runner, fake_client, cli_value, api_value):
+    """ka40004 navpre. 리터럴 고정 — 상수 참조 시 nav-gt-close↔nav-lt-close
+    맞바꿈(NAV 상회/하회 역전)이 스위트를 그대로 통과했다."""
     result = runner.invoke(cli, ["market", "etf", "all", "--nav", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["navpre"] == api_value
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ETF_ALL_TAXABLE.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("all", "0"), ("taxable", "1"), ("tax-free", "2"),
+])
 def test_etf_all_taxable_human_options(runner, fake_client, cli_value, api_value):
+    """ka40004 txon_yn. 리터럴 고정 — 상수 참조 시 taxable↔tax-free 맞바꿈
+    (과세/비과세 역전)이 스위트를 그대로 통과했다."""
     result = runner.invoke(cli, ["market", "etf", "all", "--taxable", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["txon_yn"] == api_value
@@ -1856,15 +1875,26 @@ def test_elw_search_default_body_unchanged(runner, fake_client):
     })
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ELW_RIGHT_TYPE_1DIGIT.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("all", "0"), ("call", "1"), ("put", "2"), ("dc", "3"),
+    ("dp", "4"), ("ex", "5"), ("early-call", "6"), ("early-put", "7"),
+])
 def test_elw_search_right_type_human_options(runner, fake_client, cli_value, api_value):
+    """ka30005 rght_tp. 리터럴 고정 — 상수 참조 시 early-call↔early-put
+    맞바꿈(콜/풋 역전)이 스위트를 그대로 통과했다. 형제 상수
+    ELW_RIGHT_TYPE_3DIGIT는 다른 테스트가 우연히 지키고 있었다."""
     result = runner.invoke(cli, ["market", "elw", "search", "--right-type", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["rght_tp"] == api_value
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ELW_SEARCH_SORT.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("none", "0"), ("rise-rate", "1"), ("rise-price", "2"), ("fall-rate", "3"),
+    ("fall-price", "4"), ("volume", "5"), ("amount", "6"), ("days-left", "7"),
+])
 def test_elw_search_sort_human_options(runner, fake_client, cli_value, api_value):
+    """ka30005 sort_tp. 리터럴 고정 — 상수 참조 시 amount↔days-left 맞바꿈이
+    스위트를 그대로 통과했다."""
     result = runner.invoke(cli, ["market", "elw", "search", "--sort", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["sort_tp"] == api_value
