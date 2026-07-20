@@ -732,8 +732,8 @@ def describe(command_path: tuple[str, ...], paths_only: bool, depth: int | None)
     에이전트가 도구 스키마를 파악할 때 사용합니다.
 
     \b
-    예: kiwoom describe --paths -f json   # 전체 경로 목록 (저비용 발견)
-        kiwoom describe order buy -f json # 단일 명령 상세 스키마
+    예: kiwoom -f json describe --paths   # 전체 경로 목록 (저비용 발견)
+        kiwoom -f json describe order buy # 단일 명령 상세 스키마
         kiwoom describe order --depth 1
     """
     cmd: click.Command = cli
@@ -765,7 +765,7 @@ def find_cmd(keyword: str):
 
     \b
     예: kiwoom find 미체결            # 관련 명령어 + API ID
-        kiwoom find balance -f json  # 에이전트용 구조화 출력
+        kiwoom -f json find balance  # 에이전트용 구조화 출력
     """
     kw = keyword.lower()
     cmd_rows = [
