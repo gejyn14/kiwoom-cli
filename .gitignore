@@ -20,3 +20,6 @@ docs/
 
 # understand-anything knowledge graph (local analysis artifact, ~450KB)
 .understand-anything/
+
+# local tooling config, not part of the project
+opencode.json
