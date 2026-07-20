@@ -177,6 +177,23 @@ class TestHistoryQuery:
         assert all(it["ts"].startswith(("10:", "11:")) for it in items)
         assert len(items) == 3
 
+    def test_range_filter_discriminates_by_date_not_just_time_of_day(
+        self, runner, colliding_days,
+    ):
+        """날짜만 다르고 시각이 같은 두 이벤트 중 하나만 남아야 한다.
+
+        data_setup은 날마다 시각이 전부 달라서, 범위 필터가 파일명 날짜를
+        전혀 안 보고 시각만 비교해도 통과했다 (구조적 맹목). 여기서는 시각이
+        같으므로 날짜를 실제로 쓰지 않으면 0건 또는 2건이 나온다.
+        """
+        result = runner.invoke(cli, [
+            "-f", "json", "history", "query", "005930",
+            "--from", "2026-07-16T00:00:00", "--to", "2026-07-16T23:59:59",
+        ])
+        assert result.exit_code == 0
+        items = json.loads(result.stdout)["data"]["items"]
+        assert len(items) == 1, "날짜가 범위 판정에 반영되지 않았다"
+
     def test_type_filter(self, runner, data_setup):
         result = runner.invoke(cli, [
             "-f", "json", "history", "query", "005930", "--type", "0B",
@@ -269,7 +286,8 @@ class TestHistoryExport:
             row = con.execute(
                 "SELECT ts, symbol, type, price, volume FROM events "
                 "WHERE price = 70100").fetchone()
-            assert row == ("11:00:00+09:00", "005930", "0B", 70100.0, -5)
+            # export ts는 파일명 날짜와 결합된다 (녹화 파일의 ts는 시각만 담는다)
+            assert row == ("2026-07-16T11:00:00+09:00", "005930", "0B", 70100.0, -5)
             raw = con.execute(
                 "SELECT raw_json FROM events WHERE price = 70100").fetchone()[0]
             assert json.loads(raw)["price"] == 70100
@@ -303,7 +321,7 @@ class TestHistoryExport:
         finally:
             con.close()
         ts, symbol, type_, price, volume, raw = row
-        assert (ts, symbol, type_) == ("11:30:00+09:00", "005930", "0D")
+        assert (ts, symbol, type_) == ("2026-07-16T11:30:00+09:00", "005930", "0D")
         assert price is None and volume is None
         book = json.loads(raw)
         assert book["ask1"] == 70100 and book["bid1"] == 69900
@@ -410,6 +428,93 @@ def _events_ddl(con) -> str:
     return con.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='events'"
     ).fetchone()[0]
+
+
+@pytest.fixture
+def colliding_days(tmp_path, monkeypatch):
+    """서로 다른 날짜에 **같은 시각**의 이벤트를 두는 픽스처.
+
+    data_setup은 이틀치를 담지만 시각이 전부 달라, ts가 시각만 담고 있어도
+    (날짜가 빠져 있어도) 행이 서로 구분됐다 — dedup 컬럼의 날짜맹목을
+    구조적으로 볼 수 없는 픽스처였다. 여기서는 날짜만 다르고 시각·심볼·타입이
+    같은 두 이벤트를 만들어, 날짜가 ts에 실제로 반영되는지 판별한다.
+
+    이벤트 **내용까지 완전히 동일**하게 둔다. 내용이 조금이라도 다르면
+    raw_json이 갈려 DEDUP_COLUMNS가 날짜 없이도 두 행을 구분해 버리므로,
+    날짜맹목 자체를 시험하려면 남는 차이가 날짜뿐이어야 한다.
+    """
+    monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", tmp_path / "config.toml")
+    d = tmp_path / "data"
+    d.mkdir()
+    event = json.dumps({
+        "type": "0B", "type_name": "주식체결", "symbol": "005930",
+        "ts": "09:30:15+09:00", "price": 70000, "volume": 10,
+    }, ensure_ascii=False) + "\n"
+    for date in ("2026-07-15", "2026-07-16"):
+        (d / f"005930_{date}.ndjson").write_text(event, encoding="utf-8")
+    return d
+
+
+class TestExportTsCarriesDate:
+    """녹화 NDJSON의 ts는 시각만 담는다 (날짜는 파일명에만 있다).
+
+    export가 그 시각을 그대로 쓰면 (a) DEDUP_COLUMNS가 날짜맹목이라 다른
+    날의 서로 다른 이벤트가 한 건으로 접히고 (b) (symbol, ts) 인덱스가
+    날짜를 가로질러 무의미해진다. export 시점에 파일명 날짜를 결합한다.
+    """
+
+    def test_same_time_on_different_days_survives_dedup(
+        self, runner, colliding_days, tmp_path,
+    ):
+        out = tmp_path / "out.sqlite"
+        result = runner.invoke(cli, [
+            "-f", "json", "history", "export", "005930",
+            "--dest", "sqlite", "--out", str(out),
+        ])
+        assert result.exit_code == 0, result.output
+        con = sqlite3.connect(out)
+        try:
+            rows = con.execute("SELECT ts, price FROM events ORDER BY ts").fetchall()
+        finally:
+            con.close()
+        assert rows == [
+            ("2026-07-15T09:30:15+09:00", 70000.0),
+            ("2026-07-16T09:30:15+09:00", 70000.0),
+        ]
+        # 보고한 건수도 실제 삽입 행수와 같아야 한다
+        assert json.loads(result.stdout)["data"]["events"] == 2
+
+    def test_csv_export_ts_also_carries_date(self, runner, colliding_days, tmp_path):
+        out = tmp_path / "out.csv"
+        assert runner.invoke(cli, [
+            "history", "export", "005930", "--dest", "csv", "--out", str(out),
+        ]).exit_code == 0
+        rows = out.read_text(encoding="utf-8").strip().splitlines()
+        assert rows[1].startswith("2026-07-15T09:30:15+09:00,")
+        assert rows[2].startswith("2026-07-16T09:30:15+09:00,")
+
+    def test_ndjson_recorded_shape_is_unchanged(self, runner, colliding_days):
+        """on-the-wire 계약은 그대로다 — query는 녹화된 ts를 손대지 않는다."""
+        result = runner.invoke(cli, ["-f", "json", "history", "query", "005930"])
+        assert result.exit_code == 0
+        items = json.loads(result.stdout)["data"]["items"]
+        assert [it["ts"] for it in items] == ["09:30:15+09:00", "09:30:15+09:00"]
+
+    def test_reexport_reports_zero_new_rows(self, runner, colliding_days, tmp_path):
+        """두 번째 export는 아무것도 삽입하지 않으므로 events=0이어야 한다.
+        (len(rows)를 보고하면 수집 건수 2를 보고해 DB 상태와 어긋난다.)"""
+        out = tmp_path / "out.sqlite"
+        args = ["-f", "json", "history", "export", "005930",
+                "--dest", "sqlite", "--out", str(out)]
+        assert runner.invoke(cli, args).exit_code == 0
+        second = runner.invoke(cli, args)
+        assert second.exit_code == 0
+        assert json.loads(second.stdout)["data"]["events"] == 0
+        con = sqlite3.connect(out)
+        try:
+            assert con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 2
+        finally:
+            con.close()
 
 
 class TestExportSqliteDedup:
