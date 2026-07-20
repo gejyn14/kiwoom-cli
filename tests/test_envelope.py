@@ -491,7 +491,9 @@ def test_auth_logout_json_envelope(runner, monkeypatch, configured_default):
     # revoke_token은 어느 토큰을 폐기했는지를 돌려준다 (envelope에 그대로 실림)
     monkeypatch.setattr(
         RealClient, "revoke_token",
-        lambda self: {"token_source": "keychain", "keychain_token_deleted": True},
+        lambda self, force=False: {
+            "revoked": True, "token_source": "keychain", "keychain_token_deleted": True,
+        },
     )
     result = runner.invoke(cli, ["-f", "json", "auth", "logout"])
     assert result.exit_code == 0, result.output

@@ -522,24 +522,32 @@ def auth_login(ctx):
 
 
 @auth_cmd.command("logout")
+@click.option("--force", is_flag=True,
+              help="서버 폐기에 실패해도 로컬 토큰을 지웁니다 (서버 도달 불가 시 탈출구).")
 @click.pass_context
-def auth_logout(ctx):
+def auth_logout(ctx, force):
     """접근토큰 폐기."""
     profile = config.resolve_profile(ctx.obj.get("profile") if ctx.obj else None)
     if not config.is_configured(profile):
         _fail_not_configured()
     # 폐기 실패(KiwoomAPIError)는 전역 핸들러가 envelope/exit 2로 처리
     with KiwoomClient() as c:
-        outcome = c.revoke_token()
+        outcome = c.revoke_token(force=force)
     if _get_format() == "json":
         envelope.emit(data={
             "profile": profile,
-            "revoked": True,
+            "revoked": outcome["revoked"],
             "token_source": outcome["token_source"],
             "keychain_token_deleted": outcome["keychain_token_deleted"],
         })
         return
-    human("[green]토큰 폐기 완료.[/]")
+    if outcome["revoked"]:
+        human("[green]토큰 폐기 완료.[/]")
+    else:
+        # --force 경로. 서버 폐기는 실패했고 로컬만 정리했다 — 성공이라
+        # 뭉뚱그리면 사용자는 서버에 살아 있는 토큰을 모르고 지나간다.
+        human("[yellow]서버 폐기 실패.[/] 로컬 토큰만 삭제했습니다 (--force).")
+        human("  [yellow]서버에는 토큰이 아직 유효할 수 있습니다.[/]")
     if outcome["token_source"] == "env":
         # 폐기된 것은 env 토큰이다. 예전에는 여기서 키체인 토큰까지 지워
         # 폐기한 적 없는 토큰을 폐기 불가능하게 만들었다 — 무엇을 하지

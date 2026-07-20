@@ -411,3 +411,79 @@ def test_logout_without_env_token_deletes_keychain_token(logout_ready):
     assert logout_ready["token"] == "keychain-token"
     assert keyring.get_password(config.KEYRING_SERVICE, "default:token") is None
     assert "키체인" in result.output
+
+
+@pytest.fixture
+def revoke_fails(monkeypatch):
+    """revoke 응답이 상단 실패(return_code 8015)를 돌려주도록 만든다.
+
+    logout_ready가 돌려주는 dict는 '전송된 body'라는 뜻이므로 거기에 응답
+    스텁을 섞지 않고, 여기서 post를 따로 갈아끼운다.
+    """
+    from kiwoom_cli import client as client_mod
+
+    class _FailResp:
+        status_code = 200
+
+        def json(self):
+            return {"return_code": 8015, "return_msg": "폐기 실패"}
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(client_mod.httpx.Client, "post", lambda self, url, **kw: _FailResp())
+
+
+class TestLogoutVerifiesRevoke:
+    """revoke 응답을 확인하지 않고 revoked:true를 보고한 뒤 로컬 토큰을
+    지웠다. 서버에는 토큰이 살아 있는데 로컬 사본이 없어 두 번 다시 폐기할 수
+    없는 상태가 된다."""
+
+    def test_upstream_failure_exits_2_and_keeps_token(self, logout_ready, revoke_fails):
+        import json as _json
+
+        keyring.set_password(config.KEYRING_SERVICE, "default:token", "keychain-token")
+        result = CliRunner().invoke(cli, ["-f", "json", "auth", "logout"])
+        assert result.exit_code == 2, result.output
+        doc = _json.loads(result.stdout)
+        assert doc["ok"] is False
+        assert keyring.get_password(config.KEYRING_SERVICE, "default:token") is not None, \
+            "폐기에 실패했는데 로컬 토큰을 지웠다 — 재시도가 영영 불가능해진다"
+
+    def test_force_deletes_local_token_despite_failure(self, logout_ready, revoke_fails):
+        """서버 도달 불가로 영영 로컬 정리를 못 하는 상황의 탈출구."""
+        keyring.set_password(config.KEYRING_SERVICE, "default:token", "keychain-token")
+        result = CliRunner().invoke(cli, ["auth", "logout", "--force"])
+        assert result.exit_code == 0, result.output
+        assert keyring.get_password(config.KEYRING_SERVICE, "default:token") is None
+
+    def test_http_error_also_blocks_deletion(self, logout_ready, monkeypatch):
+        """return_code뿐 아니라 HTTP 4xx/5xx도 성공으로 보고되면 안 된다."""
+        import httpx
+
+        from kiwoom_cli import client as client_mod
+
+        class _HttpErrResp:
+            status_code = 500
+
+            def json(self):
+                return {}
+
+            def raise_for_status(self):
+                raise httpx.HTTPStatusError("500", request=None, response=None)
+
+        monkeypatch.setattr(client_mod.httpx.Client, "post",
+                            lambda self, url, **kw: _HttpErrResp())
+        keyring.set_password(config.KEYRING_SERVICE, "default:token", "keychain-token")
+        result = CliRunner().invoke(cli, ["auth", "logout"])
+        assert result.exit_code != 0
+        assert keyring.get_password(config.KEYRING_SERVICE, "default:token") is not None
+
+    def test_success_path_unchanged(self, logout_ready):
+        import json as _json
+
+        keyring.set_password(config.KEYRING_SERVICE, "default:token", "keychain-token")
+        result = CliRunner().invoke(cli, ["-f", "json", "auth", "logout"])
+        assert result.exit_code == 0, result.output
+        doc = _json.loads(result.stdout)
+        assert doc["data"]["revoked"] is True

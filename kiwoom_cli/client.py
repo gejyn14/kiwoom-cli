@@ -220,11 +220,16 @@ class KiwoomClient:
             self.token = token
         return token
 
-    def revoke_token(self) -> dict[str, Any]:
+    def revoke_token(self, force: bool = False) -> dict[str, Any]:
         """Revoke the current access token via au10002.
 
         어느 토큰을 폐기했고 키체인 항목을 지웠는지를 돌려준다
-        (`{"token_source": "env"|"keychain", "keychain_token_deleted": bool}`).
+        (`{"revoked": bool, "token_source": "env"|"keychain",
+        "keychain_token_deleted": bool}`).
+
+        force=True는 상단 폐기가 실패해도 로컬 정리를 진행한다(서버 도달 불가로
+        영영 정리를 못 하는 상황의 탈출구). 이때도 revoked를 True로 만들지
+        않는다 — 확인하지 않은 것을 성공이라 보고하는 것이 애초의 결함이었다.
 
         auth.load_token은 KIWOOM_TOKEN을 키체인보다 먼저 반환하므로, env 토큰을
         폐기해 놓고 키체인의 {profile}:token을 지우면 **폐기한 적 없는 다른 살아
@@ -238,11 +243,26 @@ class KiwoomClient:
         if not token:
             raise click.ClickException("No token to revoke.")
 
-        self._http.post(
+        resp = self._http.post(
             "/oauth2/revoke",
             headers={"content-type": CONTENT_TYPE, "api-id": "au10002"},
             json={"appkey": ak, "secretkey": sk, "token": token},
         )
+        revoked = True
+        try:
+            # issue_token과 같은 확인. 종전에는 응답을 이름에 묶지도 않아
+            # HTTP 4xx/5xx와 return_code 8015/8016이 전부 성공으로 보고됐고,
+            # 그 뒤 로컬 토큰까지 지워 재폐기를 불가능하게 만들었다.
+            resp.raise_for_status()
+            data = resp.json()
+            rc = data.get("return_code")
+            if rc is not None and str(rc) != "0":
+                raise KiwoomAPIError(rc, data.get("return_msg", "토큰 폐기 실패"))
+        except (httpx.HTTPError, KiwoomAPIError):
+            if not force:
+                raise
+            revoked = False
+
         from_env = bool(env_token) and token == env_token
         # 키체인이 방금 폐기한 토큰을 들고 있으면 출처와 무관하게 지운다
         # (죽은 토큰을 남기면 auth status가 유효한 것처럼 보고한다).
@@ -252,6 +272,7 @@ class KiwoomClient:
             auth.delete_token(profile=self.profile)
         self.token = None
         return {
+            "revoked": revoked,
             "token_source": "env" if from_env else "keychain",
             "keychain_token_deleted": bool(delete_keychain and keychain_token is not None),
         }
