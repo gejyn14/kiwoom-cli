@@ -160,10 +160,26 @@ def save_config(cfg: dict) -> None:
 def resolve_profile(profile: str | None = None) -> str:
     """Resolve the active profile name.
 
-    Priority: explicit arg > KIWOOM_PROFILE env > general.default_profile > "default"
+    Priority: explicit arg > CLI --profile (Click ctx) > KIWOOM_PROFILE env
+    > general.default_profile > "default"
+
+    **CLI 플래그를 여기서 읽는 이유.** 종전에는 이 함수가 뒤의 셋만 구현하고
+    `--profile`은 호출자가 넘겨줄 때만 반영됐다. 그래서 ctx.obj["profile"]를
+    읽는 자리가 리포 전역 10곳으로 흩어졌고, 넘기는 것을 잊은 호출부
+    (us/detect.py)가 조용히 다른 프로필의 도메인으로 캐시를 갈랐다 — 모의에서
+    학습한 거래소가 실주문에 실릴 수 있었다. 우선순위 자체는 종전 docstring이
+    이미 선언하던 것이라 계약 변경이 아니라 계약 이행이다.
+
+    Click 컨텍스트가 없어도(테스트·라이브러리 사용) 동작해야 하므로
+    silent=True로 조회하고 obj가 None/빈 dict인 경우를 모두 견딘다.
     """
     if profile:
         return profile
+    ctx = click.get_current_context(silent=True)
+    if ctx is not None and isinstance(ctx.obj, dict):
+        cli_profile = ctx.obj.get("profile")
+        if cli_profile:
+            return cli_profile
     env = os.environ.get("KIWOOM_PROFILE")
     if env:
         return env
