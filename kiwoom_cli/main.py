@@ -342,7 +342,10 @@ def config_show(ctx):
         envelope.emit(data={
             "profile": profile,
             "config_file": str(config.CONFIG_FILE),
-            "domain": profile_cfg.get("domain", "mock"),
+            # 설정 파일 값이 아니라 실제 접속 도메인 — KIWOOM_DOMAIN이 이것을
+            # 덮는다. 종전에는 config show가 '모의'라고 답하는 동안 요청은
+            # 실서버로 갔다.
+            "domain": config.get_domain_key(profile),
             "configured": configured,
             "account": profile_cfg.get("account", ""),
             "token_storage": token_storage,
@@ -350,7 +353,7 @@ def config_show(ctx):
         return
     human(f"  프로필: [bold]{profile}[/]")
     human(f"  설정 파일: {config.CONFIG_FILE}")
-    human(f"  도메인: {profile_cfg.get('domain', 'mock')}")
+    human(f"  도메인: {config.get_domain_key(profile)}")
     human(f"  App Key: {'[dim]설정됨 (키체인)[/]' if configured else '(미설정)'}")
     human(f"  계좌번호: {profile_cfg.get('account', '(미설정)')}")
     human(f"  토큰 저장: {'환경변수 (KIWOOM_TOKEN)' if token_storage == 'env' else 'OS 키체인'}")
@@ -412,11 +415,17 @@ def config_profiles():
     cfg = config.load_config()
     profiles = cfg.get("profiles", {})
     default = config.get_default_profile()
+    override = os.environ.get("KIWOOM_DOMAIN")
+    override = override if override in config.DOMAINS else None
     if _get_format() == "json":
         envelope.emit(data=[
             {
                 "name": name,
                 "domain": settings.get("domain", "mock"),
+                # KIWOOM_DOMAIN은 모든 프로필을 한꺼번에 덮으므로, 행마다
+                # 유효 도메인을 계산하면 전부 같은 값이 되어 설정 정보가
+                # 사라진다. 설정값은 그대로 두고 덮어쓰기를 별도로 알린다.
+                "domain_override": override,
                 "account": settings.get("account", ""),
                 "default": name == default,
             }
@@ -427,6 +436,8 @@ def config_profiles():
         human("[yellow]등록된 프로필이 없습니다.[/]")
         return
     human(f"  현재 프로필: [bold green]{default}[/]")
+    if override:
+        human(f"  [yellow]KIWOOM_DOMAIN={override} 가 모든 프로필의 도메인을 덮고 있습니다.[/]")
     human("")
     for name, settings in profiles.items():
         marker = " [green]*[/]" if name == default else "  "
@@ -554,10 +565,10 @@ def auth_status(ctx):
     if token is not None:
         token_source = "env" if os.environ.get("KIWOOM_TOKEN") else "keyring"
     if _get_format() == "json":
-        cfg = config.load_config()
         envelope.emit(data={
             "profile": profile,
-            "domain": cfg.get("profiles", {}).get(profile, {}).get("domain", "mock"),
+            # config show와 같은 이유로 실제 접속 도메인을 보고한다.
+            "domain": config.get_domain_key(profile),
             "configured": configured,
             "has_token": token is not None,
             "token_source": token_source,

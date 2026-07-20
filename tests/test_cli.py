@@ -299,3 +299,51 @@ def test_non_json_response_returns_upstream_error_envelope(runner, monkeypatch, 
     doc = json.loads(result.output)
     assert doc["ok"] is False
     assert doc["error"]["code"] == "UPSTREAM_ERROR"
+
+
+class TestDomainDisplayTruthfulness:
+    """KIWOOM_DOMAIN이 설정되면 요청은 그 도메인으로 가는데 표시 명령은
+    config.toml 값을 읽어 다른 도메인을 출력했다. 사용자가 config show로
+    '모의'를 확인하고 실거래 주문을 넣을 수 있었다."""
+
+    @pytest.fixture
+    def two_domains(self, monkeypatch, tmp_path):
+        cfg = tmp_path / "config.toml"
+        cfg.write_text('[general]\ndefault_profile = "default"\n'
+                       '[profiles.default]\ndomain = "mock"\n')
+        monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+        monkeypatch.setattr("kiwoom_cli.config.CONFIG_DIR", tmp_path)
+        monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+        return cfg
+
+    def test_config_show_reports_env_override(self, runner, two_domains, monkeypatch):
+        monkeypatch.setenv("KIWOOM_DOMAIN", "prod")
+        doc = json.loads(runner.invoke(cli, ["-f", "json", "config", "show"]).stdout)
+        assert doc["data"]["domain"] == "prod", "config show가 실제 접속 도메인과 다른 값을 출력한다"
+
+    def test_auth_status_reports_env_override(self, runner, two_domains, monkeypatch):
+        monkeypatch.setenv("KIWOOM_DOMAIN", "prod")
+        doc = json.loads(runner.invoke(cli, ["-f", "json", "auth", "status"]).stdout)
+        assert doc["data"]["domain"] == "prod"
+
+    def test_auth_status_domain_matches_meta_env(self, runner, two_domains, monkeypatch):
+        """같은 문서 안에서 data.domain과 meta.env가 모순되면 안 된다."""
+        monkeypatch.setenv("KIWOOM_DOMAIN", "prod")
+        doc = json.loads(runner.invoke(cli, ["-f", "json", "auth", "status"]).stdout)
+        assert doc["data"]["domain"] == doc["meta"]["env"]
+
+    def test_config_profiles_keeps_configured_value_and_marks_override(
+        self, runner, two_domains, monkeypatch
+    ):
+        """목록은 '설정된 값'을 보여주는 것이 맞다 — 모든 행을 prod로 덮어쓰면
+        오히려 정보가 사라진다. 대신 override를 명시한다."""
+        monkeypatch.setenv("KIWOOM_DOMAIN", "prod")
+        doc = json.loads(runner.invoke(cli, ["-f", "json", "config", "profiles"]).stdout)
+        row = doc["data"][0]
+        assert row["domain"] == "mock"
+        assert row["domain_override"] == "prod"
+
+    def test_no_override_means_null(self, runner, two_domains, monkeypatch):
+        monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+        doc = json.loads(runner.invoke(cli, ["-f", "json", "config", "profiles"]).stdout)
+        assert doc["data"][0]["domain_override"] is None
