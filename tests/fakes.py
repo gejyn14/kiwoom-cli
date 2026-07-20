@@ -141,12 +141,27 @@ class FakeWebSocket:
 
     # 전송된 프레임 조회 헬퍼
     def sent_trnms(self) -> list[str]:
-        out = []
+        """전송 프레임의 trnm만. **프레임 순서만** 볼 때 쓸 것.
+
+        trnm 외의 모든 키를 버리므로, 이것만으로 단언하면 LOGIN의 token을
+        통째로 빼거나 REG의 item/type/grp_no/refresh를 아무 값으로 바꿔도
+        테스트가 전부 통과한다. 페이로드를 봐야 하면 `sent_frames`를 쓸 것.
+        """
+        return [f.get("trnm", "") if isinstance(f, dict) else ""
+                for f in self.sent_frames()]
+
+    def sent_frames(self) -> list[dict[str, Any]]:
+        """전송 프레임을 **파싱된 dict 그대로** 돌려준다 (페이로드 포함).
+
+        파싱 불가능한 줄은 {}로 둔다 — 자리를 없애면 인덱스가 밀린다.
+        """
+        out: list[dict[str, Any]] = []
         for raw in self.sent:
             try:
-                out.append(json.loads(raw).get("trnm", ""))
+                frame = json.loads(raw)
             except json.JSONDecodeError:
-                out.append("")
+                frame = None
+            out.append(frame if isinstance(frame, dict) else {})
         return out
 
 

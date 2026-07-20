@@ -856,3 +856,61 @@ class TestStreamAckSlotDiscipline:
         assert result.exit_code == 3, result.output
         assert "8005" in result.output, "REG 프레임을 LOGIN ack로 오독했다"
         assert "인증 실패: 등록 종목수 초과" not in result.output
+
+
+# ============================================================
+#  D9/H5: 핸드셰이크 **페이로드** 고정
+#
+#  기존 단언은 전부 sent_trnms() 기반이라 trnm 외의 모든 키를 버렸다. 그
+#  상태에서는 LOGIN에서 token을 통째로 빼거나 REG의 item/type/grp_no/refresh를
+#  아무 값으로 바꿔도 스위트가 전부 통과했다. 여기서는 sent_frames()로
+#  전송 프레임 자체를 본다.
+# ============================================================
+
+
+class TestStreamHandshakePayload:
+    def test_login_frame_carries_the_token(self, runner, ws_env):
+        ws = ws_env([LOGIN_OK, REG_OK])
+        result = runner.invoke(cli, ["stream", "quote", "005930"])
+        assert result.exit_code == 0, result.output
+        login = ws.sent_frames()[0]
+        assert login == {"trnm": "LOGIN", "token": "tok"}
+
+    def test_reg_frame_carries_type_item_grp_and_refresh(self, runner, ws_env):
+        ws = ws_env([LOGIN_OK, REG_OK])
+        result = runner.invoke(cli, ["stream", "quote", "005930", "000660"])
+        assert result.exit_code == 0, result.output
+        reg = ws.sent_frames()[1]
+        assert reg == {
+            "trnm": "REG",
+            "grp_no": "1",
+            "refresh": "1",
+            "data": [{"item": ["005930", "000660"], "type": ["0B"]}],
+        }
+
+    def test_account_type_registers_without_items(self, runner, ws_env):
+        """계좌성 타입(00/04)은 item이 비어야 한다 — 종목을 실으면 등록이 갈린다."""
+        ws = ws_env([LOGIN_OK, REG_OK])
+        result = runner.invoke(cli, ["stream", "order"])
+        assert result.exit_code == 0, result.output
+        assert ws.sent_frames()[1]["data"] == [{"item": [], "type": ["00"]}]
+
+    def test_keyboard_interrupt_exits_zero(self, runner, ws_env, monkeypatch):
+        """Ctrl+C는 실패가 아니다 (exit 0). 이전엔 어떤 테스트도 이 경로에 들어가지 않았다.
+
+        실제 Ctrl+C는 이벤트 루프 실행 중 시그널로 들어와 asyncio.run 밖으로
+        전파된다. 프레임 큐에 KeyboardInterrupt를 넣는 방식으로는 재현되지
+        않는다 — Task 안에서 던지면 asyncio가 감싸 `except Exception` 쪽으로
+        새고(실측: exit 2), 그건 실제 Ctrl+C 경로가 아니다. 그래서 경계인
+        asyncio.run 자체에서 던진다. 코루틴은 닫아 "never awaited" 경고를 막는다.
+        """
+        ws_env([LOGIN_OK, REG_OK])
+
+        def interrupted(coro, *a, **k):
+            coro.close()
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr("asyncio.run", interrupted)
+        result = runner.invoke(cli, ["stream", "quote", "005930"])
+        assert result.exit_code == 0, result.output
+        assert "스트리밍 종료" in result.output

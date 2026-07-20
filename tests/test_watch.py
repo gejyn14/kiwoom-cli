@@ -313,3 +313,93 @@ class TestWatchHandshakeSystemDisplay:
         result = _run(runner, watch_env, [LOGIN_OK, SYSTEM_FRAME, REG_OK, _real()])
         assert result.exit_code == 0, result.output
         assert "시스템: 접속허용요청" in result.output
+
+
+# ============================================================
+#  D9/H5: watch의 핸드셰이크 **페이로드**와 미검증 경로
+#
+#  기존 단언은 전부 sent_trnms() 기반이라 trnm 외의 키를 전부 버렸다. 그
+#  상태에서는 LOGIN의 token을 빼거나 REG에 엉뚱한 종목/타입/grp_no/refresh를
+#  실어도 스위트가 통과했다. 아래는 sent_frames()로 프레임 자체를 본다.
+# ============================================================
+
+
+class TestWatchHandshakePayload:
+    def test_login_frame_carries_the_token(self, runner, watch_env):
+        ws = watch_env["install"]([LOGIN_OK, REG_OK])
+        result = runner.invoke(cli, ["watch", "005930"])
+        assert result.exit_code == 0, result.output
+        assert ws.sent_frames()[0] == {"trnm": "LOGIN", "token": "tok"}
+
+    def test_reg_frame_carries_watched_codes_and_type(self, runner, watch_env):
+        ws = watch_env["install"]([LOGIN_OK, REG_OK])
+        result = runner.invoke(cli, ["watch", "005930", "000660"])
+        assert result.exit_code == 0, result.output
+        assert ws.sent_frames()[1] == {
+            "trnm": "REG",
+            "grp_no": "1",
+            "refresh": "1",
+            "data": [{"item": ["005930", "000660"], "type": ["0B"]}],
+        }
+
+
+class TestWatchLoginSlotRejection:
+    """LOGIN 자리의 reject_trnm=("REG","REMOVE")가 실제로 걸리는지.
+
+    task-D1-fix-report.md §5는 "양방향 모두 고정됐다"고 적었지만 REG 자리만
+    고정돼 있었다 (TestWatchAckSlotDiscipline). 여기가 나머지 방향이다.
+    """
+
+    def test_reg_ack_is_not_consumed_as_login_ack(self, runner, watch_env):
+        """REG ack가 LOGIN 자리에서 소비되면 인증 없이 인증 성공이 된다.
+
+        큐에 REG ack **하나만** 둔다. 거부가 살아 있으면 LOGIN 자리는 그것을
+        ack로 받지 않고 버퍼로 넘기며, 큐가 말라 인증 단계에서 exit 3(EXIT_AUTH)
+        으로 끝난다. 거부를 빼면 REG_OK를 LOGIN ack로 삼켜 "인증 성공"이 된 뒤
+        REG 자리에서 막혀 exit 2가 난다 — 두 종료 코드가 실제로 갈린다.
+        (프레임을 [REG_OK, LOGIN_OK]로 두면 어느 쪽이든 exit 2라 판별되지 않는다.)
+        """
+        result = _run(runner, watch_env, [REG_OK])
+        assert result.exit_code == 3, result.output
+        assert "인증 응답을 받기 전에 연결이 끊겼습니다" in result.output
+
+    def test_remove_ack_is_not_consumed_as_login_ack(self, runner, watch_env):
+        result = _run(runner, watch_env, [{"trnm": "REMOVE", "return_code": 0}])
+        assert result.exit_code == 3, result.output
+
+
+class TestWatchUncoveredGuards:
+    def test_missing_reg_ack_exits_api(self, runner, watch_env):
+        """등록 응답 없음(reg_resp is None) 가드 — 어떤 테스트도 들어가지 않던 경로.
+
+        큐를 그냥 말리면 recv가 ConnectionClosed를 던져 **다른** 핸들러로
+        간다. None을 받게 하려면 ack 없이 잡담(SYSTEM)만으로 건너뛰기 예산
+        (MAX_HANDSHAKE_SKIP=10)을 소진시켜야 한다.
+        """
+        result = _run(runner, watch_env, [LOGIN_OK] + [SYSTEM_FRAME] * 10)
+        assert result.exit_code == 2, result.output
+        assert "등록 응답을 받지 못했습니다" in result.output
+
+    def test_ping_in_receive_loop_is_echoed(self, runner, watch_env):
+        """수신 루프(핸드셰이크가 아니라)의 PING 에코 — 미검증 경로였다.
+
+        핸드셰이크 PING 에코는 이미 고정돼 있지만(recv_ack 안), 두 ack가 모두
+        끝난 뒤 Live 루프 안에서 오는 PING은 watch.py가 직접 처리한다.
+        """
+        ws = watch_env["install"]([LOGIN_OK, REG_OK, {"trnm": "PING"}, _real()])
+        result = runner.invoke(cli, ["watch", "005930"])
+        assert result.exit_code == 0, result.output
+        assert ws.sent_trnms() == ["LOGIN", "REG", "PING"]
+
+    def test_keyboard_interrupt_exits_zero(self, runner, watch_env, monkeypatch):
+        """Ctrl+C는 실패가 아니다 (exit 0). 미검증 경로였다."""
+        watch_env["install"]([LOGIN_OK, REG_OK])
+
+        def interrupted(coro, *a, **k):
+            coro.close()
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr("asyncio.run", interrupted)
+        result = runner.invoke(cli, ["watch", "005930"])
+        assert result.exit_code == 0, result.output
+        assert "모니터링 종료" in result.output
