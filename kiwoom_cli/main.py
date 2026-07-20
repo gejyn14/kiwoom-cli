@@ -184,6 +184,19 @@ def cli(ctx, output_format, profile, fields, no_color, next_key, all_pages):
             "영문자/숫자/하이픈/언더스코어 1~64자만 허용됩니다."
         )
 
+    # 루트에서 한 번만 해석해 저장한다. KiwoomClient와 envelope.build_meta가
+    # 각자 ctx.obj["profile"]를 다시 해석하면 두 값이 갈릴 수 있고, meta.env는
+    # "클라이언트가 실제로 쓴 도메인"이어야지 "같은 입력으로 다시 계산한 값"이면
+    # 안 된다 (AGENTS.md가 주문 전 meta.env 확인을 지시한다).
+    ctx.obj["resolved_profile"] = resolved_profile
+    try:
+        ctx.obj["domain_key"] = config.get_domain_key(resolved_profile)
+    except click.ClickException:
+        # config.toml 손상. 위 resolved_profile 폴백과 같은 이유로 여기서 죽지
+        # 않는다. env를 지어내지 않고 None으로 둔다 — envelope.build_meta의
+        # 기존 정책과 동일하다.
+        ctx.obj["domain_key"] = None
+
     if next_key and all_pages:
         raise click.UsageError("--next-key와 --all-pages는 함께 사용할 수 없습니다.")
     ctx.obj["next_key"] = next_key

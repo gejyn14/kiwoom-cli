@@ -98,8 +98,10 @@ def build_meta() -> dict[str, Any]:
     ctx = click.get_current_context(silent=True)
     obj = ctx.obj if ctx is not None and isinstance(ctx.obj, dict) else {}
     try:
-        profile = config.resolve_profile(obj.get("profile"))
-        env = config.get_domain_key(profile)
+        # 루트가 해석해 둔 값을 우선 읽는다 — 재계산하면 "우연히 같은 값"이지
+        # "클라이언트가 실제로 쓴 값"이 아니다.
+        profile = obj.get("resolved_profile") or config.resolve_profile(obj.get("profile"))
+        env = obj["domain_key"] if "domain_key" in obj else config.get_domain_key(profile)
     except click.ClickException as e:
         # config.toml이 손상된 경우(config.load_config()가 재발생시키는
         # NOT_CONFIGURED ClickException) meta 구성이 load_config()를 다시 호출해

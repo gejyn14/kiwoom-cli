@@ -37,7 +37,9 @@ class KiwoomClient:
         if profile is None:
             ctx = click.get_current_context(silent=True)
             if ctx and ctx.obj:
-                profile = ctx.obj.get("profile")
+                # 루트가 해석해 둔 값을 우선 읽는다. 없으면(루트 콜백을 거치지
+                # 않는 직접 사용) 원시 플래그로 폴백한다.
+                profile = ctx.obj.get("resolved_profile") or ctx.obj.get("profile")
         self.profile = profile
         self.domain = domain or config.get_domain(profile=profile)
         self.token = token or auth.load_token(profile=profile)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 
+import click
 import httpx
 import pytest
 from click.testing import CliRunner
@@ -573,3 +574,58 @@ def test_api_raw_json_mode_enveloped_unstripped(runner, monkeypatch):
     assert doc["ok"] is True
     assert doc["data"]["return_code"] == 0
     assert doc["data"]["stk_nm"] == "삼성전자"
+
+
+def test_meta_env_reports_domain_client_actually_used(runner, monkeypatch, tmp_path):
+    """meta.env는 클라이언트가 실제로 쓴 도메인의 '보고'여야 한다.
+
+    종전에는 KiwoomClient와 build_meta가 ctx.obj['profile']를 각자 읽고 각자
+    해석했다. 값이 같은 것은 우연이지 보장이 아니었다. AGENTS.md가 에이전트에게
+    주문 전 meta.env로 prod/mock을 확인하라고 지시하므로, 우연히 맞는 값은
+    잘못된 보장이다.
+    """
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        '[general]\ndefault_profile = "sim"\n'
+        '[profiles.sim]\ndomain = "mock"\n'
+        '[profiles.live]\ndomain = "prod"\n'
+    )
+    monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+    monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+    monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+
+    result = runner.invoke(cli, ["-p", "live", "-f", "json", "auth", "status"])
+    doc = json.loads(result.stdout)
+    assert doc["meta"]["profile"] == "live"
+    assert doc["meta"]["env"] == "prod"
+
+
+def test_client_domain_and_meta_env_cannot_diverge(monkeypatch, tmp_path):
+    """meta.env와 KiwoomClient.domain은 같은 해석 결과를 공유해야 한다.
+
+    auth status는 KiwoomClient를 만들지 않으므로 위 테스트만으로는 '보고한
+    값'과 '실제로 접속한 값'이 같다는 보장이 안 된다. 여기서 둘을 직접
+    맞대어 고정한다 — 이 불변식이 Task 2의 존재 이유다.
+    """
+    from kiwoom_cli import envelope
+    from kiwoom_cli.client import KiwoomClient
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        '[general]\ndefault_profile = "sim"\n'
+        '[profiles.sim]\ndomain = "mock"\n'
+        '[profiles.live]\ndomain = "prod"\n'
+    )
+    monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+    monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+    monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+    monkeypatch.setattr("kiwoom_cli.auth.load_token", lambda profile=None: "tok")
+
+    obj = {"profile": "live", "resolved_profile": "live", "domain_key": "prod"}
+    with click.Context(click.Command("x"), obj=obj):
+        with KiwoomClient() as c:
+            meta = envelope.build_meta()
+            assert c.domain == config.DOMAINS[meta["env"]], (
+                f"보고한 env={meta['env']} 인데 실제 접속 도메인은 {c.domain}"
+            )
+            assert c.profile == meta["profile"]
