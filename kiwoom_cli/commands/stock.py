@@ -69,6 +69,7 @@ from ._constants import (
     WARRANT_TYPE,
 )
 from .us import stock_ops as us_stock_ops
+from ..normalize import strip_kr_market_prefix
 from .us.detect import is_us_symbol
 
 
@@ -93,6 +94,7 @@ def stock():
 )
 def info(code: str, exchange: str | None):
     """종목 기본정보 조회. (국내 ka10001 / 미국 usa10100)"""
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_stock_ops.info(code, exchange)
     with KiwoomClient() as c:
@@ -110,6 +112,7 @@ def info(code: str, exchange: str | None):
 )
 def price(code: str, exchange: str | None):
     """종목 현재가 간단 조회. (국내 ka10001 / 미국 usa20100)"""
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_stock_ops.price(code, exchange)
     with KiwoomClient() as c:
@@ -142,6 +145,7 @@ def price(code: str, exchange: str | None):
 )
 def orderbook(code: str, exchange: str | None):
     """호가창 조회. 10단계 매수/매도 호가. (국내 ka10004 / 미국 usa20101)"""
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_stock_ops.orderbook(code, exchange)
     with KiwoomClient() as c:
@@ -253,9 +257,17 @@ def watchlist(codes: str):
         print_generic_table(data, title="관심종목정보")
 
 
+# 종목 리스트 캐시 수명. 거래소 캐시(24h)보다 길게 잡는다 — 상장/폐지는
+# 하루 단위로 흔들리지 않고, 만료 시 재동기화가 ka10099 4회 호출이라
+# 대화형 `stock search`에서 매일 물게 하기엔 비싸다. 거래소 캐시와 달리
+# 이 값은 주문 body에 들어가지 않아 틀렸을 때의 대가도 작다.
+_STOCK_CACHE_TTL_DAYS = 7
+
+
 def _load_stock_cache() -> list[dict] | None:
-    """Load cached stock list."""
+    """캐시된 종목 리스트. 없거나 TTL을 넘겼으면 None (호출측이 재동기화)."""
     import json
+    from datetime import datetime, timedelta
 
     from .. import config
     path = config.CACHE_DIR / "stocks.json"
@@ -263,9 +275,15 @@ def _load_stock_cache() -> list[dict] | None:
         return None
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        return raw["data"]
-    except (json.JSONDecodeError, KeyError, ValueError):
+        data = raw["data"]
+        # fetched_at은 오래도록 쓰이는 곳 없이 기록만 되고 있었다 (= 만료 없는
+        # 영구 캐시). 해석할 수 없으면 신선도를 주장할 수 없으므로 만료 취급한다.
+        fetched_at = datetime.fromisoformat(raw["fetched_at"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return None
+    if datetime.now() - fetched_at > timedelta(days=_STOCK_CACHE_TTL_DAYS):
+        return None
+    return data
 
 
 def _save_stock_cache(data: list[dict]) -> None:
@@ -283,12 +301,15 @@ def _save_stock_cache(data: list[dict]) -> None:
 
 def _sync_stocks() -> list[dict]:
     """Fetch all stocks from Kiwoom API across all markets and save to cache."""
-    _api_map = {"0": "코스피", "10": "코스닥", "8": "ETF", "3": "ELW"}
-    _market_label = {"거래소": "코스피", "코스닥": "코스닥", "ETF": "ETF", "ELW": "ELW"}
+    _api_map = {"0": "코스피", "10": "코스닥", "8": "ETF", "3": "ELW", "60": "ETN"}
+    _market_label = {"거래소": "코스피", "코스닥": "코스닥", "ETF": "ETF",
+                     "ELW": "ELW", "ETN": "ETN"}
     _kind_label = {"A": "주식", "Q": "ETN", "J": "ELW"}
     all_items: list[dict] = []
     with KiwoomClient() as c:
-        for mrkt_code in ["0", "10", "8", "3"]:
+        # "60"(ETN)이 빠져 있어 --market etn이 구조적으로 항상 빈 결과였다.
+        # ka10099 스펙의 mrkt_tp는 "60 : ETN"을 문서화한다.
+        for mrkt_code in ["0", "10", "8", "3", "60"]:
             data, _ = c.request("ka10099", {"mrkt_tp": mrkt_code})
             items = _find_list(data) or []
             for item in items:
@@ -1466,6 +1487,7 @@ def chart():
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
 def chart_tick(code: str, tic_scope: str, upd_stkpc_tp: str, exchange: str | None, krw: bool):
     """틱 차트 조회 (국내 ka10079 / 미국 usa06010)."""
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_stock_ops.chart("tick", code, exchange, tic_scope=tic_scope,
                                   adjusted=upd_stkpc_tp, krw=krw)
@@ -1503,6 +1525,7 @@ def chart_tick(code: str, tic_scope: str, upd_stkpc_tp: str, exchange: str | Non
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
 def chart_minute(code: str, tic_scope: str, upd_stkpc_tp: str, base_dt: str, exchange: str | None, krw: bool):
     """분봉 차트 조회 (국내 ka10080 / 미국 usa06011)."""
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_stock_ops.chart("minute", code, exchange, tic_scope=tic_scope,
                                   strt_dt=base_dt, adjusted=upd_stkpc_tp, krw=krw)
@@ -1537,6 +1560,7 @@ def chart_minute(code: str, tic_scope: str, upd_stkpc_tp: str, base_dt: str, exc
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
 def chart_day(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, krw: bool):
     """일봉 차트 조회 (국내 ka10081 / 미국 usa06012)."""
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_stock_ops.chart("day", code, exchange, strt_dt=base_dt,
                                   adjusted=upd_stkpc_tp, krw=krw)
@@ -1568,6 +1592,7 @@ def chart_day(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, 
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
 def chart_week(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, krw: bool):
     """주봉 차트 조회 (국내 ka10082 / 미국 usa06013)."""
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_stock_ops.chart("week", code, exchange, strt_dt=base_dt,
                                   adjusted=upd_stkpc_tp, krw=krw)
@@ -1599,6 +1624,7 @@ def chart_week(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None,
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
 def chart_month(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, krw: bool):
     """월봉 차트 조회 (국내 ka10083 / 미국 usa06014)."""
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_stock_ops.chart("month", code, exchange, strt_dt=base_dt,
                                   adjusted=upd_stkpc_tp, krw=krw)
@@ -1630,6 +1656,7 @@ def chart_month(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None
 @click.option("--krw", "krw", is_flag=True, help="원화 환산 (미국 전용)")
 def chart_year(code: str, base_dt: str, upd_stkpc_tp: str, exchange: str | None, krw: bool):
     """년봉 차트 조회 (국내 ka10094 / 미국 usa06015)."""
+    code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_stock_ops.chart("year", code, exchange, strt_dt=base_dt,
                                   adjusted=upd_stkpc_tp, krw=krw)

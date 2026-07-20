@@ -17,7 +17,7 @@ import pytest
 from click.testing import CliRunner
 
 from kiwoom_cli.client import KiwoomAPIError
-from kiwoom_cli.commands.order import _MARKET_TYPES, KST, ORDER_TYPES
+from kiwoom_cli.commands.order import _MARKET_TYPES, KST
 from kiwoom_cli.main import cli
 from tests.fakes import FakeKiwoomClient
 
@@ -664,9 +664,27 @@ def test_condition_stop_sends_trnm_cnsrclr(runner, fake_client):
 # ============================================================
 
 
-@pytest.mark.parametrize("type_name,api_code", list(ORDER_TYPES.items()))
+@pytest.mark.parametrize("type_name,api_code", [
+    # kt10000 trde_tp. 기대값은 **리터럴**이다 — ORDER_TYPES에서 가져오면 안 된다.
+    ("limit", "0"), ("market", "3"), ("conditional", "5"),
+    ("after-hours", "81"), ("pre-market", "61"), ("single", "62"),
+    ("best", "6"), ("first", "7"),
+    ("ioc", "10"), ("market-ioc", "13"), ("best-ioc", "16"),
+    ("fok", "20"), ("market-fok", "23"), ("best-fok", "26"),
+    ("stop", "28"), ("mid", "29"), ("mid-ioc", "30"), ("mid-fok", "31"),
+])
 def test_order_type_translation(runner, fake_client, type_name, api_code):
-    """Each of 18 order types maps to correct API code in trde_tp field.
+    """18개 주문유형이 trde_tp로 정확히 번역되는지 — 값을 리터럴로 고정한다.
+
+    예전에는 `parametrize(list(ORDER_TYPES.items()))`였다. 기대값을 검증 대상
+    상수에서 가져오므로 상수를 어떻게 바꿔도 자기모순이 없어 항상 통과했다.
+    실측: `ioc`("10")와 `fok`("20")를 맞바꿔도, `mid-ioc`/`mid-fok`를 맞바꿔도
+    전체 1988개 스위트가 그대로 green이었다. 기본값 `limit`만 다른 테스트가
+    우연히 지키고 있었다.
+
+    IOC(체결 가능분만 체결 후 잔량 취소)와 FOK(전량 아니면 취소)는 실행 계약
+    자체가 다르고, 맞바꿔도 둘 다 스펙상 유효한 코드라 서버가 정상 접수한다 —
+    실주문 경로에서 조용히 다른 체결 방식으로 나가는 형태의 결함이다.
 
     시장가 계열(market/market-ioc/market-fok)은 --price와 함께 쓰면 모순으로
     거부되므로(Task 5), 이 파라미터들만 --price 없이 호출한다.
@@ -1100,7 +1118,8 @@ def test_validate_buy_happy_path(runner, fake_client, market_open):
     assert data["valid"] is True
     assert data["checks"] == {
         "symbol_ok": True, "market_open": True,
-        "sufficient_balance": True, "price_ok": True, "price_known": True,
+        "sufficient_balance": True, "qty_ok": True, "price_ok": True,
+        "price_known": True,
     }
     assert data["est_cost"] == 700000
     assert data["heuristic"] is True
@@ -1388,3 +1407,20 @@ def test_litmus_loop_json_driven(runner, fake_everywhere, isolated_home, market_
     assert r7.exit_code == 0
     assert _doc(r7)["data"]["idempotent_replay"] is True
     assert len(fake.calls) == calls_before
+
+
+@pytest.mark.parametrize("side,api_id", [("buy", "kt10000"), ("sell", "kt10001")])
+def test_prefixed_code_order_dry_run_strips_prefix(runner, fake_client, side, api_id):
+    """주문 경로도 'A005930'을 국내로 보내고 접두사를 벗긴다.
+
+    dry-run이라 전송은 없고 출력된 body만 본다 — 라우팅이 틀리면 미국
+    주문 미리보기(ust2000x)가 나와 api_id가 달라진다.
+    """
+    result = runner.invoke(cli, [
+        "-f", "json", "order", side, "A005930", "10",
+        "--price", "70000", "--dry-run",
+    ])
+    assert result.exit_code == 0
+    doc = json.loads(result.output)
+    assert doc["data"]["api_id"] == api_id
+    assert doc["data"]["body"]["stk_cd"] == "005930"

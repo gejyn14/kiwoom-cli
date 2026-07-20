@@ -11,9 +11,30 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .formatters import _ABS_FIELDS, _SIGNED_FIELDS, _USD_FIELDS
+
+# 국내 종목코드의 시장구분 접두사: 영문 1자 + 숫자 6자리 ("A005930").
+# 잔고/체결 응답이 이 모양으로 stk_cd를 돌려주는 경우가 있다.
+_KR_PREFIXED_SYMBOL_RE = re.compile(r"^[A-Za-z][0-9]{6}$")
+
+
+def strip_kr_market_prefix(code: str) -> str:
+    """'A005930' -> '005930'. 그 외 입력은 손대지 않는다.
+
+    **선행 영문자를 무조건 벗기면 안 된다.** 미국 티커가 그대로 깨진다
+    (NVDA -> VDA, TSLA -> SLA, F -> ''). 그래서 "영문 정확히 1자 +
+    숫자 정확히 6자리"라는 완성된 모양에만 적용하고, 길이가 하나라도 어긋나면
+    (A00593 / A0059301 / AB005930 / M04020000) 원본을 돌려준다. 미국 티커는
+    숫자로 끝나지 않으므로 이 정규식에 걸릴 수 없다.
+
+    REST 경로(normalize_record의 stk_cd)와 WS 경로(normalize_ws_values의
+    "9001") 양쪽이 이 함수를 쓴다 — 접두사 규칙의 단일 소스다. 어느 한쪽에
+    `s[1:] if s[:1].isalpha()` 같은 무조건 스트립을 다시 심지 말 것.
+    """
+    return code[1:] if _KR_PREFIXED_SYMBOL_RE.fullmatch(code) else code
 
 # 키움 필드명 -> 정규 필드명 (나머지 키는 그대로 통과)
 CANONICAL_NAMES: dict[str, str] = {
@@ -47,6 +68,7 @@ WS_FIELD_NAMES: dict[str, str] = {
     "17": "고가",
     "18": "저가",
     "20": "체결시간",
+    "21": "호가시간",  # 0D(주식호가잔량). "20"(체결시간)과 다른 필드다
     "25": "전일대비기호",
     "27": "매도호가",
     "28": "매수호가",
@@ -86,6 +108,26 @@ WS_FIELD_NAMES: dict[str, str] = {
     "9203": "주문번호",
 }
 
+# 0D(주식호가잔량) 10단계 호가. 스펙(docs/미국 REST API 문서.xlsx 시트
+# '주식호가잔량(0D)' Response)과 kwcli 0.1.1 동봉 kiwoom_api_spec.json의
+# 같은 API 항목이 필드별로 일치함을 대조해 확인했다:
+#   41~50 매도호가1~10      51~60 매수호가1~10
+#   61~70 매도호가수량1~10  71~80 매수호가수량1~10
+# 블록 시작 ID를 헷갈리면 매도/매수가 통째로 뒤바뀌므로 절대 추측하지 말 것.
+# 81~100(직전대비), 121/122/125/126(총잔량), 128/138(순매수·순매도잔량),
+# 6044~6115(KRX/NXT 분리 잔량)은 아직 미등록이다.
+_ASK_BID_BLOCKS = (
+    (41, "매도호가", "ask"),
+    (51, "매수호가", "bid"),
+    (61, "매도호가수량", "ask_qty"),
+    (71, "매수호가수량", "bid_qty"),
+)
+
+for _base, _ko, _en in _ASK_BID_BLOCKS:
+    for _lvl in range(1, 11):
+        WS_FIELD_NAMES[str(_base + _lvl - 1)] = f"{_ko}{_lvl}"
+del _base, _ko, _en, _lvl
+
 # WebSocket 필드 ID -> 정규 영문명 (CANONICAL_NAMES와 같은 축).
 # 미등록 ID는 WS_FIELD_NAMES의 한글 이름으로, 그것도 없으면 ID 그대로 통과.
 WS_CANONICAL: dict[str, str] = {
@@ -105,9 +147,29 @@ WS_CANONICAL: dict[str, str] = {
     "908": "ts",
     "9001": "symbol",
     "9203": "order_no",
+    "21": "ts",  # 0D 호가시간 (HHmmss) — 20/908과 같은 축의 시각 필드
 }
 
-_WS_TIME_IDS = frozenset({"20", "908"})
+# 0D 10단계 호가: ask1~ask10 / bid1~bid10 / ask_qty1~10 / bid_qty1~10
+for _base, _ko, _en in _ASK_BID_BLOCKS:
+    for _lvl in range(1, 11):
+        WS_CANONICAL[str(_base + _lvl - 1)] = f"{_en}{_lvl}"
+del _base, _ko, _en, _lvl
+
+# 시각 필드 ID: 20(체결시간), 908(주문체결시간), 21(호가시간).
+# 여기 빠지면 handle_message가 ts=None을 내고 history가 조용히 버린다.
+#
+# 미검증 위험 — 미국 실시간의 타임존:
+# _iso_datetime은 HHMMSS에 무조건 +09:00을 붙인다. 국내 타입(0B/0D 등)은 KST가
+# 맞지만, 이 ID들은 미국 타입과도 공유된다 (FT의 21=시간, FE의 20=시간).
+# FT/FE 값이 KST인지 현지(ET)인지 스펙으로 확정하지 못했다:
+#  - 정황: FE에는 51020 "현지 체결시간"이 따로 있어 20은 현지가 아닌 것으로 보인다
+#  - 반증 불가: 워크북 Response Example이 합성 데이터다 (FE의 20과 51020이 둘 다
+#    "215300"으로 같고, FT의 41과 FE의 27이 똑같이 "198.5400"이다)
+# 틀렸다면 미국 이벤트 ts가 13~14시간 어긋난다. 실제 US 프레임으로 확인 필요.
+# 타입별로 다른 타임존을 주려면 _WS_TIME_IDS/_iso_datetime에 타입 문맥이
+# 있어야 하는데 지금은 없다 (분류 상수 전반이 api_id 문맥 없이 필드명 기준).
+_WS_TIME_IDS = frozenset({"20", "21", "908"})
 
 
 def parse_signed(v: Any) -> tuple[int | float | None, str]:
@@ -156,7 +218,7 @@ def normalize_ws_values(values: dict[str, Any]) -> dict[str, Any]:
 
     - WS_CANONICAL에 있는 ID는 영문명, 아니면 WS_FIELD_NAMES 한글명, 둘 다 없으면 ID 유지
     - "20"/"908" (체결시간) -> ISO-8601 (+09:00), 키는 "ts"
-    - "9001" (종목코드) -> 선행 시장구분 문자(A 등) 제거
+    - "9001" (종목코드) -> strip_kr_market_prefix (REST의 stk_cd와 같은 규칙)
     - 숫자 분류는 formatters의 _ABS_FIELDS/_SIGNED_FIELDS를 그대로 따름
       (ABS: 절대값 + 방향 동반 키, SIGNED: 부호 유지)
     """
@@ -166,8 +228,7 @@ def normalize_ws_values(values: dict[str, Any]) -> dict[str, Any]:
         if k in _WS_TIME_IDS:
             out[canon] = _iso_datetime("tm", v)
         elif k == "9001":
-            s = str(v).strip()
-            out[canon] = s[1:] if s[:1].isalpha() else s
+            out[canon] = strip_kr_market_prefix(str(v).strip())
         elif isinstance(v, str) and k in _NUMERIC_FIELDS:
             num, direction = parse_signed(v)
             if num is None:
@@ -200,6 +261,11 @@ def normalize_record(d: dict[str, Any]) -> dict[str, Any]:
             out[canon] = normalize_record(v)
         elif isinstance(v, list):
             out[canon] = [normalize_record(x) if isinstance(x, dict) else x for x in v]
+        elif k == "stk_cd" and isinstance(v, str):
+            # 잔고 응답의 'A005930'은 시장구분 접두사가 붙은 국내 종목코드다.
+            # 그대로 두면 이 값을 --code에 다시 넣은 사용자가 미국 경로로
+            # 라우팅된다. 원본은 data.raw에 남으므로 손실되지 않는다.
+            out[canon] = strip_kr_market_prefix(v)
         elif k in _DATETIME_KEYS:
             out[canon] = _iso_datetime(k, v)
         elif isinstance(v, str) and k in _NUMERIC_FIELDS:

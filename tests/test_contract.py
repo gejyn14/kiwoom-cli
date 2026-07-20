@@ -345,6 +345,7 @@ def test_fields_checks_on_order_validate_returns_whole_dict(runner, isolated_env
         "symbol_ok": True,
         "market_open": True,
         "sufficient_balance": True,
+        "qty_ok": True,
         "price_ok": True,
         "price_known": True,
     }

@@ -347,3 +347,46 @@ def test_orders_status_market_discriminating_pins(runner, fake_client, human, ow
     assert body["mrkt_tp"] not in {"000", "001", "101"}   # MARKET_ALL
     if human == "all":
         assert body["mrkt_tp"] != "%"                     # CREDIT_MARKET
+
+
+# ============================================================
+#  잔고에서 복사한 'A005930' 형태 코드의 라우팅 (Task 26)
+# ============================================================
+#
+# `account balance`의 원본 응답은 종목코드를 'A005930'처럼 시장구분 접두사를
+# 붙여 돌려준다. 이 값을 그대로 --code에 넣으면 is_us_symbol이 미국으로
+# 판정해서, 국내 분기는 stk_cd 필터를 조용히 빼먹고(전 종목 반환) 미국 분기는
+# 'A005930'을 ust21050에 보냈다. 아래 테스트는 국내 API가 접두사 없는
+# 6자리 코드를 받는지를 본다 — 필터가 빠지면 body에 stk_cd 키 자체가 없어서,
+# 접두사가 남으면 값이 'A005930'이라서 각각 다르게 깨진다.
+
+
+@pytest.mark.parametrize("argv,api_id", [
+    (["account", "orders", "pending", "--market", "kr", "--code", "A005930"], "ka10075"),
+    (["account", "orders", "executed", "--market", "kr", "--code", "A005930"], "ka10076"),
+    (["account", "pnl", "by-period", "--market", "kr", "--code", "A005930",
+      "--from", "20260101", "--to", "20260131"], "ka10073"),
+])
+def test_prefixed_code_keeps_kr_filter(runner, fake_client, argv, api_id):
+    result = runner.invoke(cli, argv)
+    assert result.exit_code == 0
+    called_id, body = fake_client.calls[0]
+    assert called_id == api_id
+    assert body.get("stk_cd") == "005930"
+
+
+def test_prefixed_code_pnl_today_routes_kr(runner, fake_client):
+    """pnl today --market kr은 'A005930'을 미국 티커로 보고 거부했었다."""
+    result = runner.invoke(cli, ["account", "pnl", "today", "--market", "kr", "A005930"])
+    assert result.exit_code == 0
+    assert fake_client.calls == [("ka10077", {"stk_cd": "005930"})]
+
+
+def test_us_ticker_still_routes_us_in_orders_pending(runner, fake_client):
+    """접두사 제거가 미국 티커까지 국내로 끌고 오지 않는지 (역방향 감시)."""
+    result = runner.invoke(cli, ["account", "orders", "pending", "--market", "us",
+                                 "--code", "NVDA"])
+    assert result.exit_code == 0
+    called_id, body = fake_client.calls[0]
+    assert called_id == "ust21050"
+    assert body["stk_cd"] == "NVDA"

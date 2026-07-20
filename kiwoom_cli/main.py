@@ -10,7 +10,7 @@ import click
 import httpx
 import keyring
 
-from . import __version__, auth, config, envelope
+from . import __version__, auth, config, envelope, idempotency
 from .client import KiwoomClient, KiwoomAPIError, KiwoomAuthError
 from .commands.account import account
 from .commands.dashboard import dashboard
@@ -422,6 +422,34 @@ def config_profiles():
         human(f"  {marker} {name:15s} 도메인={domain}  계좌={account}")
 
 
+@config_cmd.command("prune-ledger")
+@click.option("--days", default=idempotency.DEFAULT_MAX_AGE_DAYS, type=int, show_default=True,
+              help="보존기간 (이보다 오래된 종결 키를 제거)")
+@click.option("--dry-run", is_flag=True, help="제거하지 않고 대상만 보고")
+def config_prune_ledger(days: int, dry_run: bool):
+    """멱등성 원장에서 오래된 종결 키를 제거.
+
+    in-flight(결과 불명) 기록은 나이와 무관하게 남는다 — 주문이 브로커에
+    닿았을 수 있다는 유일한 증거라 지우면 재실행이 실제 주문을 다시 쏜다.
+    임시 파일 + os.replace로 갈아끼우므로 도중에 죽어도 원장은 잘리지 않는다.
+    """
+    if days < 1:
+        fail_input("--days는 1 이상이어야 합니다.")
+    try:
+        stats = idempotency.prune(days, dry_run=dry_run)
+    except idempotency.LedgerLockBusy:
+        fail_input("원장이 다른 프로세스에 잠겨 있습니다. 잠시 후 다시 시도하세요.")
+    if _get_format() == "json":
+        envelope.emit(data=stats)
+        return
+    prefix = "[dim](--dry-run: 실제로 지우지 않음)[/] " if dry_run else ""
+    console.print(
+        f"{prefix}[green]원장 정리:[/] 키 {stats['removed_keys']}개 제거, "
+        f"{stats['kept_keys']}개 유지 (줄 {stats['removed_lines']}개 제거)"
+    )
+    console.print(f"[dim]{stats['ledger']}[/]")
+
+
 # ── Auth ──────────────────────────────────────────────
 
 @cli.group("auth")
@@ -478,13 +506,27 @@ def auth_logout(ctx):
         _fail_not_configured()
     # 폐기 실패(KiwoomAPIError)는 전역 핸들러가 envelope/exit 2로 처리
     with KiwoomClient() as c:
-        c.revoke_token()
+        outcome = c.revoke_token()
     if _get_format() == "json":
-        envelope.emit(data={"profile": profile, "revoked": True})
+        envelope.emit(data={
+            "profile": profile,
+            "revoked": True,
+            "token_source": outcome["token_source"],
+            "keychain_token_deleted": outcome["keychain_token_deleted"],
+        })
+        return
+    human("[green]토큰 폐기 완료.[/]")
+    if outcome["token_source"] == "env":
+        # 폐기된 것은 env 토큰이다. 예전에는 여기서 키체인 토큰까지 지워
+        # 폐기한 적 없는 토큰을 폐기 불가능하게 만들었다 — 무엇을 하지
+        # 않았는지까지 정확히 알린다.
+        human("  폐기 대상: [bold]KIWOOM_TOKEN 환경변수의 토큰[/] (이제 무효)")
+        human("  [yellow]unset KIWOOM_TOKEN 으로 셸에서 제거하세요.[/]")
+        if not outcome["keychain_token_deleted"]:
+            human("  키체인 토큰은 [bold]삭제하지 않았습니다[/] — 별개의 토큰이라 "
+                  "그대로 유효합니다. 폐기하려면 unset 후 다시 실행하세요.")
     else:
-        human("[green]토큰 폐기 완료.[/]")
-    if os.environ.get("KIWOOM_TOKEN"):
-        human("[yellow]KIWOOM_TOKEN 환경변수가 설정되어 있어 이 셸에서는 해당 토큰이 계속 사용됩니다. unset KIWOOM_TOKEN 으로 제거하세요.[/]")
+        human("  폐기 대상: [bold]키체인에 저장된 토큰[/] (키체인에서 삭제됨)")
 
 
 @auth_cmd.command("status")
@@ -690,8 +732,8 @@ def describe(command_path: tuple[str, ...], paths_only: bool, depth: int | None)
     에이전트가 도구 스키마를 파악할 때 사용합니다.
 
     \b
-    예: kiwoom describe --paths -f json   # 전체 경로 목록 (저비용 발견)
-        kiwoom describe order buy -f json # 단일 명령 상세 스키마
+    예: kiwoom -f json describe --paths   # 전체 경로 목록 (저비용 발견)
+        kiwoom -f json describe order buy # 단일 명령 상세 스키마
         kiwoom describe order --depth 1
     """
     cmd: click.Command = cli
@@ -723,7 +765,7 @@ def find_cmd(keyword: str):
 
     \b
     예: kiwoom find 미체결            # 관련 명령어 + API ID
-        kiwoom find balance -f json  # 에이전트용 구조화 출력
+        kiwoom -f json find balance  # 에이전트용 구조화 출력
     """
     kw = keyword.lower()
     cmd_rows = [

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from unittest import mock
 from unittest.mock import MagicMock, patch
 
@@ -814,3 +818,247 @@ def test_market_read_command_still_advertises_meta_cont(runner, isolated_env, mo
     result = runner.invoke(cli, ["-f", "json", "market", "rank", "volume"])
     assert result.exit_code == 0, result.stdout
     assert json.loads(result.stdout)["meta"]["cont"] == {"next_key": "K"}
+
+
+# ── D8/29-3: 원장 정리(prune) ─────────────────────────
+#
+# 원장은 append-only라 파일도 lookup 스캔도 무한히 자란다. 90일 지난
+# **종결된** 키를 지운다. 트리거는 수동 명령(`kiwoom config prune-ledger`)
+# 하나뿐이다 — record()에서 확률적으로 돌리는 안은 채택하지 않았다.
+# 잘린 원장은 lookup이 None을 반환해 중복 주문을 재전송시키므로, 큰 원장보다
+# 훨씬 나쁘다. 그 위험을 주문 실행 도중에 무작위로 터뜨릴 이유가 없다.
+
+def _write_ledger(lines):
+    ledger = idempotency._ledger_file()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    with open(ledger, "w", encoding="utf-8") as f:
+        for line in lines:
+            f.write((line if isinstance(line, str) else json.dumps(line, ensure_ascii=False)) + "\n")
+    return ledger
+
+
+def _rec(key, status, days_ago, **extra):
+    from datetime import timedelta
+    ts = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat(timespec="seconds")
+    return {"key": key, "api_id": "kt10000", "ord_no": "1", "fingerprint": "f",
+            "status": status, "response": {"ord_no": "1"}, "ts": ts, **extra}
+
+
+def test_prune_removes_old_resolved_keys(isolated_env):
+    _write_ledger([_rec("old-done", "done", 200), _rec("fresh-done", "done", 3)])
+    stats = idempotency.prune(max_age_days=90)
+    assert stats["removed_keys"] == 1
+    assert idempotency.lookup("old-done") is None
+    assert idempotency.lookup("fresh-done") is not None
+
+
+def test_prune_never_removes_inflight_however_old(isolated_env):
+    """in-flight는 주문이 브로커에 닿았을 수 있다는 유일한 증거다 —
+    나이와 무관하게 절대 지우지 않는다. 이걸 지우면 재실행이 실제 주문을
+    다시 쏜다."""
+    _write_ledger([_rec("ancient-inflight", "inflight", 3650)])
+    stats = idempotency.prune(max_age_days=90)
+    assert stats["removed_keys"] == 0
+    hit = idempotency.lookup("ancient-inflight")
+    assert hit is not None and hit["status"] == "inflight"
+
+
+def test_prune_removes_superseded_inflight_only_with_its_resolved_key(isolated_env):
+    """모든 주문은 inflight를 먼저 쓰고 done으로 종결한다. 종결된 오래된 키는
+    inflight 줄까지 함께 사라져야 실제로 공간이 회수된다 — 그러나 이는 그 키의
+    **최종** 레코드가 종결 상태일 때에만 허용된다."""
+    _write_ledger([_rec("k", "inflight", 200), _rec("k", "done", 200)])
+    assert idempotency.prune(max_age_days=90)["removed_keys"] == 1
+    assert idempotency.lookup("k") is None
+
+    _write_ledger([_rec("k2", "done", 200), _rec("k2", "inflight", 200)])
+    assert idempotency.prune(max_age_days=90)["removed_keys"] == 0
+    assert idempotency.lookup("k2")["status"] == "inflight"
+
+
+def test_prune_keeps_unparseable_lines_and_missing_ts(isolated_env):
+    """해석 불가능한 줄은 보존한다 — 지울 근거가 없으면 남기는 쪽이 안전하다."""
+    _write_ledger(["{쓰레기", {"key": "no-ts", "status": "done"}, _rec("old", "done", 200)])
+    idempotency.prune(max_age_days=90)
+    text = idempotency._ledger_file().read_text(encoding="utf-8")
+    assert "{쓰레기" in text
+    assert "no-ts" in text
+    assert "\"old\"" not in text
+
+
+def test_prune_dry_run_does_not_touch_file(isolated_env):
+    ledger = _write_ledger([_rec("old", "done", 200)])
+    before = ledger.read_bytes()
+    stats = idempotency.prune(max_age_days=90, dry_run=True)
+    assert stats["removed_keys"] == 1  # 지웠을 것을 보고는 한다
+    assert ledger.read_bytes() == before
+    assert idempotency.lookup("old") is not None
+
+
+def test_prune_leaves_ledger_intact_when_write_fails(isolated_env, monkeypatch):
+    """쓰다 죽어도 원장은 잘리지 않아야 한다. 임시 파일에 쓰고 os.replace로
+    갈아끼우므로, 실패 시 원본이 그대로 남는다."""
+    ledger = _write_ledger([_rec("old", "done", 200), _rec("fresh", "done", 1)])
+    before = ledger.read_bytes()
+
+    real_replace = os.replace
+
+    def boom(src, dst):
+        raise OSError("디스크 꽉 참")
+
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(OSError):
+        idempotency.prune(max_age_days=90)
+    monkeypatch.setattr(os, "replace", real_replace)
+
+    assert ledger.read_bytes() == before, "원장이 손상됐다"
+    assert idempotency.lookup("old") is not None
+    assert idempotency.lookup("fresh") is not None
+    # 임시 파일이 남아 다음 실행을 헷갈리게 하면 안 된다
+    leftovers = [p.name for p in ledger.parent.iterdir() if p.name.endswith(".tmp")]
+    assert leftovers == [], leftovers
+
+
+def test_prune_leaves_ledger_intact_when_write_dies_midway(isolated_env, monkeypatch):
+    """쓰기 **도중** 죽는 경우. 원장에 직접 open(...,"w")하는 구현은 그 순간
+    파일이 잘리므로 이 테스트가 잡는다 — os.replace 실패만 보는 테스트로는
+    비원자적 구현을 구분할 수 없다."""
+    ledger = _write_ledger([_rec("old", "done", 200), _rec("fresh", "done", 1)])
+    before = ledger.read_bytes()
+
+    def boom(fd):
+        raise OSError("쓰는 중에 죽음")
+
+    monkeypatch.setattr(os, "fsync", boom)
+    with pytest.raises(OSError):
+        idempotency.prune(max_age_days=90)
+
+    assert ledger.read_bytes() == before, "원장이 잘렸다 — 원자적 교체가 아니다"
+    assert idempotency.lookup("old") is not None
+    assert idempotency.lookup("fresh") is not None
+
+
+def test_prune_no_ledger_is_a_noop(isolated_env):
+    stats = idempotency.prune(max_age_days=90)
+    assert stats["removed_keys"] == 0 and stats["kept_keys"] == 0
+
+
+def test_prune_holds_the_ledger_lock(isolated_env, monkeypatch):
+    """잠금 없이 재작성하면 동시 실행 중인 주문의 조회→전송→기록 구간과
+    겹쳐 기록이 유실될 수 있다."""
+    held = []
+    real_locked = idempotency.locked
+
+    @contextmanager
+    def spy(blocking: bool = True):
+        held.append(blocking)
+        with real_locked(blocking=blocking):
+            yield
+
+    monkeypatch.setattr(idempotency, "locked", spy)
+    _write_ledger([_rec("old", "done", 200)])
+    idempotency.prune(max_age_days=90)
+    # 잠금을 잡았고, **논블로킹**으로 잡았다 (D9/L1 — 블로킹이면 main.py의
+    # LedgerLockBusy 핸들러가 POSIX에서 절대 실행되지 않는다)
+    assert held == [False]
+
+
+def test_prune_preserves_file_permissions(isolated_env):
+    _write_ledger([_rec("old", "done", 200), _rec("fresh", "done", 1)])
+    idempotency.prune(max_age_days=90)
+    mode = idempotency._ledger_file().stat().st_mode & 0o777
+    assert mode == 0o600, oct(mode)
+
+
+def test_config_prune_ledger_command(runner, isolated_env):
+    _write_ledger([_rec("old", "done", 200), _rec("fresh", "done", 1)])
+    result = runner.invoke(cli, ["config", "prune-ledger"])
+    assert result.exit_code == 0, result.output
+    assert idempotency.lookup("old") is None
+    assert idempotency.lookup("fresh") is not None
+
+
+def test_config_prune_ledger_json_and_dry_run(runner, isolated_env):
+    ledger = _write_ledger([_rec("old", "done", 200)])
+    before = ledger.read_bytes()
+    result = runner.invoke(cli, ["-f", "json", "config", "prune-ledger", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["data"]["removed_keys"] == 1
+    assert payload["data"]["dry_run"] is True
+    assert ledger.read_bytes() == before
+
+
+@pytest.mark.parametrize("days", ["0", "-5"])
+def test_config_prune_ledger_rejects_bad_days(runner, isolated_env, days):
+    """--days 0은 "전부 지워라"가 된다. 원장을 통째로 날리는 오타를 막는다.
+
+    "No such command"로 우연히 exit 1이 나는 공허한 통과를 배제하기 위해
+    메시지까지 본다."""
+    result = runner.invoke(cli, ["config", "prune-ledger", "--days", days])
+    assert result.exit_code == 1
+    assert "No such command" not in result.output
+    assert "1 이상" in result.output
+
+
+# ── D9/L1: prune의 잠금 대기는 논블로킹이어야 한다 ────────────
+#
+# main.py의 prune-ledger는 LedgerLockBusy를 잡아 "잠시 후 다시 시도하세요"를
+# 안내한다. 그런데 POSIX의 _acquire는 LOCK_NB 없이 flock(LOCK_EX)이라 영원히
+# 기다린다 — 동시에 주문이 돌면 그 핸들러는 절대 실행되지 않고 사용자
+# 프롬프트가 조용히 멈춘다. 주문 경로는 정확성 때문에 계속 블로킹해야 하므로
+# 논블로킹은 사람이 부르는 경로에만 준다.
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX flock 경로")
+def test_prune_reports_busy_instead_of_hanging(isolated_env):
+    """다른 프로세스가 잠금을 쥐고 있으면 매달리지 않고 LedgerLockBusy."""
+    _write_ledger([_rec("old", "done", 200)])
+    ledger = idempotency._ledger_file()
+    lock_path = ledger.with_suffix(".lock")
+
+    import fcntl
+    # 같은 프로세스라도 open이 다르면 file description이 달라 flock이 실제로
+    # 경합한다 — 별도 프로세스를 띄우지 않고도 경합을 재현할 수 있다.
+    with open(lock_path, "a+", encoding="utf-8") as holder:
+        fcntl.flock(holder, fcntl.LOCK_EX)
+        try:
+            with pytest.raises(idempotency.LedgerLockBusy):
+                idempotency.prune(max_age_days=90)
+        finally:
+            fcntl.flock(holder, fcntl.LOCK_UN)
+
+    # 잠금이 풀리면 정상 동작한다 (논블로킹이 항상 실패로 굳지 않았는지)
+    assert idempotency.prune(max_age_days=90)["removed_keys"] == 1
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX flock 경로")
+def test_order_path_lock_still_blocks(isolated_env):
+    """주문 경로(locked() 기본값)는 계속 블로킹한다 — 여기서 실패로 바꾸면
+    동시 주문이 LEDGER_BUSY로 흔들린다. 논블로킹은 prune 전용이다."""
+    import fcntl
+    import threading
+
+    ledger = idempotency._ledger_file()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = ledger.with_suffix(".lock")
+    entered = threading.Event()
+
+    with open(lock_path, "a+", encoding="utf-8") as holder:
+        fcntl.flock(holder, fcntl.LOCK_EX)
+
+        def waiter():
+            with idempotency.locked():
+                entered.set()
+
+        t = threading.Thread(target=waiter, daemon=True)
+        t.start()
+        # 논블로킹이었다면 즉시 LedgerLockBusy로 죽어 entered가 서지 않고
+        # 스레드가 끝난다. 블로킹이면 아직 대기 중이어야 한다.
+        assert not entered.wait(timeout=0.3), "주문 경로가 논블로킹으로 바뀌었다"
+        assert t.is_alive(), "주문 경로가 대기하지 않고 즉시 종료했다"
+        fcntl.flock(holder, fcntl.LOCK_UN)
+
+    assert entered.wait(timeout=2.0), "잠금 해제 후에도 진입하지 못했다"
+    t.join(timeout=2.0)

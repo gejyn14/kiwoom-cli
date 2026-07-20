@@ -241,13 +241,19 @@ exit 2로 하드 실패하지 않고) `checks.price_known`이 `false`가 되어 
 | `--confirm` / `--yes` | 확인 게이트 통과 (없으면 json/csv에서 `CONFIRMATION_REQUIRED`) |
 | `--dry-run` | 전송될 body를 그대로 출력, **아무것도 전송하지 않음**. `--confirm`보다 우선 |
 | `--client-order-id KEY` | 멱등키. 같은 키 재실행 → 재전송 없이 이전 응답 + `idempotent_replay: true` |
-| `order validate buy\|sell CODE QTY` | read-only 사전점검: `symbol_ok` / `market_open`(KST 시계 휴리스틱, `heuristic: true`) / `sufficient_balance` / `price_ok` / `price_known`(현재가 조회로 예상비용을 계산할 수 있었는지) |
+| `order validate buy\|sell CODE QTY` | read-only 사전점검: `symbol_ok` / `market_open`(KST 시계 휴리스틱, `heuristic: true`) / `sufficient_balance` / `qty_ok` / `price_ok` / `price_known`(현재가 조회로 예상비용을 계산할 수 있었는지). `qty_ok`/`price_ok`는 실주문 경로와 **같은 술어**를 쓰므로 사전점검이 통과한 수량·가격은 실주문에서도 거부되지 않는다 |
 
 멱등키는 주문 내용(api_id+body)의 fingerprint에 바인딩되며, 조회→전송→기록
 구간은 원장 파일 잠금으로 프로세스 간 직렬화된다. 같은 키로 다른 내용을
-보내면 `IDEMPOTENCY_CONFLICT`. 잠금 대기는 POSIX(fcntl)에서는 무한 대기하며,
+보내면 `IDEMPOTENCY_CONFLICT`. **주문 경로**의 잠금 대기는 POSIX(fcntl)에서는
+무한 대기하며(정확성 우선 — 동시 주문을 실패시키는 대신 직렬화한다),
 Windows(msvcrt)에서만 약 10초 재시도 후 획득 실패로 `LEDGER_BUSY`
 (exit 2, retryable)가 발생한다. 잠시 후 재시도하면 된다.
+
+반면 유지보수 명령 `kiwoom config prune-ledger`는 잠금을 **논블로킹**으로
+잡는다. 같은 프로필의 주문이 전송 중이면 기다리지 않고 즉시 실패하며,
+"원장이 다른 프로세스에 잠겨 있습니다" 안내와 함께 exit 1로 끝난다.
+사람이 프롬프트 앞에서 부르는 명령이 조용히 매달리지 않게 하기 위함이다.
 
 전송 직전에 원장에 "inflight" 표식을 남긴 뒤 전송한다. 이후 결과는 세 가지로
 갈린다:
@@ -310,8 +316,37 @@ $ kiwoom -f json stream quote 005930 --max-events 3
 - `kiwoom history export CODE --dest sqlite|csv|parquet [--out 경로] [--from --to]`:
   sqlite는 `events(ts, symbol, type, price, volume, raw_json)` + `(symbol, ts)`
   인덱스. parquet은 pandas+pyarrow 필요 (없으면 stderr 안내 + exit 1).
+  `--out`의 상위 디렉터리는 없으면 만들어집니다(만들 수 없으면 `INVALID_INPUT`,
+  exit 1).
+- csv/parquet은 매번 파일을 덮어쓰지만 **sqlite는 기존 파일에 append**합니다.
+  중복은 `UNIQUE(ts, symbol, type, raw_json)` + `INSERT OR IGNORE`로 걸러지므로
+  같은 구간을 다시 내보내도 행이 늘지 않습니다(재실행 안전). 제약이 없던
+  구버전 파일에 내보내면 스키마를 자동 승격하며, 이때 이미 쌓여 있던 중복
+  행은 한 건으로 접힙니다. 네 컬럼이 모두 같은 서로 다른 이벤트는 한 건으로
+  취급됩니다(`raw_json`이 이벤트 전체를 담으므로 실질적으로 동일한 이벤트).
+- **export의 `ts` 컬럼은 녹화된 `ts`와 다릅니다.** 녹화 NDJSON의 `ts`는 시각만
+  담고(`"09:30:15+09:00"`) 날짜는 파일명에만 있습니다. export는 그 둘을 결합해
+  날짜까지 담은 값(`"2026-07-16T09:30:15+09:00"`)을 씁니다. 그래야 여러 날을
+  한 번에 내보낼 때 날짜만 다른 이벤트가 dedup에서 접히지 않고, `(symbol, ts)`
+  인덱스가 날짜를 가로질러 의미를 갖습니다. 파일명에서 날짜를 읽을 수 없으면
+  (명시 경로 녹화 등) 날짜를 지어내지 않고 녹화된 값을 그대로 씁니다.
+  `history query`와 `--record` 파일의 `ts`는 **바뀌지 않습니다** (녹화 계약 유지).
+- **미검증 위험 — 미국 타입(FT/FE)의 `ts` 타임존.** 정규화는 WebSocket의
+  시각 필드(ID `20`/`21`/`908`)에 **무조건 `+09:00`(KST)** 를 붙입니다. 국내
+  타입(0B/0D 등)은 맞지만, 이 필드 ID는 미국 타입과도 공유됩니다(FT의 `21`,
+  FE의 `20`). 그 값이 KST인지 현지(ET)인지 **스펙으로 확정하지 못했습니다**:
+  FE에는 `51020 현지 체결시간`이 따로 있어 `20`은 현지가 아닌 것으로 보이지만,
+  워크북의 Response Example이 합성 데이터라(FE의 `20`과 `51020`이 같고, FT의
+  `41`과 FE의 `27`이 바이트 단위로 동일) 반증도 확증도 불가능합니다.
+  틀렸다면 미국 이벤트의 `ts`가 13~14시간 어긋납니다.
+  `kiwoom stream *`은 국내 소켓(`/api/dostk/websocket`)만 dial하므로 지금
+  경로로는 도달하지 않지만, **다른 경로로 얻은 FT/FE 프레임을 녹화 파일로
+  넣어 `history`로 읽는 경우** 그 `ts`를 KST로 신뢰하지 마세요. 실제 US
+  프레임으로 확인되기 전까지는 추정하지 않습니다.
 - json 모드 출력: list/query는 `data.items`(raw 없음), export는
-  `{out, format, events}` 요약.
+  `{out, format, events}` 요약. `events`는 수집 건수가 아니라 **실제로 쓰인
+  행 수**입니다. csv/parquet은 매번 덮어쓰므로 둘이 같지만, append인 sqlite에
+  같은 구간을 다시 내보내면 아무 행도 삽입되지 않아 `events: 0`이 됩니다.
 
 ## describe: CLI 자기서술
 
@@ -358,7 +393,7 @@ $ kiwoom -f json --fields symbol,price,change_direction stock info 005930
 # 2. 사전점검 (read-only, 주문 미전송)
 $ kiwoom -f json order validate buy 005930 10 --price 70000
 {"ok": true, "data": {"valid": true, "checks": {"symbol_ok": true, "market_open": true,
- "sufficient_balance": true, "price_ok": true, "price_known": true}, "est_cost": 700000,
+ "sufficient_balance": true, "qty_ok": true, "price_ok": true, "price_known": true}, "est_cost": 700000,
  "heuristic": true}, ...}
 
 # 3. dry-run: 전송될 body 확인 (미전송)

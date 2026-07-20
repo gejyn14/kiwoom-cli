@@ -345,18 +345,23 @@ def migrate_to_profiles() -> bool:
         cfg.setdefault("profiles", {})["default"] = profile_data
         general["default_profile"] = "default"
         cfg["general"] = general
-        save_config(cfg)
-        migrated = True
     # keyring: bare keys -> default:-prefixed
-    for key in ("appkey", "secretkey"):
+    #
+    # config 저장보다 **먼저** 옮긴다. cfg["profiles"]의 존재가 곧 위쪽
+    # `if "profiles" in cfg: return False` 가드의 마이그레이션 완료 표식이므로,
+    # 자격증명이 실제로 옮겨가기 전에 저장하면 keyring 도중 예외가 났을 때
+    # 다음 실행이 가드에 걸려 bare 키가 영영 고아로 남는다.
+    #
+    # 각 키는 set -> delete 순서라 루프 자체가 멱등하다: set 직후에 죽으면
+    # bare 키가 남아 다음 실행이 같은 값으로 다시 set하고 delete한다.
+    # 따라서 keyring 이전과 config 저장 사이에서 죽어도 재실행이 완주한다.
+    for key in ("appkey", "secretkey", "token"):
         raw = keyring.get_password(KEYRING_SERVICE, key)
         if raw is not None:
             keyring.set_password(KEYRING_SERVICE, f"default:{key}", raw)
             keyring.delete_password(KEYRING_SERVICE, key)
             migrated = True
-    raw_token = keyring.get_password(KEYRING_SERVICE, "token")
-    if raw_token is not None:
-        keyring.set_password(KEYRING_SERVICE, "default:token", raw_token)
-        keyring.delete_password(KEYRING_SERVICE, "token")
+    if profile_data:
+        save_config(cfg)
         migrated = True
     return migrated

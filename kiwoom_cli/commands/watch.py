@@ -15,9 +15,9 @@ from rich.table import Table
 from rich.text import Text
 
 from ..client import KiwoomClient
-from ..formatters import _fmt_number, _sign_color
+from ..formatters import _fmt_number, _get_format, _sign_color, fail_input
 from ..output import console
-from ..streaming import resolve_ws_target
+from ..streaming import EXIT_API, EXIT_AUTH, print_system_frame, recv_ack, resolve_ws_target
 from .. import auth
 
 
@@ -71,6 +71,14 @@ def watch(codes: tuple[str, ...]):
       kiwoom watch 005930                    # 삼성전자
       kiwoom watch 005930 000660 035420      # 여러 종목
     """
+    # Rich Live TUI라 json/csv의 파싱 가능 출력 계약을 지킬 수 없다.
+    # 조용히 TUI를 띄우면 -f json 소비자가 빈 stdout을 받는다 → 명시적으로 거부.
+    if _get_format() != "table":
+        fail_input(
+            "watch는 table 출력 전용입니다. 'kiwoom stream quote'를 사용하세요.",
+            code="INVALID_INPUT",
+        )
+
     code_list = list(codes)
 
     # Fetch initial stock names via REST
@@ -97,15 +105,40 @@ def watch(codes: tuple[str, ...]):
 
     if not token:
         console.print("[red]토큰이 없습니다. 'kiwoom auth login'으로 발급하세요.[/]")
-        return
+        raise SystemExit(EXIT_AUTH)
+
+    try:
+        import websockets
+    except ImportError:
+        console.print("[red]websockets 패키지가 필요합니다: pip install websockets[/]")
+        raise SystemExit(1) from None
 
     code_str = ", ".join(f"{stock_state[c].get('_name', c)}({c})" for c in code_list)
     console.print(f"[dim]실시간 모니터링: {code_str}[/]")
     console.print("[dim]Ctrl+C로 종료[/]\n")
 
-    async def _live_stream():
-        import websockets
+    def _system(frame: dict[str, str]) -> None:
+        print_system_frame(frame, console.print)
 
+    def _apply_real(data: dict) -> bool:
+        """REAL 프레임을 stock_state에 반영. REAL이 아니면 False."""
+        if data.get("trnm") != "REAL":
+            return False
+        for entry in data.get("data", []):
+            item_code = entry.get("item", "")
+            values = entry.get("values", {})
+            if isinstance(values, list) and values:
+                values = values[0] if isinstance(values[0], dict) else {}
+            if item_code in stock_state:
+                name = stock_state[item_code].get("_name", item_code)
+                for k, v in values.items():
+                    if v:
+                        stock_state[item_code][k] = v
+                stock_state[item_code]["_name"] = name
+        return True
+
+    async def _live_stream() -> int:
+        """종료 코드를 반환한다 (0=정상, EXIT_API=2, EXIT_AUTH=3)."""
         url = f"{ws_url}/api/dostk/websocket"
         try:
             async with websockets.connect(
@@ -114,12 +147,29 @@ def watch(codes: tuple[str, ...]):
                 ping_interval=None,
                 ping_timeout=None,
             ) as ws:
-                # Auth
-                await ws.send(json.dumps({"trnm": "LOGIN", "token": token}))
-                auth_resp = json.loads(await ws.recv())
-                if auth_resp.get("return_code", -1) != 0:
+                # Auth.
+                # ack를 recv() 순번으로 집지 않는다 — prod는 LOGIN 응답 뒤에 SYSTEM
+                # 프레임을 보내지만 mock은 안 보내서, 위치로 읽으면 환경에 따라
+                # 엉뚱한 프레임을 ack로 오독한다 (return_code 부재 → 사유 공란 실패).
+                #
+                # pending: ack보다 먼저 도착한 데이터 프레임 보관소. 버리면
+                # 핸드셰이크 도중 밀려든 시세가 통째로 사라진다 (Live 시작 전에 소비).
+                pending: list[dict] = []
+                try:
+                    await ws.send(json.dumps({"trnm": "LOGIN", "token": token}))
+                    auth_resp = await recv_ack(
+                        ws, on_system=_system, buffer=pending, reject_trnm=("REG", "REMOVE")
+                    )
+                except websockets.exceptions.ConnectionClosed as e:
+                    # 정상 종료 코드로 끊겨도 인증되지 않은 세션은 성공이 아니다.
+                    console.print(f"[red]인증 응답을 받기 전에 연결이 끊겼습니다: {e}[/]")
+                    return EXIT_AUTH
+                if auth_resp is None:
+                    console.print("[red]인증 응답을 받지 못했습니다 (LOGIN 응답 프레임 없음).[/]")
+                    return EXIT_AUTH
+                if str(auth_resp.get("return_code")) != "0":
                     console.print(f"[red]인증 실패: {auth_resp.get('return_msg', '')}[/]")
-                    return
+                    return EXIT_AUTH
 
                 # Register for 0B (체결)
                 reg = {
@@ -128,11 +178,21 @@ def watch(codes: tuple[str, ...]):
                     "refresh": "1",
                     "data": [{"item": code_list, "type": ["0B"]}],
                 }
-                await ws.send(json.dumps(reg))
-                reg_resp = json.loads(await ws.recv())
-                if reg_resp.get("return_code", -1) != 0:
+                try:
+                    await ws.send(json.dumps(reg))
+                    # LOGIN ack가 REG 자리에서 소비되면 등록 없이 '등록 성공'이 된다.
+                    reg_resp = await recv_ack(
+                        ws, on_system=_system, buffer=pending, reject_trnm=("LOGIN",)
+                    )
+                except websockets.exceptions.ConnectionClosed as e:
+                    console.print(f"[red]등록 응답을 받기 전에 연결이 끊겼습니다: {e}[/]")
+                    return EXIT_API
+                if reg_resp is None:
+                    console.print("[red]등록 응답을 받지 못했습니다.[/]")
+                    return EXIT_API
+                if str(reg_resp.get("return_code")) != "0":
                     console.print(f"[red]등록 실패: {reg_resp.get('return_msg', '')}[/]")
-                    return
+                    return EXIT_API
 
                 tick_count = 0
 
@@ -142,6 +202,14 @@ def watch(codes: tuple[str, ...]):
                     refresh_per_second=4,
                     transient=False,
                 ) as live:
+                    for buffered in pending:
+                        if _apply_real(buffered):
+                            tick_count += 1
+                    if tick_count:
+                        live.update(_build_live_table(
+                            stock_state, title=f"실시간 시세 (tick #{tick_count})"))
+                    pending.clear()
+
                     async for message in ws:
                         try:
                             data = json.loads(message)
@@ -150,41 +218,49 @@ def watch(codes: tuple[str, ...]):
 
                         trnm = data.get("trnm", "")
 
-                        # Heartbeat
+                        # Heartbeat. 에코가 실패하면(소켓이 닫힘) 바깥 핸들러로
+                        # 넘겨 정상/비정상 종료를 구분한다 — 여기서 삼키면 1006도 0이 된다.
                         if trnm == "PING":
-                            try:
-                                await ws.send(json.dumps({"trnm": "PING"}))
-                            except websockets.exceptions.ConnectionClosed:
-                                break
+                            await ws.send(json.dumps({"trnm": "PING"}))
                             continue
 
-                        if trnm != "REAL":
+                        # 시스템 메시지를 조용히 버리지 않는다 (streaming.py와 동일)
+                        if trnm == "SYSTEM":
+                            _system(data)
                             continue
 
-                        # Update stock state from real-time data
-                        for entry in data.get("data", []):
-                            item_code = entry.get("item", "")
-                            values = entry.get("values", {})
-                            if isinstance(values, list) and values:
-                                values = values[0] if isinstance(values[0], dict) else {}
-
-                            if item_code in stock_state:
-                                name = stock_state[item_code].get("_name", item_code)
-                                for k, v in values.items():
-                                    if v:
-                                        stock_state[item_code][k] = v
-                                stock_state[item_code]["_name"] = name
+                        if not _apply_real(data):
+                            continue
 
                         tick_count += 1
                         title = f"실시간 시세 (tick #{tick_count})"
                         live.update(_build_live_table(stock_state, title=title))
 
-        except websockets.exceptions.ConnectionClosed:
+        except websockets.exceptions.ConnectionClosedOK:
+            # 정상 종료(1000)만 실패가 아니다. ConnectionClosedOK는 ConnectionClosed의
+            # 하위 클래스이므로 이 갈래가 반드시 먼저 와야 한다 — 하나로 합치면
+            # 1006 같은 비정상 종료까지 exit 0이 된다.
             console.print("\n[yellow]서버 연결 종료. 재접속하려면 다시 실행하세요.[/]")
+            return 0
+        except websockets.exceptions.ConnectionClosed as e:
+            # 비정상 종료(ConnectionClosedError, 1006 등). 실제 websockets는 정상
+            # 종료면 `async for`를 조용히 끝내고 비정상일 때만 raise하므로,
+            # 이 핸들러에 실제로 도달하는 트래픽은 대부분 이쪽이다.
+            console.print(f"\n[red]연결이 비정상 종료되었습니다: {e}[/]")
+            return EXIT_API
         except ConnectionRefusedError:
             console.print("[red]WebSocket 연결 실패. 도메인과 토큰을 확인하세요.[/]")
+            return EXIT_API
+        except Exception as e:
+            # JSONDecodeError 등 나머지가 raw traceback으로 새지 않게 (streaming.py와 동일)
+            console.print(f"[red]오류: {e}[/]")
+            return EXIT_API
+        return 0
 
     try:
-        asyncio.run(_live_stream())
+        exit_code = asyncio.run(_live_stream())
     except KeyboardInterrupt:
         console.print("\n[dim]모니터링 종료[/]")
+        exit_code = 0
+    if exit_code:
+        raise SystemExit(exit_code)

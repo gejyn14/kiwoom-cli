@@ -16,7 +16,7 @@ import click
 
 from .. import envelope, idempotency
 from ..client import KiwoomAPIError, KiwoomAuthError
-from ..formatters import _get_format, fail_api, human, print_order_result
+from ..formatters import _get_format, fail_api, fail_input, human, print_order_result
 from ..output import err_console
 
 
@@ -58,6 +58,112 @@ def parse_quote_price(value: Any) -> float:
     if f <= 0:
         raise QuoteUnavailable(f"시세 값이 0 이하입니다 (시세 없음 — 거래정지/상장전 등): {value!r}")
     return f
+
+
+def is_valid_order_qty(qty: int, *, allow_zero: bool = False) -> bool:
+    """주문 수량 유효성 **술어** — 순수 함수이며 종료하지 않는다.
+
+    이 함수가 "유효한 수량"의 **유일한 정의**다. 두 소비자가 공유한다:
+      - `validate_order_qty` (실주문 경로 — 위반 시 fail_input으로 exit 1)
+      - `order validate`의 `checks.qty_ok` (사전점검 — 위반 시 체크가 false)
+
+    임계값을 양쪽에 각각 적어 두면 반드시 어긋난다. 실제로 어긋났었다: D5가
+    주문 경로에만 하한을 넣어, 사전점검이 `valid: true`라고 답한 수량을 실주문이
+    거부하는 상태가 됐다(D5b). 프리플라이트의 존재 이유가 실주문 결과 예측이므로
+    이 드리프트는 그 자체로 결함이다. 새 임계값을 넣을 일이 있으면 반드시
+    여기에만 넣을 것.
+    """
+    return qty > 0 or (qty == 0 and allow_zero)
+
+
+def is_valid_order_price(price: float, *, allow_zero: bool = True) -> bool:
+    """주문 가격 유효성 **술어** — 순수 함수이며 종료하지 않는다.
+
+    `is_valid_order_qty`와 같은 이유로 존재한다: `validate_order_price`(실주문)와
+    `order validate`의 `checks.price_ok`(사전점검)가 이 정의 하나를 공유한다.
+
+    국내 경로의 "정수(원)" 규칙은 여기 없다 — 그건 국내 전용이라 order.py의
+    `_is_kr_integer_price`가 갖고 있고, 그쪽도 같은 이유로 단일 정의다.
+    """
+    if not math.isfinite(price):
+        return False
+    return price > 0 or (price == 0 and allow_zero)
+
+
+def validate_order_qty(qty: int, *, allow_zero: bool = False,
+                       label: str = "주문수량") -> int:
+    """주문 수량 하한 검증. 위반 시 fail_input(exit 1)이며 요청은 전송되지 않는다.
+
+    판정은 `is_valid_order_qty`에 위임한다 — 임계값 정의는 그쪽 한 곳뿐이다.
+
+    **allow_zero=True는 취소·정정 경로에만 쓸 것.** 매수/매도에 0을 허용하면
+    ord_qty="0"이 그대로 전송된다 — 이 가드 이전의 실제 동작이 그랬다.
+
+    ── 0을 허용하는 두 경로와 그 근거 ────────────────────────────────
+    두 근거가 서로 어긋난다. **REST 스펙을 따른다** (스펙은 API가 실제로 받는
+    값을 정의하고, kwcli는 그 위에 얹은 한 CLI의 입력 정책일 뿐이다).
+
+    - **취소**(cncl_qty, kt10003/kt10009/kt50003): 스펙 비고가 "'0' 입력시
+      잔량 전부 취소"다. 우리 문서화된 계약(`--qty 0` = 전량취소, `--qty`
+      기본값 0)과도 같다.
+    - **정정**(mdfy_qty, kt10002/kt10008/kt50002): 스펙 비고가 "단위: 1주,
+      '0' 입력 시 잔량 전부 정정"이다 (docs/미국 REST API 문서.xlsx의 해당
+      시트 Request). 부분체결 뒤 남은 알 수 없는 잔량을 재호가하는 문서화된
+      관용구다. v2.12까지 mdfy_qty="0"이 실제로 전송됐고, D5의 하한 가드가
+      이를 exit 1로 막았다가 여기서 되살렸다.
+
+      주의: 구 워크북 `docs/키움 REST API 문서.xlsx`에는 mdfy_qty 행에 비고
+      칸 자체가 없다 (cncl_qty에는 있다). 두 워크북이 다르며, 미국 워크북
+      쪽이 더 완전하다(메모리: 216/217 커버).
+
+    **kwcli는 반대로 선언한다** — 숨기지 않고 적어 둔다. kwcli 0.1.1의
+    `maps/arguments.csv`는 ord_qty/mdfy_qty를 `type=quantity`
+    (=`positive_int_string`, `<= 0` 거부), cncl_qty를 `type=cancel_quantity`
+    (=`nonnegative_int_string`, 0 허용)로 선언한다. 즉 kwcli 기준이면 정정 0은
+    거부된다. 그러나 kwcli는 이 지점에서 **자기 자신과도 어긋난다**:
+    `domestic orders cancel --qty`만 `quantity`(양수)로 선언해 형제
+    `credit-cancel`/`gold-cancel`(nonnegative)과 다르다. 한 CLI의 입력 정책이
+    스펙 비고를 뒤집을 근거는 되지 못한다고 보고 스펙을 따른다.
+    """
+    if not is_valid_order_qty(qty, allow_zero=allow_zero):
+        limit = "0 이상" if allow_zero else "1 이상"
+        fail_input(f"{label}은(는) {limit}이어야 합니다 (입력값: {qty}).")
+    return qty
+
+
+def validate_order_price(price: float, *, allow_zero: bool = True,
+                         label: str = "주문가격") -> float:
+    """주문 가격 검증: 비유한(NaN/Inf)과 음수를 거부한다. 위반 시 exit 1.
+
+    근거는 kwcli 0.1.1이 모든 가격 필드(ord_uv/mdfy_uv/cond_uv)에 붙이는
+    `type=price` → `price_string`이다: `^\\d+$` 매칭 후 `int(value) < 0`을
+    거부하므로 음수·NaN·Inf가 전부 걸러진다. 0은 통과시킨다.
+
+    allow_zero=True(기본)인 이유: 이 코드베이스 전반에서 price=0은 "가격 미지정"
+    = 시장가 센티널이며(`ord_uv`를 빈 문자열로 보낸다), 값이 아니다. 여기서 0을
+    막으면 시장가 주문 전체가 막힌다. 정정처럼 시장가 개념이 없는 경로만
+    allow_zero=False를 쓴다.
+
+    NaN/Inf를 별도로 막는 이유: 이 가드 이전에는 국내 경로에서
+    `int(float('nan'))`이 ValueError를, `int(float('inf'))`가 OverflowError를
+    던져 envelope 없이 죽었고(json 모드 stdout 공백 — envelope-항상 계약 위반),
+    미국 경로에서는 `fmt_us_price`가 NaN을 truthy로 보아 `ord_uv="nan"`을
+    실제로 전송했다.
+
+    _mutation.py의 `parse_quote_price`와 혼동하지 말 것 — 그쪽은 **시세 응답**을
+    검증하고 이쪽은 **사용자 입력**을 검증한다. 계약도 다르다(그쪽은 0 이하를
+    "시세 없음"으로 거부한다).
+
+    판정은 `is_valid_order_price`에 위임한다 — 임계값 정의는 그쪽 한 곳뿐이다.
+    비유한 값은 메시지를 구분하기 위해서만 따로 검사한다(판정 자체는 술어가 이미
+    False를 준다).
+    """
+    if not math.isfinite(price):
+        fail_input(f"{label}이(가) 유효한 숫자가 아닙니다 (입력값: {price}).")
+    if not is_valid_order_price(price, allow_zero=allow_zero):
+        limit = "0 이상이어야" if allow_zero else "0보다 커야"
+        fail_input(f"{label}은(는) {limit} 합니다 (입력값: {price:g}).")
+    return price
 
 
 def suppress_pagination() -> None:

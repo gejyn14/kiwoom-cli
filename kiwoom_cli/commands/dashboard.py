@@ -19,6 +19,7 @@ from ..formatters import (
     print_generic_table,
 )
 from ..output import console, err_console
+from ._constants import EXCHANGE_ALL, STOCK_CONDITION
 
 
 def _build_account_panel(data: dict[str, Any]) -> Panel:
@@ -97,14 +98,26 @@ def dashboard():
             movers_data, _ = c.request("ka10030", {
                 "mrkt_tp": "000",
                 "sort_tp": "1",
-                "mang_stk_incls": "1",
+                "mang_stk_incls": STOCK_CONDITION["include-managed"],
                 "crd_tp": "0",
                 "trde_qty_tp": "0",
                 "pric_tp": "0",
                 "trde_prica_tp": "0",
                 "mrkt_open_tp": "0",
-                "stex_tp": "1",
+                # `market rank volume`(같은 ka10030)의 --exchange 기본값과 맞춘다.
+                # D7이 그쪽 기본값을 KRX(1)에서 통합(3)으로 옮겼을 때 여기만
+                # "1"로 남아, 같은 "당일 거래량 상위"가 두 명령에서 갈렸다.
+                # 리터럴 대신 상수를 참조해 다음 이동 때 다시 갈리지 않게 한다.
+                "stex_tp": EXCHANGE_ALL["all"],
             })
+            # mang_stk_incls도 `market rank volume` 기본값과 맞춘다. 예전에는
+            # 여기만 "1"(exclude-managed)이라 dashboard의 거래량 상위에서
+            # 관리종목이 조용히 빠졌다 — 관리종목은 상장폐지·감사의견 이슈로
+            # 거래량이 튀는 날 상위권에 들어오는 종목이라, 같은 "당일 거래량
+            # 상위"가 두 명령에서 다른 목록으로 나왔다.
+            # ka10030의 이 필드는 boolean이 아니라 15개짜리 종목조건 코드북이다
+            # (_constants.py의 STOCK_CONDITION 주석 참고). 리터럴 대신 상수를
+            # 참조해 market 쪽 기본값이 움직여도 다시 갈리지 않게 한다.
             # Extract list from response
             if movers_data:
                 for v in movers_data.values():

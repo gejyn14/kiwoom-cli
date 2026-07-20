@@ -20,25 +20,18 @@ from kiwoom_cli.commands._constants import (
     ELW_RANK_RIGHT_TYPE_3DIGIT,
     ELW_RIGHT_TYPE_1DIGIT,
     ELW_RIGHT_TYPE_3DIGIT,
-    ELW_SEARCH_SORT,
     ELW_SURGE_DIRECTION,
     ELW_SURGE_QTY_TYPE,
     ELW_SURGE_TIME_UNIT,
-    ETF_ALL_NAV,
-    ETF_ALL_TAX_TYPE,
-    ETF_ALL_TAXABLE,
-    ETF_RETURNS_PERIOD,
     EXCHANGE_ALL,
-    EXCHANGE_TWO,
+    EXCHANGE_ALL_ZERO,
     EXCLUDE_ENDED_ELW,
     GOLD_PRICE_TYPE,
     MARKET_ALL,
     MARKET_KOSPI_KOSDAQ,
     MARKET_TWO,
-    SECTOR_CODES_MARKET,
     SECTOR_PRICE_MARKET,
     THEME_LOOKUP_KIND,
-    THEME_LOOKUP_SORT,
 )
 from kiwoom_cli.main import cli
 from tests.fakes import FakeKiwoomClient
@@ -81,7 +74,7 @@ def test_rank_volume_sends_to_ka10030(runner, fake_client):
         "pric_tp": "0",
         "trde_prica_tp": "0",
         "mrkt_open_tp": "0",
-        "stex_tp": "1",
+        "stex_tp": "3",
     }
 
 
@@ -98,11 +91,11 @@ def test_rank_volume_market_enum_parametrized(
     assert fake_client.calls[0][1]["mrkt_tp"] == api_value
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(EXCHANGE_TWO.items()))
+@pytest.mark.parametrize("cli_value,api_value", list(EXCHANGE_ALL.items()))
 def test_rank_volume_exchange_enum_parametrized(
     runner, fake_client, cli_value, api_value
 ):
-    """Each EXCHANGE_TWO key maps to correct API value in stex_tp field."""
+    """Each EXCHANGE_ALL key maps to correct API value in stex_tp field."""
     result = runner.invoke(
         cli, ["market", "rank", "volume", "--exchange", cli_value]
     )
@@ -143,7 +136,7 @@ def test_rank_new_highlow_default_body_unchanged(runner, fake_client):
     assert fake_client.calls[0] == ("ka10016", {
         "mrkt_tp": "000", "ntl_tp": "1", "high_low_close_tp": "1",
         "stk_cnd": "0", "trde_qty_tp": "00000", "crd_cnd": "0",
-        "updown_incls": "0", "dt": "5", "stex_tp": "1",
+        "updown_incls": "0", "dt": "5", "stex_tp": "3",
     })
 
 
@@ -167,7 +160,7 @@ def test_rank_limit_default_body_unchanged(runner, fake_client):
     assert fake_client.calls[0] == ("ka10017", {
         "mrkt_tp": "000", "updown_tp": "1", "sort_tp": "2",
         "stk_cnd": "0", "trde_qty_tp": "00000", "crd_cnd": "0",
-        "trde_gold_tp": "0", "stex_tp": "1",
+        "trde_gold_tp": "0", "stex_tp": "3",
     })
 
 
@@ -191,7 +184,7 @@ def test_rank_near_highlow_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10018", {
         "high_low_tp": "1", "alacc_rt": "05", "mrkt_tp": "000",
-        "trde_qty_tp": "00000", "stk_cnd": "0", "crd_cnd": "0", "stex_tp": "1",
+        "trde_qty_tp": "00000", "stk_cnd": "0", "crd_cnd": "0", "stex_tp": "3",
     })
 
 
@@ -213,7 +206,7 @@ def test_rank_surge_default_body_unchanged(runner, fake_client):
     assert fake_client.calls[0] == ("ka10019", {
         "mrkt_tp": "000", "flu_tp": "1", "tm_tp": "1", "tm": "5",
         "trde_qty_tp": "00000", "stk_cnd": "0", "crd_cnd": "0",
-        "pric_cnd": "0", "updown_incls": "0", "stex_tp": "1",
+        "pric_cnd": "0", "updown_incls": "0", "stex_tp": "3",
     })
 
 
@@ -238,7 +231,7 @@ def test_rank_orderbook_top_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10020", {
         "mrkt_tp": "001", "sort_tp": "1", "trde_qty_tp": "0000",
-        "stk_cnd": "0", "crd_cnd": "0", "stex_tp": "1",
+        "stk_cnd": "0", "crd_cnd": "0", "stex_tp": "3",
     })
 
 
@@ -259,7 +252,7 @@ def test_rank_orderbook_surge_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10021", {
         "mrkt_tp": "001", "trde_tp": "1", "sort_tp": "1", "tm_tp": "5",
-        "trde_qty_tp": "1", "stk_cnd": "0", "stex_tp": "1",
+        "trde_qty_tp": "1", "stk_cnd": "0", "stex_tp": "3",
     })
 
 
@@ -280,7 +273,7 @@ def test_rank_balance_rate_surge_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10022", {
         "mrkt_tp": "001", "rt_tp": "1", "tm_tp": "5",
-        "trde_qty_tp": "5", "stk_cnd": "0", "stex_tp": "1",
+        "trde_qty_tp": "5", "stk_cnd": "0", "stex_tp": "3",
     })
 
 
@@ -300,7 +293,7 @@ def test_rank_volume_surge_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10023", {
         "mrkt_tp": "000", "sort_tp": "1", "tm_tp": "1", "trde_qty_tp": "5",
-        "tm": "", "stk_cnd": "0", "pric_tp": "0", "stex_tp": "1",
+        "tm": "", "stk_cnd": "0", "pric_tp": "0", "stex_tp": "3",
     })
 
 
@@ -503,7 +496,7 @@ def test_rank_volume_defaults_unchanged_full_body(runner, fake_client):
         "pric_tp": "0",
         "trde_prica_tp": "0",
         "mrkt_open_tp": "0",
-        "stex_tp": "1",
+        "stex_tp": "3",
     }
 
 
@@ -889,7 +882,7 @@ def test_rank_change_default_body_wire_value_fixed(runner, fake_client):
     assert fake_client.calls[0] == ("ka10027", {
         "mrkt_tp": "000", "sort_tp": "1", "trde_qty_cnd": "0000",
         "stk_cnd": "0", "crd_cnd": "0", "updown_incls": "0",
-        "pric_cnd": "0", "trde_prica_cnd": "0", "stex_tp": "1",
+        "pric_cnd": "0", "trde_prica_cnd": "0", "stex_tp": "3",
     })
 
 
@@ -930,7 +923,7 @@ def test_rank_expected_change_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10029", {
         "mrkt_tp": "000", "sort_tp": "1", "trde_qty_cnd": "0",
-        "stk_cnd": "0", "crd_cnd": "0", "pric_cnd": "0", "stex_tp": "1",
+        "stk_cnd": "0", "crd_cnd": "0", "pric_cnd": "0", "stex_tp": "3",
     })
 
 
@@ -954,7 +947,7 @@ def test_rank_prev_volume_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10031", {
         "mrkt_tp": "000", "qry_tp": "1",
-        "rank_strt": "1", "rank_end": "50", "stex_tp": "1",
+        "rank_strt": "1", "rank_end": "50", "stex_tp": "3",
     })
 
 
@@ -969,7 +962,7 @@ def test_rank_credit_ratio_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10033", {
         "mrkt_tp": "000", "trde_qty_tp": "0", "stk_cnd": "0",
-        "updown_incls": "0", "crd_cnd": "0", "stex_tp": "1",
+        "updown_incls": "0", "crd_cnd": "0", "stex_tp": "3",
     })
 
 
@@ -991,7 +984,7 @@ def test_rank_foreign_period_default_body_unchanged(runner, fake_client):
     result = runner.invoke(cli, ["market", "rank", "foreign-period"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10034", {
-        "mrkt_tp": "000", "trde_tp": "2", "dt": "0", "stex_tp": "1",
+        "mrkt_tp": "000", "trde_tp": "2", "dt": "0", "stex_tp": "3",
     })
 
 
@@ -1009,7 +1002,7 @@ def test_rank_foreign_consecutive_default_body_unchanged(runner, fake_client):
     result = runner.invoke(cli, ["market", "rank", "foreign-consecutive"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10035", {
-        "mrkt_tp": "000", "trde_tp": "2", "base_dt_tp": "0", "stex_tp": "1",
+        "mrkt_tp": "000", "trde_tp": "2", "base_dt_tp": "0", "stex_tp": "3",
     })
 
 
@@ -1028,7 +1021,7 @@ def test_rank_foreign_exhaust_default_body_unchanged(runner, fake_client):
     result = runner.invoke(cli, ["market", "rank", "foreign-exhaust"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10036", {
-        "mrkt_tp": "000", "dt": "0", "stex_tp": "1",
+        "mrkt_tp": "000", "dt": "0", "stex_tp": "3",
     })
 
 
@@ -1042,7 +1035,7 @@ def test_rank_foreign_broker_default_body_unchanged(runner, fake_client):
     result = runner.invoke(cli, ["market", "rank", "foreign-broker"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10037", {
-        "mrkt_tp": "000", "dt": "0", "trde_tp": "1", "sort_tp": "1", "stex_tp": "1",
+        "mrkt_tp": "000", "dt": "0", "trde_tp": "1", "sort_tp": "1", "stex_tp": "3",
     })
 
 
@@ -1063,7 +1056,7 @@ def test_rank_broker_top_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10039", {
         "mmcm_cd": "001", "trde_qty_tp": "0",
-        "trde_tp": "1", "dt": "1", "stex_tp": "1",
+        "trde_tp": "1", "dt": "1", "stex_tp": "3",
     })
 
 
@@ -1248,7 +1241,7 @@ def test_rank_same_net_trade_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10062", {
         "strt_dt": "20241106", "end_dt": "", "mrkt_tp": "000",
-        "trde_tp": "1", "sort_cnd": "1", "unit_tp": "1", "stex_tp": "1",
+        "trde_tp": "1", "sort_cnd": "1", "unit_tp": "1", "stex_tp": "3",
     })
 
 
@@ -1313,7 +1306,7 @@ def test_rank_foreign_inst_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka90009", {
         "mrkt_tp": "000", "amt_qty_tp": "1", "qry_dt_tp": "0",
-        "date": "", "stex_tp": "1",
+        "date": "", "stex_tp": "3",
     })
 
 
@@ -1404,7 +1397,7 @@ def test_sector_investor_default_body_unchanged(runner, fake_client):
     result = runner.invoke(cli, ["market", "sector", "investor"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka10051", {
-        "mrkt_tp": "0", "amt_qty_tp": "0", "base_dt": "", "stex_tp": "1",
+        "mrkt_tp": "0", "amt_qty_tp": "0", "base_dt": "", "stex_tp": "3",
     })
 
 
@@ -1431,7 +1424,7 @@ def test_sector_stocks_default_body_unchanged(runner, fake_client):
     result = runner.invoke(cli, ["market", "sector", "stocks", "001"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == (
-        "ka20002", {"mrkt_tp": "0", "inds_cd": "001", "stex_tp": "1"}
+        "ka20002", {"mrkt_tp": "0", "inds_cd": "001", "stex_tp": "3"}
     )
 
 
@@ -1466,10 +1459,17 @@ def test_sector_codes_default_body_unchanged(runner, fake_client):
     assert fake_client.calls[0] == ("ka10101", {"mrkt_tp": "0"})
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(SECTOR_CODES_MARKET.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("kospi", "0"), ("kosdaq", "1"), ("kospi200", "2"),
+    ("kospi100", "4"), ("krx100", "7"),  # 3/5/6은 결번 — 연속이 아니다
+])
 def test_sector_codes_market_human_options(runner, fake_client, cli_value, api_value):
     """SECTOR_CODES_MARKET(ka10101)의 5개 값 전부 고정 — kospi100(4)/krx100(7)까지
-    포함해 SECTOR_PRICE_MARKET(3값)의 진짜 상위집합임을 못 박는다."""
+    포함해 SECTOR_PRICE_MARKET(3값)의 진짜 상위집합임을 못 박는다.
+
+    기대값은 리터럴이다. 상수에서 가져오면(예전 형태) kospi100↔krx100을
+    맞바꿔도 스위트가 green이었다 — 결번이 있는 매핑이라 더더욱 고정이 필요하다.
+    """
     result = runner.invoke(cli, ["market", "sector", "codes", "--market", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["mrkt_tp"] == api_value
@@ -1480,7 +1480,7 @@ def test_theme_groups_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka90001", {
         "qry_tp": "0", "stk_cd": "", "date_tp": "1",
-        "thema_nm": "", "flu_pl_amt_tp": "1", "stex_tp": "1",
+        "thema_nm": "", "flu_pl_amt_tp": "1", "stex_tp": "3",
     })
 
 
@@ -1497,8 +1497,13 @@ def test_theme_groups_type_human_options(runner, fake_client, cli_value, api_val
     assert fake_client.calls[0][1]["qry_tp"] == api_value
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(THEME_LOOKUP_SORT.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("profit-top", "1"), ("profit-bottom", "2"),
+    ("change-top", "3"), ("change-bottom", "4"),
+])
 def test_theme_groups_sort_human_options(runner, fake_client, cli_value, api_value):
+    """ka90001 flu_pl_amt_tp. 리터럴 고정 — 상수 참조 시 change-top↔change-bottom
+    맞바꿈(정렬 방향 역전)이 스위트를 그대로 통과했다."""
     result = runner.invoke(cli, ["market", "theme", "groups", "--sort", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["flu_pl_amt_tp"] == api_value
@@ -1549,17 +1554,22 @@ def test_rank_volume_exchange_widened_to_all(runner, fake_client):
     assert fake_client.calls[0][1]["stex_tp"] == "3"
 
 
-def test_rank_volume_exchange_default_still_krx(runner, fake_client):
-    """widening 후에도 기본값은 그대로 KRX(1)를 보내야 한다."""
+def test_rank_volume_exchange_default_is_now_integrated(runner, fake_client):
+    """v2.13.0에서 기본값이 KRX(1) -> all(3, 통합)으로 바뀌었다.
+
+    사용자가 승인한 의도적 동작 변경이다. bare `market rank volume`은
+    이제 KRX 단독이 아니라 KRX+NXT 통합 결과를 돌려준다.
+    """
     result = runner.invoke(cli, ["market", "rank", "volume"])
     assert result.exit_code == 0
-    assert fake_client.calls[0][1]["stex_tp"] == "1"
+    assert fake_client.calls[0][1]["stex_tp"] == "3"
+    assert fake_client.calls[0][1]["stex_tp"] != "1"   # 옛 기본값
 
 
 def test_program_arbitrage_balance_default_body_unchanged(runner, fake_client):
     result = runner.invoke(cli, ["market", "program", "arbitrage-balance", "--date", "20241125"])
     assert result.exit_code == 0
-    assert fake_client.calls[0] == ("ka90006", {"date": "20241125", "stex_tp": "1"})
+    assert fake_client.calls[0] == ("ka90006", {"date": "20241125", "stex_tp": "3"})
 
 
 def test_program_arbitrage_balance_exchange_widened_to_all(runner, fake_client):
@@ -1574,7 +1584,7 @@ def test_program_cumulative_default_body_unchanged(runner, fake_client):
     result = runner.invoke(cli, ["market", "program", "cumulative", "--date", "20241125"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka90007", {
-        "date": "20241125", "amt_qty_tp": "1", "mrkt_tp": "0", "stex_tp": "1",
+        "date": "20241125", "amt_qty_tp": "1", "mrkt_tp": "0", "stex_tp": "3",
     })
 
 
@@ -1604,10 +1614,16 @@ def test_program_cumulative_unit_human_options(runner, fake_client, cli_value, a
 
 
 def test_program_stock_time_default_body_unchanged(runner, fake_client):
-    result = runner.invoke(cli, ["market", "program", "stock-time", "005930"])
+    """--date를 지정한 호출의 body 고정.
+
+    (D9/M2에서 미지정 시 빈 문자열 대신 키를 빼도록 바뀌었다 — date는
+    스펙상 Required=Y다. 기본 호출의 body는
+    test_program_stock_time_omits_date_key_when_unset가 고정한다.)"""
+    result = runner.invoke(
+        cli, ["market", "program", "stock-time", "005930", "--date", "20241125"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka90008", {
-        "amt_qty_tp": "1", "stk_cd": "005930", "date": "",
+        "amt_qty_tp": "1", "stk_cd": "005930", "date": "20241125",
     })
 
 
@@ -1622,12 +1638,16 @@ def test_program_stock_time_unit_human_options(runner, fake_client, cli_value, a
 
 
 def test_program_stock_daily_unit_still_raw_text(runner, fake_client):
-    """ka90013(stock-daily)의 --unit은 Required=N + 기존 기본값이 빈 문자열이라
-    이번 태스크에서 HumanChoice로 전환하지 않았다 — raw 텍스트 그대로 통과해야 한다."""
+    """ka90013(stock-daily)의 --unit은 HumanChoice로 전환하지 않았다 —
+    Required=N이라 자유 텍스트였고, enum을 씌우면 받는 값 집합이 줄어 breaking이다.
+    raw 코드는 그대로 통과해야 한다.
+
+    (D8/29-5에서 미지정 시 빈 문자열 대신 키를 빼도록 바뀌었다. 기본 호출의
+    body는 test_program_stock_daily_omits_optional_keys_when_unset가 고정한다.)"""
     result = runner.invoke(cli, ["market", "program", "stock-daily", "005930", "--unit", "1"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka90013", {
-        "amt_qty_tp": "1", "stk_cd": "005930", "date": "",
+        "stk_cd": "005930", "amt_qty_tp": "1",
     })
 
 
@@ -1635,15 +1655,37 @@ def test_program_stock_daily_unit_still_raw_text(runner, fake_client):
 
 
 def test_etf_returns_default_body_unchanged(runner, fake_client):
-    result = runner.invoke(cli, ["market", "etf", "returns", "069500"])
+    """--index를 지정한 호출의 body 고정.
+
+    (D9/M2에서 미지정 시 빈 문자열 대신 키를 빼도록 바뀌었다 —
+    etfobjt_idex_cd는 스펙상 Required=Y다. 기본 호출의 body는
+    test_etf_returns_omits_index_key_when_unset가 고정한다.)"""
+    result = runner.invoke(cli, ["market", "etf", "returns", "069500", "--index", "207"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka40001", {
-        "stk_cd": "069500", "etfobjt_idex_cd": "", "dt": "0",
+        "stk_cd": "069500", "dt": "0", "etfobjt_idex_cd": "207",
     })
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ETF_RETURNS_PERIOD.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("week", "0"),        # ka40001 dt: 0=1주
+    ("month", "1"),       #           1=1달
+    ("six-months", "2"),  #           2=6개월
+    ("year", "3"),        #           3=1년
+])
 def test_etf_returns_period_human_options(runner, fake_client, cli_value, api_value):
+    """기대값을 **리터럴로** 고정한다. ETF_RETURNS_PERIOD에서 가져오면 안 된다.
+
+    예전에는 `parametrize(list(ETF_RETURNS_PERIOD.items()))`였다. 상수와
+    기대값이 같은 출처라 상수를 어떻게 바꾸든 자기모순이 없어 항상 통과했다.
+    기본값(week)만 다른 body 테스트가 우연히 지키고 있었을 뿐, 나머지 세 값은
+    무방비였다: `year`를 "9"로 바꿔도, `month`와 `six-months` 값을 서로
+    맞바꿔도 전체 스위트가 그대로 green이었다(둘 다 실측).
+
+    맞바꾸기가 특히 위험하다 — 두 값 모두 스펙상 유효한 코드라 API가 200에
+    정상 응답을 준다. `--period month`를 요청한 사용자가 6개월 수익률을
+    받아도 어디에도 오류가 남지 않는다.
+    """
     result = runner.invoke(
         cli, ["market", "etf", "returns", "069500", "--period", cli_value]
     )
@@ -1656,7 +1698,7 @@ def test_etf_all_default_body_unchanged(runner, fake_client):
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka40004", {
         "txon_type": "0", "navpre": "0", "mngmcomp": "0000",
-        "txon_yn": "0", "trace_idex": "0", "stex_tp": "1",
+        "txon_yn": "0", "trace_idex": "0", "stex_tp": "3",
     })
 
 
@@ -1678,22 +1720,35 @@ def test_etf_all_exchange_existing_values_unchanged(
     assert fake_client.calls[0][1]["stex_tp"] == exchange_code
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ETF_ALL_TAX_TYPE.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("all", "0"), ("tax-free", "1"), ("holding-tax", "2"),
+    ("company", "3"), ("foreign", "4"), ("foreign-tax-free", "5"),
+])
 def test_etf_all_tax_type_human_options(runner, fake_client, cli_value, api_value):
+    """ka40004 txon_type. 리터럴 고정 — 상수 참조 시 foreign↔foreign-tax-free
+    맞바꿈(과세 구분 오분류)이 스위트를 그대로 통과했다."""
     result = runner.invoke(cli, ["market", "etf", "all", "--tax-type", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["txon_type"] == api_value
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ETF_ALL_NAV.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("all", "0"), ("nav-gt-close", "1"), ("nav-lt-close", "2"),
+])
 def test_etf_all_nav_human_options(runner, fake_client, cli_value, api_value):
+    """ka40004 navpre. 리터럴 고정 — 상수 참조 시 nav-gt-close↔nav-lt-close
+    맞바꿈(NAV 상회/하회 역전)이 스위트를 그대로 통과했다."""
     result = runner.invoke(cli, ["market", "etf", "all", "--nav", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["navpre"] == api_value
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ETF_ALL_TAXABLE.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("all", "0"), ("taxable", "1"), ("tax-free", "2"),
+])
 def test_etf_all_taxable_human_options(runner, fake_client, cli_value, api_value):
+    """ka40004 txon_yn. 리터럴 고정 — 상수 참조 시 taxable↔tax-free 맞바꿈
+    (과세/비과세 역전)이 스위트를 그대로 통과했다."""
     result = runner.invoke(cli, ["market", "etf", "all", "--taxable", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["txon_yn"] == api_value
@@ -1820,15 +1875,26 @@ def test_elw_search_default_body_unchanged(runner, fake_client):
     })
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ELW_RIGHT_TYPE_1DIGIT.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("all", "0"), ("call", "1"), ("put", "2"), ("dc", "3"),
+    ("dp", "4"), ("ex", "5"), ("early-call", "6"), ("early-put", "7"),
+])
 def test_elw_search_right_type_human_options(runner, fake_client, cli_value, api_value):
+    """ka30005 rght_tp. 리터럴 고정 — 상수 참조 시 early-call↔early-put
+    맞바꿈(콜/풋 역전)이 스위트를 그대로 통과했다. 형제 상수
+    ELW_RIGHT_TYPE_3DIGIT는 다른 테스트가 우연히 지키고 있었다."""
     result = runner.invoke(cli, ["market", "elw", "search", "--right-type", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["rght_tp"] == api_value
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ELW_SEARCH_SORT.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("none", "0"), ("rise-rate", "1"), ("rise-price", "2"), ("fall-rate", "3"),
+    ("fall-price", "4"), ("volume", "5"), ("amount", "6"), ("days-left", "7"),
+])
 def test_elw_search_sort_human_options(runner, fake_client, cli_value, api_value):
+    """ka30005 sort_tp. 리터럴 고정 — 상수 참조 시 amount↔days-left 맞바꿈이
+    스위트를 그대로 통과했다."""
     result = runner.invoke(cli, ["market", "elw", "search", "--sort", cli_value])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["sort_tp"] == api_value
@@ -1939,16 +2005,15 @@ def test_gold_chart_day_default_body_unchanged(runner, fake_client):
 
 
 def test_gold_chart_minute_price_type_still_raw_text(runner, fake_client):
-    """ka50080(chart-minute)의 --price-type은 Required=N + 기존 기본값이 빈
-    문자열이라 이번 태스크에서 전환하지 않았다 — raw 코드가 그대로 통과하고,
-    기본 호출은 빈 문자열을 그대로 보내야 한다."""
-    result = runner.invoke(cli, ["market", "gold", "chart-minute"])
-    assert result.exit_code == 0
-    assert fake_client.calls[0][1]["upd_stkpc_tp"] == ""
+    """ka50080(chart-minute)의 --price-type은 HumanChoice로 전환하지 않았다 —
+    Required=N이라 자유 텍스트였고, GOLD_PRICE_TYPE을 씌우면 받는 값 집합이
+    줄어 breaking이다. raw 코드는 그대로 통과해야 한다.
 
-    result2 = runner.invoke(cli, ["market", "gold", "chart-minute", "--price-type", "1"])
-    assert result2.exit_code == 0
-    assert fake_client.calls[-1][1]["upd_stkpc_tp"] == "1"
+    (D8/29-5에서 미지정 시 빈 문자열 대신 키를 빼도록 바뀌었다. 기본 호출의
+    body는 test_gold_chart_minute_omits_price_type_key_when_unset가 고정한다.)"""
+    result = runner.invoke(cli, ["market", "gold", "chart-minute", "--price-type", "1"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["upd_stkpc_tp"] == "1"
 
 
 # ── Task 33: 형제 상수 이름 거부(상위집합 오염 방지) ─────────────────
@@ -2338,27 +2403,30 @@ def test_theme_groups_kind_stock_discriminating_pin(runner, fake_client):
     assert fake_client.calls[0][1]["qry_tp"] != "3"   # INSTANT_VOLUME_MARKET
 
 
-# ── EXCHANGE_TWO vs EXCHANGE_ALL — 키 집합 확장 방어 ────────────────
+# ── EXCHANGE_ALL vs EXCHANGE_ALL_ZERO — all의 wire 값 방어 ──────────
 #
-# 이 관계는 값이 아니라 **키 집합**이 위험하다. EXCHANGE_TWO의 두 값은
-# EXCHANGE_ALL과 동일해서 값만 비교하는 병합 테스트로는 잡히지 않는다.
-# 위험은 EXCHANGE_ALL이 "all"->"3"을 하나 더 갖고 있다는 것 — 합치면
-# KRX/NXT만 문서화된 23개 사이트가 전부 stex_tp="3"을 받아들이게 된다.
+# 종전 이 자리에는 EXCHANGE_TWO가 "all"을 갖지 못하게 막는 테스트가 있었다.
+# v2.13.0에서 30개 사이트 전부가 3:통합을 문서화한 것이 확인돼(워크북 +
+# kwcli 0.1.1 kiwoom_api_spec.json + maps/arguments.csv 3중 확인)
+# EXCHANGE_TWO는 배선이 하나도
+# 남지 않아 삭제됐고, 그 두 테스트도 전제가 사라져 함께 제거했다.
+#
+# 남은 진짜 해저드는 EXCHANGE_ALL(all="3")과 EXCHANGE_ALL_ZERO(all="0")다 —
+# 키 집합이 완전히 같아 이름 말고는 구분할 단서가 없다. 아래 테스트는
+# tests/test_constant_drift.py의 전수 동치 불변식과 별개로, 이 특정 쌍의
+# wire 값을 직접 못 박는다.
 
 
-def test_exchange_two_has_no_all_key():
-    """EXCHANGE_TWO는 KRX/NXT 두 키뿐이어야 한다. "all"이 들어오는 순간
-    23개 EXCHANGE_TWO 사이트가 스펙에 없는 stex_tp="3"을 전송하게 된다."""
-    assert set(EXCHANGE_TWO) == {"KRX", "NXT"}
-    assert "all" not in EXCHANGE_TWO
-    assert EXCHANGE_TWO != EXCHANGE_ALL
+def test_exchange_all_and_all_zero_stay_distinct():
+    """EXCHANGE_ALL의 all은 "3", EXCHANGE_ALL_ZERO의 all은 "0"이다.
 
-
-def test_exchange_two_site_rejects_all(runner, fake_client):
-    """EXCHANGE_TWO 사이트는 --exchange all을 거부해야 한다."""
-    result = runner.invoke(cli, ["market", "theme", "groups", "--exchange", "all"])
-    assert result.exit_code != 0
-    assert fake_client.calls == []
+    ka10075/ka10076/ka10085가 쓰는 후자와 합치면 market.py 30곳이 조용히
+    stex_tp="0"을 전송한다 — 키 집합이 같아 병합해도 KeyError가 안 난다.
+    """
+    assert EXCHANGE_ALL["all"] == "3"
+    assert EXCHANGE_ALL_ZERO["all"] == "0"
+    assert set(EXCHANGE_ALL) == set(EXCHANGE_ALL_ZERO)
+    assert EXCHANGE_ALL != EXCHANGE_ALL_ZERO
 
 
 def test_exchange_all_site_still_accepts_all(runner, fake_client):
@@ -2367,3 +2435,247 @@ def test_exchange_all_site_still_accepts_all(runner, fake_client):
     result = runner.invoke(cli, ["market", "rank", "volume", "--exchange", "all"])
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["stex_tp"] == "3"
+# ============================================================
+#  Task 29-1: --exchange 통합(stex_tp="3") 확대 + 기본값 all 전환
+# ============================================================
+#
+# market.py의 --exchange 사이트 30곳은 전부 stex_tp를 보내고, 워크북
+# (docs/미국 REST API 문서.xlsx)에서 30개 시트 전부가 3:통합을 문서화하고
+# 있음을 확인했다(Required=Y). 스펙 원문 표기는 두 가지로 갈린다
+# ("1:KRX, 2:NXT 3.통합" 18곳 / "1:KRX, 2:NXT, 3:통합" 12곳) — 문장부호
+# 차이일 뿐 값 집합은 30곳 모두 동일하다.
+#
+# 이 테스트들은 **전송 body를 캡처**한다. 옵션 선언만 덤프하면 커맨드
+# 본문의 EXCHANGE_ALL[stex_tp] 룩업이 보이지 않아, 선언은 넓어졌는데
+# 본문이 옛 코드북을 쓰는 회귀를 통째로 놓친다.
+
+
+def _discover_exchange_sites():
+    """market 그룹의 모든 --exchange(stex_tp) 사이트를 CLI 트리에서 발견한다."""
+    found = []
+
+    def walk(cmd, path):
+        if isinstance(cmd, click.Group):
+            for name, sub in cmd.commands.items():
+                walk(sub, path + [name])
+            return
+        for p in cmd.params:
+            if isinstance(p, click.Option) and "--exchange" in p.opts and p.name == "stex_tp":
+                found.append(tuple(path))
+
+    walk(cli.commands["market"], ["market"])
+    return sorted(found)
+
+
+_EXCHANGE_SITES = _discover_exchange_sites()
+
+# 커맨드 본문까지 도달시키기 위한 최소 필수 인자/옵션. 이 표가 낡으면
+# 아래 body 테스트가 exit_code != 0으로 즉시 실패한다(조용히 건너뛰지 않는다).
+_EXCHANGE_SITE_ARGS = {
+    ("market", "rank", "broker-top"): ["001"],
+    ("market", "rank", "same-net-trade"): ["--from", "20240101"],
+    ("market", "sector", "stocks"): ["001"],
+    ("market", "theme", "stocks"): ["001"],
+    ("market", "program", "time-trend"): ["--date", "20240101"],
+    ("market", "program", "arbitrage-balance"): ["--date", "20240101"],
+    ("market", "program", "cumulative"): ["--date", "20240101"],
+    ("market", "program", "daily-trend"): ["--date", "20240101"],
+}
+
+
+def test_exchange_site_discovery_finds_thirty():
+    """발견 로직 자체의 회귀 테스트 — 30이라는 숫자가 조용히 줄면
+    (탐색 조건이 어긋나 사이트를 놓치면) 아래 전수 테스트가 통째로
+    무력해지므로 여기서 먼저 드러나야 한다."""
+    assert len(_EXCHANGE_SITES) == 30
+
+
+@pytest.mark.parametrize("path", _EXCHANGE_SITES, ids=[" ".join(p) for p in _EXCHANGE_SITES])
+def test_every_market_exchange_site_accepts_all_and_defaults_to_all(path):
+    """30곳 전부 KRX/NXT/all을 받고 기본값이 all이어야 한다.
+
+    v2.13.0 이전에는 23곳이 {KRX, NXT}만 받았고 30곳 전부 기본값이 KRX였다.
+    받아들이는 값 집합은 넓어지기만 했으므로(breaking 아님), 기본값 전환은
+    의도된 동작 변경이다(bare 호출이 KRX 단독 -> 통합).
+    """
+    cmd = cli
+    for part in path:
+        cmd = cmd.commands[part]
+    opt = next(p for p in cmd.params if isinstance(p, click.Option) and p.name == "stex_tp")
+    assert set(opt.type.choices) == {"KRX", "NXT", "all"}
+    assert opt.default == "all"
+
+
+@pytest.mark.parametrize("path", _EXCHANGE_SITES, ids=[" ".join(p) for p in _EXCHANGE_SITES])
+def test_every_market_exchange_site_transmits_integrated_by_default(runner, fake_client, path):
+    """기본 호출이 실제로 stex_tp="3"(통합)을 전송하는지 body로 확인한다."""
+    argv = [*path, *_EXCHANGE_SITE_ARGS.get(path, [])]
+    result = runner.invoke(cli, argv)
+    assert result.exit_code == 0, result.output
+    assert fake_client.calls[0][1]["stex_tp"] == "3"
+
+
+@pytest.mark.parametrize("human,wire", [("KRX", "1"), ("NXT", "2"), ("all", "3")])
+@pytest.mark.parametrize("path", _EXCHANGE_SITES, ids=[" ".join(p) for p in _EXCHANGE_SITES])
+def test_every_market_exchange_site_maps_all_three_values(
+    runner, fake_client, path, human, wire
+):
+    """세 값 전부가 올바른 wire 코드로 전송되는지 body로 확인한다.
+
+    "all"->"3"이 핵심이다. EXCHANGE_ALL_ZERO({all:"0"})를 잘못 끌어다 쓰면
+    all이 "0"으로 나가는데, 선언만 보는 테스트로는 절대 잡히지 않는다.
+    """
+    argv = [*path, *_EXCHANGE_SITE_ARGS.get(path, []), "--exchange", human]
+    result = runner.invoke(cli, argv)
+    assert result.exit_code == 0, result.output
+    assert fake_client.calls[0][1]["stex_tp"] == wire
+
+
+def test_exchange_all_is_not_exchange_all_zero():
+    """EXCHANGE_ALL의 all은 "3", EXCHANGE_ALL_ZERO의 all은 "0"이다.
+    두 코드북은 키 집합이 완전히 같아 이름 말고는 구분할 단서가 없다 —
+    합치는 순간 30곳 전부가 조용히 잘못된 거래소 코드를 전송한다."""
+    assert EXCHANGE_ALL["all"] == "3"
+    assert EXCHANGE_ALL_ZERO["all"] == "0"
+    assert set(EXCHANGE_ALL) == set(EXCHANGE_ALL_ZERO)
+    assert EXCHANGE_ALL != EXCHANGE_ALL_ZERO
+
+
+# ── D8/29-5: 선택 파라미터는 빈 문자열이 아니라 키 자체를 빼야 한다 ──
+#
+# 스펙(docs/미국 REST API 문서.xlsx)에서 Required=N인 Body 필드는 "보내지
+# 않는 것"이 미지정이다. 빈 문자열을 넣어 보내는 것은 "빈 값을 명시했다"는
+# 다른 신호다. 선례는 같은 파일의 ka10038(rank broker-by-stock) —
+# 조건부로 키를 추가하고, 아니면 키를 아예 만들지 않는다.
+#
+# 이 테스트들은 반드시 **전송된 body**를 본다. 옵션 선언 덤프
+# (default=="" 인지)는 키 생략이 body에서 일어나므로 구조적으로 눈이 멀었다.
+
+
+def test_gold_chart_minute_omits_price_type_key_when_unset(runner, fake_client):
+    """ka50080 upd_stkpc_tp는 Required=N — 미지정 시 키가 body에 없어야 한다."""
+    result = runner.invoke(cli, ["market", "gold", "chart-minute"])
+    assert result.exit_code == 0, result.output
+    api_id, body = fake_client.calls[0]
+    assert api_id == "ka50080"
+    assert "upd_stkpc_tp" not in body, f'키가 남아 있다: {body!r}'
+    # 필수 필드는 그대로 있어야 한다 (키를 통째로 지우는 과잉수정 방지)
+    assert body["stk_cd"] == "M04020000"
+    assert body["tic_scope"] == "1"
+
+
+def test_gold_chart_minute_sends_price_type_when_given(runner, fake_client):
+    """지정하면 그대로 전송된다 — "항상 키를 뺀다"는 오답을 배제한다."""
+    result = runner.invoke(cli, ["market", "gold", "chart-minute", "--price-type", "1"])
+    assert result.exit_code == 0, result.output
+    assert fake_client.calls[0][1]["upd_stkpc_tp"] == "1"
+
+
+def test_program_stock_daily_omits_optional_keys_when_unset(runner, fake_client):
+    """ka90013 amt_qty_tp/date 모두 Required=N — 미지정 시 키가 없어야 한다."""
+    result = runner.invoke(cli, ["market", "program", "stock-daily", "005930"])
+    assert result.exit_code == 0, result.output
+    api_id, body = fake_client.calls[0]
+    assert api_id == "ka90013"
+    assert "amt_qty_tp" not in body, f'키가 남아 있다: {body!r}'
+    assert "date" not in body, f'키가 남아 있다: {body!r}'
+    assert body["stk_cd"] == "005930"  # Required=Y
+
+
+def test_program_stock_daily_sends_optional_keys_when_given(runner, fake_client):
+    """지정하면 그대로 전송된다 — "항상 키를 뺀다"는 오답을 배제한다."""
+    result = runner.invoke(cli, [
+        "market", "program", "stock-daily", "005930",
+        "--unit", "1", "--date", "20250408",
+    ])
+    assert result.exit_code == 0, result.output
+    body = fake_client.calls[0][1]
+    assert body["amt_qty_tp"] == "1"
+    assert body["date"] == "20250408"
+
+
+# ── D8/29-6: sector 위치인자 metavar ──────────────────
+#
+# sector index만 --sector-code 옵션이고 나머지 9개는 위치인자라 --help에
+# 파라미터 이름 INDS_CD가 그대로 노출된다. wire 값·파라미터 이름은 그대로 두고
+# **표시되는 metavar만** SECTOR_CODE로 맞춘다.
+#
+# 렌더된 help 텍스트를 본다. "명령이 여전히 돈다"는 테스트는 아무것도 증명하지 않는다.
+
+_SECTOR_POSITIONAL_CMDS = [
+    ("market", "sector", "current"),
+    ("market", "sector", "stocks"),
+    ("market", "sector", "daily"),
+    ("market", "sector", "chart", "tick"),
+    ("market", "sector", "chart", "minute"),
+    ("market", "sector", "chart", "day"),
+    ("market", "sector", "chart", "week"),
+    ("market", "sector", "chart", "month"),
+    ("market", "sector", "chart", "year"),
+]
+
+
+@pytest.mark.parametrize("path", _SECTOR_POSITIONAL_CMDS,
+                         ids=[" ".join(p) for p in _SECTOR_POSITIONAL_CMDS])
+def test_sector_positional_help_shows_sector_code_metavar(runner, path):
+    result = runner.invoke(cli, [*path, "--help"])
+    assert result.exit_code == 0, result.output
+    assert "SECTOR_CODE" in result.output, result.output
+    assert "INDS_CD" not in result.output, result.output
+
+
+def test_sector_index_option_name_unchanged(runner):
+    """sector index는 옵션 형태가 맞다 (전체 업종 반환 → 기본값이 의미 있음).
+    9개를 옵션으로 바꾸지 않았음을 함께 고정한다."""
+    result = runner.invoke(cli, ["market", "sector", "index", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "--sector-code" in result.output
+    assert "SECTOR_CODE" not in result.output.split("Options:")[0]
+
+
+# ── D9/M2: Required=Y 필드에 빈 문자열을 보내지 않는다 ────────────
+#
+# 위 D8 항목은 Required=N 필드였다. 여기 둘은 스펙상 **Required=Y**인데
+# default=""가 그대로 body에 실려 빈 문자열이 전송되고 있었다. 두 워크북
+# (docs/미국 REST API 문서.xlsx, docs/키움 REST API 문서.xlsx)이 일치한다:
+#   ka40001 etfobjt_idex_cd — Required=Y, Length 3
+#   ka90008 date            — Required=Y, Length 8
+# 빈 문자열도 "보내지 않음"도 스펙 위반이지만, 빈 값을 명시적으로 주장하는
+# 대신 키를 빼면 서버가 자기 필수필드 오류로 답한다. 같은 파일의
+# ka10038/ka50080/ka90013 선례와 동일한 처리다.
+
+
+def test_etf_returns_omits_index_key_when_unset(runner, fake_client):
+    result = runner.invoke(cli, ["market", "etf", "returns", "069500"])
+    assert result.exit_code == 0, result.output
+    api_id, body = fake_client.calls[0]
+    assert api_id == "ka40001"
+    assert "etfobjt_idex_cd" not in body, f'빈 문자열이 전송되고 있다: {body!r}'
+    assert body["stk_cd"] == "069500"
+    assert body["dt"] == "0"  # --period 기본값 week
+
+
+def test_etf_returns_sends_index_when_given(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "etf", "returns", "069500", "--index", "207",
+    ])
+    assert result.exit_code == 0, result.output
+    assert fake_client.calls[0][1]["etfobjt_idex_cd"] == "207"
+
+
+def test_program_stock_time_omits_date_key_when_unset(runner, fake_client):
+    result = runner.invoke(cli, ["market", "program", "stock-time", "005930"])
+    assert result.exit_code == 0, result.output
+    api_id, body = fake_client.calls[0]
+    assert api_id == "ka90008"
+    assert "date" not in body, f'빈 문자열이 전송되고 있다: {body!r}'
+    assert body["stk_cd"] == "005930"
+    assert body["amt_qty_tp"] == "1"  # --unit 기본값 amount
+
+
+def test_program_stock_time_sends_date_when_given(runner, fake_client):
+    result = runner.invoke(cli, [
+        "market", "program", "stock-time", "005930", "--date", "20250408",
+    ])
+    assert result.exit_code == 0, result.output
+    assert fake_client.calls[0][1]["date"] == "20250408"

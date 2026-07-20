@@ -42,7 +42,6 @@ from ._constants import (
     ETF_ALL_TAXABLE,
     ETF_RETURNS_PERIOD,
     EXCHANGE_ALL,
-    EXCHANGE_TWO,
     EXCLUDE_ENDED_ELW,
     EXPECTED_CHANGE_CREDIT_CND,
     EXPECTED_CHANGE_PRICE_CND,
@@ -174,7 +173,7 @@ def rank():
               help="신용조건 (all,a,b,c,d,e,all-financing)")
 @click.option("--include-limit", "updown_incls", type=HumanChoice(NEW_HIGH_LOW_INCLUDE_LIMIT), default="no",
               help="상하한포함 (yes,no)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_new_highlow(mrkt_tp, ntl_tp, high_low_close_tp, dt, stk_cnd, trde_qty_tp, crd_cnd, updown_incls, stex_tp):
     """신고저가 순위. (ka10016)"""
 
@@ -183,7 +182,7 @@ def rank_new_highlow(mrkt_tp, ntl_tp, high_low_close_tp, dt, stk_cnd, trde_qty_t
             "mrkt_tp": MARKET_ALL[mrkt_tp], "ntl_tp": ntl_tp,
             "high_low_close_tp": high_low_close_tp, "stk_cnd": stk_cnd,
             "trde_qty_tp": trde_qty_tp, "crd_cnd": crd_cnd,
-            "updown_incls": updown_incls, "dt": dt, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "updown_incls": updown_incls, "dt": dt, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "신고저가")
 
@@ -207,7 +206,7 @@ def rank_new_highlow(mrkt_tp, ntl_tp, high_low_close_tp, dt, stk_cnd, trde_qty_t
               help="신용조건 (all,a,b,c,d,e,all-financing)")
 @click.option("--trade-gold", "trde_gold_tp", type=HumanChoice(LIMIT_MOVE_PRICE_CND), default="all",
               help="매매금구분 (all,under-1k,1k-2k,2k-3k,5k-10k,over-10k,over-1k)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_limit(mrkt_tp, updown_tp, sort_tp, stk_cnd, trde_qty_tp, crd_cnd, trde_gold_tp, stex_tp):
     """상하한가 순위. (ka10017)"""
 
@@ -215,7 +214,7 @@ def rank_limit(mrkt_tp, updown_tp, sort_tp, stk_cnd, trde_qty_tp, crd_cnd, trde_
         data, _ = c.request("ka10017", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "updown_tp": updown_tp, "sort_tp": sort_tp,
             "stk_cnd": stk_cnd, "trde_qty_tp": trde_qty_tp, "crd_cnd": crd_cnd,
-            "trde_gold_tp": trde_gold_tp, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "trde_gold_tp": trde_gold_tp, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "상하한가")
 
@@ -235,7 +234,7 @@ def rank_limit(mrkt_tp, updown_tp, sort_tp, stk_cnd, trde_qty_tp, crd_cnd, trde_
                    "only-margin-100,only-margin-40,only-margin-30)")
 @click.option("--credit", "crd_cnd", type=HumanChoice(NEAR_HIGHLOW_CREDIT_CND), default="all",
               help="신용조건 (all,a,b,c,d,e,all-financing)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_near_highlow(high_low_tp, alacc_rt, mrkt_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp):
     """고저가근접 순위. (ka10018)"""
 
@@ -243,7 +242,7 @@ def rank_near_highlow(high_low_tp, alacc_rt, mrkt_tp, trde_qty_tp, stk_cnd, crd_
         data, _ = c.request("ka10018", {
             "high_low_tp": high_low_tp, "alacc_rt": alacc_rt,
             "mrkt_tp": MARKET_ALL[mrkt_tp], "trde_qty_tp": trde_qty_tp,
-            "stk_cnd": stk_cnd, "crd_cnd": crd_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "stk_cnd": stk_cnd, "crd_cnd": crd_cnd, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "고저가근접")
 
@@ -269,7 +268,7 @@ def rank_near_highlow(high_low_tp, alacc_rt, mrkt_tp, trde_qty_tp, stk_cnd, crd_
               help="가격조건 (all,under-1k,1k-2k,2k-3k,5k-10k,over-10k,over-1k)")
 @click.option("--include-limit", "updown_incls", type=HumanChoice(SURGE_INCLUDE_LIMIT), default="no",
               help="상하한포함 (yes,no)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_surge(mrkt_tp, flu_tp, tm_tp, tm, trde_qty_tp, stk_cnd, crd_cnd, pric_cnd, updown_incls, stex_tp):
     """가격급등락 순위. (ka10019)"""
 
@@ -277,7 +276,7 @@ def rank_surge(mrkt_tp, flu_tp, tm_tp, tm, trde_qty_tp, stk_cnd, crd_cnd, pric_c
         data, _ = c.request("ka10019", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "flu_tp": flu_tp, "tm_tp": tm_tp, "tm": tm,
             "trde_qty_tp": trde_qty_tp, "stk_cnd": stk_cnd, "crd_cnd": crd_cnd,
-            "pric_cnd": pric_cnd, "updown_incls": updown_incls, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "pric_cnd": pric_cnd, "updown_incls": updown_incls, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "가격급등락")
 
@@ -296,7 +295,7 @@ def rank_surge(mrkt_tp, flu_tp, tm_tp, tm, trde_qty_tp, stk_cnd, crd_cnd, pric_c
                    "only-margin-40,only-margin-30,only-margin-20)")
 @click.option("--credit", "crd_cnd", type=HumanChoice(ORDERBOOK_TOP_CREDIT_CND), default="all",
               help="신용조건 (all,a,b,c,d,e,all-financing)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_orderbook_top(mrkt_tp, sort_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp):
     """호가잔량 상위. (ka10020)"""
 
@@ -304,7 +303,7 @@ def rank_orderbook_top(mrkt_tp, sort_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp)
         data, _ = c.request("ka10020", {
             "mrkt_tp": MARKET_TWO[mrkt_tp], "sort_tp": sort_tp,
             "trde_qty_tp": trde_qty_tp, "stk_cnd": stk_cnd,
-            "crd_cnd": crd_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "crd_cnd": crd_cnd, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "호가잔량상위")
 
@@ -324,7 +323,7 @@ def rank_orderbook_top(mrkt_tp, sort_tp, trde_qty_tp, stk_cnd, crd_cnd, stex_tp)
 @click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(ORDERBOOK_SURGE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
                    "only-margin-40,only-margin-30,only-margin-20)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_orderbook_surge(mrkt_tp, trde_tp, sort_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp):
     """호가잔량 급증. (ka10021)"""
 
@@ -332,7 +331,7 @@ def rank_orderbook_surge(mrkt_tp, trde_tp, sort_tp, tm_tp, trde_qty_tp, stk_cnd,
         data, _ = c.request("ka10021", {
             "mrkt_tp": MARKET_TWO[mrkt_tp], "trde_tp": trde_tp, "sort_tp": sort_tp,
             "tm_tp": tm_tp, "trde_qty_tp": trde_qty_tp,
-            "stk_cnd": stk_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "stk_cnd": stk_cnd, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "호가잔량급증")
 
@@ -350,14 +349,14 @@ def rank_orderbook_surge(mrkt_tp, trde_tp, sort_tp, tm_tp, trde_qty_tp, stk_cnd,
 @click.option("--stock-cond", "--stk-cnd", "stk_cnd", type=HumanChoice(BALANCE_RATE_STK_CND), default="all",
               help="종목조건 (all,exclude-managed,exclude-margin-100,only-margin-100,"
                    "only-margin-40,only-margin-30,only-margin-20)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_balance_rate_surge(mrkt_tp, rt_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp):
     """잔량율 급증. (ka10022)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10022", {
             "mrkt_tp": MARKET_TWO[mrkt_tp], "rt_tp": rt_tp, "tm_tp": tm_tp,
-            "trde_qty_tp": trde_qty_tp, "stk_cnd": stk_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "trde_qty_tp": trde_qty_tp, "stk_cnd": stk_cnd, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "잔량율급증")
 
@@ -382,7 +381,7 @@ def rank_balance_rate_surge(mrkt_tp, rt_tp, tm_tp, trde_qty_tp, stk_cnd, stex_tp
                    "exclude-etf-etn-spac)")
 @click.option("--price-type", "pric_tp", type=HumanChoice(VOLUME_SURGE_PRICE_TYPE), default="all",
               help="가격구분 (all,over-50k,over-10k,over-5k,over-1k,over-100k)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_volume_surge(mrkt_tp, sort_tp, tm_tp, trde_qty_tp, tm, stk_cnd, pric_tp, stex_tp):
     """거래량 급증. (ka10023)"""
 
@@ -390,7 +389,7 @@ def rank_volume_surge(mrkt_tp, sort_tp, tm_tp, trde_qty_tp, tm, stk_cnd, pric_tp
         data, _ = c.request("ka10023", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "sort_tp": sort_tp, "tm_tp": tm_tp,
             "trde_qty_tp": trde_qty_tp, "tm": tm, "stk_cnd": stk_cnd,
-            "pric_tp": pric_tp, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "pric_tp": pric_tp, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "거래량급증")
 
@@ -417,7 +416,7 @@ def rank_volume_surge(mrkt_tp, sort_tp, tm_tp, trde_qty_tp, tm, stk_cnd, pric_tp
               help="가격조건 (all,under-1k,1k-2k,2k-5k,5k-10k,over-10k,over-1k,under-10k)")
 @click.option("--amount-cond", "--amount-cnd", "trde_prica_cnd", type=HumanChoice(RANK_CHANGE_AMOUNT_CND), default="all",
               help="거래대금조건 (all,30m,50m,100m,300m,500m,1b,3b,5b,10b,30b,50b = 이상)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, updown_incls, pric_cnd, trde_prica_cnd, stex_tp):
     """전일대비 등락률 상위. (ka10027)"""
 
@@ -427,7 +426,7 @@ def rank_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, updown_incls, 
             "trde_qty_cnd": trde_qty_cnd, "stk_cnd": stk_cnd,
             "crd_cnd": crd_cnd, "updown_incls": updown_incls,
             "pric_cnd": pric_cnd, "trde_prica_cnd": trde_prica_cnd,
-            "stex_tp": EXCHANGE_TWO[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "등락률상위")
 
@@ -450,7 +449,7 @@ def rank_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, updown_incls, 
               help="신용조건 (all,a,b,c,d,exclude-overlimit,e,short,all-financing)")
 @click.option("--price-cond", "--price-cnd", "pric_cnd", type=HumanChoice(EXPECTED_CHANGE_PRICE_CND), default="all",
               help="가격조건 (all,under-1k,1k-2k,2k-5k,5k-10k,over-10k,over-1k,under-10k)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_expected_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, pric_cnd, stex_tp):
     """예상체결 등락률 상위. (ka10029)"""
 
@@ -458,7 +457,7 @@ def rank_expected_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, pric_
         data, _ = c.request("ka10029", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "sort_tp": sort_tp,
             "trde_qty_cnd": trde_qty_cnd, "stk_cnd": stk_cnd,
-            "crd_cnd": crd_cnd, "pric_cnd": pric_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "crd_cnd": crd_cnd, "pric_cnd": pric_cnd, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "예상체결등락률상위")
 
@@ -488,7 +487,7 @@ def rank_expected_change(mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd, pric_
               help="거래대금구분 (all,10m,30m,50m,100m,300m,500m,1b,3b,5b,10b,30b,50b = 이상)")
 @click.option("--session", "mrkt_open_tp", type=HumanChoice(VOLUME_RANK_SESSION), default="all",
               help="장운영구분 (all=전체,regular=장중,pre-open=장전시간외,after-hours=장후시간외)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_volume(mrkt_tp, sort_tp, mang_stk_incls, crd_tp, trde_qty_tp, pric_tp, trde_prica_tp, mrkt_open_tp, stex_tp):
     """당일 거래량 상위. (ka10030)"""
 
@@ -512,7 +511,7 @@ def rank_volume(mrkt_tp, sort_tp, mang_stk_incls, crd_tp, trde_qty_tp, pric_tp, 
               help="조회구분 (volume=전일거래량, amount=전일거래대금)")
 @click.option("--rank-start", "rank_strt", default="1", help="순위시작")
 @click.option("--rank-end", "rank_end", default="50", help="순위끝")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_prev_volume(mrkt_tp, qry_tp, rank_strt, rank_end, stex_tp):
     """전일 거래량 상위. (ka10031)"""
 
@@ -520,7 +519,7 @@ def rank_prev_volume(mrkt_tp, qry_tp, rank_strt, rank_end, stex_tp):
         data, _ = c.request("ka10031", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "qry_tp": qry_tp,
             "rank_strt": rank_strt, "rank_end": rank_end,
-            "stex_tp": EXCHANGE_TWO[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "전일거래량상위")
 
@@ -532,7 +531,7 @@ def rank_prev_volume(mrkt_tp, qry_tp, rank_strt, rank_end, stex_tp):
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
 @click.option("--include-managed", "mang_stk_incls", type=HumanChoice(MANAGED_STOCK_INCLUDE), default="no",
               help="관리종목포함 (no=미포함, yes=포함)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_amount(mrkt_tp, mang_stk_incls, stex_tp):
     """거래대금 상위. (ka10032)"""
 
@@ -558,7 +557,7 @@ def rank_amount(mrkt_tp, mang_stk_incls, stex_tp):
               help="상하한포함 (yes,no)")
 @click.option("--credit", "crd_cnd", type=HumanChoice(CREDIT_RATIO_CREDIT_CND), default="all",
               help="신용조건 (all,a,b,c,d,e,all-financing)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_credit_ratio(mrkt_tp, trde_qty_tp, stk_cnd, updown_incls, crd_cnd, stex_tp):
     """신용비율 상위. (ka10033)"""
 
@@ -566,7 +565,7 @@ def rank_credit_ratio(mrkt_tp, trde_qty_tp, stk_cnd, updown_incls, crd_cnd, stex
         data, _ = c.request("ka10033", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "trde_qty_tp": trde_qty_tp,
             "stk_cnd": stk_cnd, "updown_incls": updown_incls,
-            "crd_cnd": crd_cnd, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "crd_cnd": crd_cnd, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "신용비율상위")
 
@@ -580,14 +579,14 @@ def rank_credit_ratio(mrkt_tp, trde_qty_tp, stk_cnd, updown_incls, crd_cnd, stex
               help="매매구분 (net-sell=순매도, net-buy=순매수, net-trade=순매매)")
 @click.option("--period", "dt", type=HumanChoice(PERIOD_TODAY_PREV_5_60), default="today",
               help="기간 (today,previous,5d,10d,20d,60d)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_foreign_period(mrkt_tp, trde_tp, dt, stex_tp):
     """외인 기간별 매매 상위. (ka10034)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10034", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "trde_tp": trde_tp,
-            "dt": dt, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "dt": dt, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "외인기간별매매상위")
 
@@ -601,14 +600,14 @@ def rank_foreign_period(mrkt_tp, trde_tp, dt, stex_tp):
               help="구분 (net-sell=연속순매도, net-buy=연속순매수)")
 @click.option("--base-date", "base_dt_tp", type=HumanChoice(FOREIGN_CONSECUTIVE_BASE_DATE), default="today",
               help="기준일구분 (today=당일, previous=전일)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_foreign_consecutive(mrkt_tp, trde_tp, base_dt_tp, stex_tp):
     """외인 연속 순매매 상위. (ka10035)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10035", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "trde_tp": trde_tp,
-            "base_dt_tp": base_dt_tp, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "base_dt_tp": base_dt_tp, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "외인연속순매매상위")
 
@@ -620,13 +619,13 @@ def rank_foreign_consecutive(mrkt_tp, trde_tp, base_dt_tp, stex_tp):
 @click.option("--market", "mrkt_tp", default="all", type=click.Choice(["all", "kospi", "kosdaq"]), help="시장구분")
 @click.option("--period", "dt", type=HumanChoice(PERIOD_TODAY_PREV_5_60), default="today",
               help="기간 (today,previous,5d,10d,20d,60d)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_foreign_exhaust(mrkt_tp, dt, stex_tp):
     """외인 한도소진율 증가 상위. (ka10036)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10036", {
-            "mrkt_tp": MARKET_ALL[mrkt_tp], "dt": dt, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "mrkt_tp": MARKET_ALL[mrkt_tp], "dt": dt, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "외인한도소진율증가상위")
 
@@ -642,14 +641,14 @@ def rank_foreign_exhaust(mrkt_tp, dt, stex_tp):
               help="매매구분 (net-buy=순매수,net-sell=순매도,buy=매수,sell=매도)")
 @click.option("--sort", "sort_tp", type=HumanChoice(FOREIGN_BROKER_SORT), default="amount",
               help="정렬 (amount=금액, quantity=수량)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_foreign_broker(mrkt_tp, dt, trde_tp, sort_tp, stex_tp):
     """외국계 창구 매매 상위. (ka10037)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10037", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "dt": dt, "trde_tp": trde_tp,
-            "sort_tp": sort_tp, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "sort_tp": sort_tp, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "외국계창구매매상위")
 
@@ -695,14 +694,14 @@ def rank_broker_by_stock(code, qry_tp, strt_dt, end_dt, dt):
               help="매매구분 (net-buy=순매수, net-sell=순매도)")
 @click.option("--period", "dt", type=HumanChoice(BROKER_TOP_PERIOD), default="previous",
               help="기간 (today,previous,5d,10d,60d)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_broker_top(broker_code, trde_qty_tp, trde_tp, dt, stex_tp):
     """증권사별 매매 상위. (ka10039)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10039", {
             "mmcm_cd": broker_code, "trde_qty_tp": trde_qty_tp,
-            "trde_tp": trde_tp, "dt": dt, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "trde_tp": trde_tp, "dt": dt, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, f"증권사별매매상위 ({broker_code})")
 
@@ -770,7 +769,7 @@ def rank_top_exit(code):
               help="정렬조건 (quantity=수량, amount=금액)")
 @click.option("--unit", "unit_tp", type=HumanChoice(SAME_NET_TRADE_UNIT), default="share",
               help="단위 (share=단주, thousand=천주)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_same_net_trade(strt_dt, end_dt, mrkt_tp, trde_tp, sort_cnd, unit_tp, stex_tp):
     """동일 순매매 순위. (ka10062)"""
 
@@ -778,7 +777,7 @@ def rank_same_net_trade(strt_dt, end_dt, mrkt_tp, trde_tp, sort_cnd, unit_tp, st
         data, _ = c.request("ka10062", {
             "strt_dt": strt_dt, "end_dt": end_dt, "mrkt_tp": MARKET_ALL[mrkt_tp],
             "trde_tp": trde_tp, "sort_cnd": sort_cnd,
-            "unit_tp": unit_tp, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "unit_tp": unit_tp, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "동일순매매순위")
 
@@ -845,14 +844,14 @@ def rank_afterhours_change(mrkt_tp, sort_base, stk_cnd, trde_qty_cnd, crd_cnd, t
 @click.option("--date-type", "qry_dt_tp", type=HumanChoice(FOREIGN_INST_DATE_INCLUDE), default="no",
               help="날짜포함구분 (no=미포함, yes=포함)")
 @click.option("--date", default="", help="날짜 (YYYYMMDD)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def rank_foreign_inst(mrkt_tp, amt_qty_tp, qry_dt_tp, date, stex_tp):
     """외국인/기관 매매 상위. (ka90009)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka90009", {
             "mrkt_tp": MARKET_ALL[mrkt_tp], "amt_qty_tp": amt_qty_tp,
-            "qry_dt_tp": qry_dt_tp, "date": date, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "qry_dt_tp": qry_dt_tp, "date": date, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "외국인기관매매상위")
 
@@ -900,14 +899,14 @@ def sector_program(code):
 @click.option("--market", "mrkt_tp", default="kospi", type=click.Choice(["kospi", "kosdaq"]), help="시장구분")
 @click.option("--unit", "amt_qty_tp", default="amount", type=HumanChoice(AMT_QTY_TP_0_1), help="금액/수량 구분")
 @click.option("--date", "base_dt", default="", help="기준일자 (YYYYMMDD)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def sector_investor(mrkt_tp, amt_qty_tp, base_dt, stex_tp):
     """업종별 투자자 순매수. (ka10051)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka10051", {
             "mrkt_tp": MARKET_KOSPI_KOSDAQ[mrkt_tp], "amt_qty_tp": amt_qty_tp,
-            "base_dt": base_dt, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "base_dt": base_dt, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "업종별투자자순매수")
 
@@ -916,7 +915,7 @@ def sector_investor(mrkt_tp, amt_qty_tp, base_dt, stex_tp):
 
 
 @sector.command("current")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--market", "mrkt_tp", default="kospi", type=HumanChoice(SECTOR_PRICE_MARKET), help="시장구분")
 def sector_current(inds_cd, mrkt_tp):
     """업종 현재가 조회. (ka20001)"""
@@ -931,15 +930,15 @@ def sector_current(inds_cd, mrkt_tp):
 
 
 @sector.command("stocks")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--market", "mrkt_tp", default="kospi", type=HumanChoice(SECTOR_PRICE_MARKET), help="시장구분")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def sector_stocks(inds_cd, mrkt_tp, stex_tp):
     """업종별 주가. (ka20002)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka20002", {
-            "mrkt_tp": mrkt_tp, "inds_cd": inds_cd, "stex_tp": EXCHANGE_TWO[stex_tp],
+            "mrkt_tp": mrkt_tp, "inds_cd": inds_cd, "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, f"업종별주가 ({inds_cd})")
 
@@ -960,7 +959,7 @@ def sector_index(inds_cd):
 
 
 @sector.command("daily")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--market", "mrkt_tp", default="kospi", type=HumanChoice(SECTOR_PRICE_MARKET), help="시장구분")
 def sector_daily(inds_cd, mrkt_tp):
     """업종 현재가 일별. (ka20009)"""
@@ -996,7 +995,7 @@ def sector_chart():
 
 
 @sector_chart.command("tick")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--scope", "tic_scope", default="1", help="틱범위 (1,3,5,10,30)")
 def sector_chart_tick(inds_cd, tic_scope):
     """업종 틱차트. (ka20004)"""
@@ -1011,7 +1010,7 @@ def sector_chart_tick(inds_cd, tic_scope):
 
 
 @sector_chart.command("minute")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--scope", "tic_scope", default="1", help="틱범위 (1,3,5,10,30)")
 @click.option("--date", "base_dt", default="", help="기준일자 (YYYYMMDD)")
 def sector_chart_minute(inds_cd, tic_scope, base_dt):
@@ -1027,7 +1026,7 @@ def sector_chart_minute(inds_cd, tic_scope, base_dt):
 
 
 @sector_chart.command("day")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 def sector_chart_day(inds_cd, base_dt):
     """업종 일봉 차트. (ka20006)"""
@@ -1042,7 +1041,7 @@ def sector_chart_day(inds_cd, base_dt):
 
 
 @sector_chart.command("week")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 def sector_chart_week(inds_cd, base_dt):
     """업종 주봉 차트. (ka20007)"""
@@ -1057,7 +1056,7 @@ def sector_chart_week(inds_cd, base_dt):
 
 
 @sector_chart.command("month")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 def sector_chart_month(inds_cd, base_dt):
     """업종 월봉 차트. (ka20008)"""
@@ -1072,7 +1071,7 @@ def sector_chart_month(inds_cd, base_dt):
 
 
 @sector_chart.command("year")
-@click.argument("inds_cd")
+@click.argument("inds_cd", metavar="SECTOR_CODE")
 @click.option("--date", "base_dt", required=True, help="기준일자 (YYYYMMDD)")
 def sector_chart_year(inds_cd, base_dt):
     """업종 년봉 차트. (ka20019)"""
@@ -1104,7 +1103,7 @@ def theme():
 @click.option("--theme-name", "thema_nm", default="", help="테마명 (테마검색시)")
 @click.option("--sort", "flu_pl_amt_tp", default="profit-top",
               type=HumanChoice(THEME_LOOKUP_SORT), help="정렬 기준")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def theme_groups(qry_tp, stk_cd, date_tp, thema_nm, flu_pl_amt_tp, stex_tp):
     """테마 그룹별 조회. (ka90001)"""
 
@@ -1112,7 +1111,7 @@ def theme_groups(qry_tp, stk_cd, date_tp, thema_nm, flu_pl_amt_tp, stex_tp):
         data, _ = c.request("ka90001", {
             "qry_tp": qry_tp, "stk_cd": stk_cd, "date_tp": date_tp,
             "thema_nm": thema_nm, "flu_pl_amt_tp": flu_pl_amt_tp,
-            "stex_tp": EXCHANGE_TWO[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, "테마그룹별")
 
@@ -1123,14 +1122,14 @@ def theme_groups(qry_tp, stk_cd, date_tp, thema_nm, flu_pl_amt_tp, stex_tp):
 @theme.command("stocks")
 @click.argument("theme_code")
 @click.option("--date-type", "date_tp", default="1", help="날짜구분 (1~99일)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(["KRX", "NXT"]), help="거래소 (KRX/NXT)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def theme_stocks(theme_code, date_tp, stex_tp):
     """테마 구성종목 조회. (ka90002)"""
 
     with KiwoomClient() as c:
         data, _ = c.request("ka90002", {
             "date_tp": date_tp, "thema_grp_cd": theme_code,
-            "stex_tp": EXCHANGE_TWO[stex_tp],
+            "stex_tp": EXCHANGE_ALL[stex_tp],
         })
         print_api_response(data, f"테마구성종목 ({theme_code})")
 
@@ -1151,15 +1150,20 @@ def etf():
 
 @etf.command("returns")
 @click.argument("code")
-@click.option("--index", "etfobjt_idex_cd", default="", help="ETF대상지수코드")
+@click.option("--index", "etfobjt_idex_cd", default="",
+              help="ETF대상지수코드 (3자리, 스펙상 필수)")
 @click.option("--period", "dt", type=HumanChoice(ETF_RETURNS_PERIOD), default="week",
               help="기간 (week=1주,month=1달,six-months=6개월,year=1년)")
 def etf_returns(code, etfobjt_idex_cd, dt):
     """ETF 수익율 조회. (ka40001)"""
+    # 스펙: etfobjt_idex_cd는 Required=Y, Length 3 (두 워크북 일치). 빈 문자열은
+    # "빈 값을 명시했다"는 신호라 길이 검증에 걸린다. 미지정이면 키를 빼서
+    # 서버가 자기 필수필드 오류로 답하게 한다 (ka10038/ka50080/ka90013 선례).
+    body = {"stk_cd": code, "dt": dt}
+    if etfobjt_idex_cd:
+        body["etfobjt_idex_cd"] = etfobjt_idex_cd
     with KiwoomClient() as c:
-        data, _ = c.request("ka40001", {
-            "stk_cd": code, "etfobjt_idex_cd": etfobjt_idex_cd, "dt": dt,
-        })
+        data, _ = c.request("ka40001", body)
         print_api_response(data, f"ETF수익율 ({code})")
 
 
@@ -1199,7 +1203,7 @@ def etf_daily(code):
 @click.option("--taxable", "txon_yn", type=HumanChoice(ETF_ALL_TAXABLE), default="all",
               help="과세여부 (all,taxable,tax-free)")
 @click.option("--index", "trace_idex", default="0", help="추적지수 (0=전체)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def etf_all(txon_type, navpre, mngmcomp, txon_yn, trace_idex, stex_tp):
     """ETF 전체 시세. (ka40004)"""
 
@@ -1546,14 +1550,16 @@ def gold_chart_tick(stk_cd, tic_scope, upd_stkpc_tp):
 @gold.command("chart-minute")
 @click.option("--code", "stk_cd", default="M04020000", help="종목코드")
 @click.option("--scope", "tic_scope", default="1", help="틱범위 (1,3,5,10,15,30,45,60)")
-@click.option("--price-type", "upd_stkpc_tp", default="", help="수정주가구분 (선택)")
+@click.option("--price-type", "upd_stkpc_tp", default="", help="수정주가구분 (선택, 0=원본/1=수정주가)")
 def gold_chart_minute(stk_cd, tic_scope, upd_stkpc_tp):
     """금현물 분봉 차트. (ka50080)"""
+    # 스펙: upd_stkpc_tp는 Required=N. 미지정은 "빈 값을 명시"가 아니라
+    # "보내지 않는다"이므로 키 자체를 뺀다 (ka10038 rank broker-by-stock 선례).
+    body = {"stk_cd": stk_cd, "tic_scope": tic_scope}
+    if upd_stkpc_tp:
+        body["upd_stkpc_tp"] = upd_stkpc_tp
     with KiwoomClient() as c:
-        data, _ = c.request("ka50080", {
-            "stk_cd": stk_cd, "tic_scope": tic_scope,
-            "upd_stkpc_tp": upd_stkpc_tp,
-        })
+        data, _ = c.request("ka50080", body)
         print_api_response(data, "금현물분봉차트")
 
 
@@ -1710,7 +1716,7 @@ def program():
 @click.option("--unit", "amt_qty_tp", type=HumanChoice(AMT_QTY_TP_1_2), default="amount", help="금액/수량")
 @click.option("--market", "market", type=click.Choice(["kospi", "kosdaq"]), default="kospi", help="시장구분")
 @click.option("--tick-type", "min_tic_tp", type=HumanChoice(MIN_TIC_TP), default="minute", help="분틱구분")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def program_time_trend(date, amt_qty_tp, market, min_tic_tp, stex_tp):
     """프로그램매매 추이 (시간대별). (ka90005)"""
 
@@ -1730,7 +1736,7 @@ def program_time_trend(date, amt_qty_tp, market, min_tic_tp, stex_tp):
 
 @program.command("arbitrage-balance")
 @click.option("--date", required=True, help="날짜 (YYYYMMDD)")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def program_arbitrage_balance(date, stex_tp):
     """프로그램매매 차익잔고 추이. (ka90006)"""
 
@@ -1748,7 +1754,7 @@ def program_arbitrage_balance(date, stex_tp):
 @click.option("--date", required=True, help="날짜 (YYYYMMDD)")
 @click.option("--unit", "amt_qty_tp", type=HumanChoice(AMT_QTY_TP_1_2), default="amount", help="금액/수량")
 @click.option("--market", "mrkt_tp", default="kospi", type=click.Choice(["kospi", "kosdaq"]), help="시장구분")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def program_cumulative(date, amt_qty_tp, mrkt_tp, stex_tp):
     """프로그램매매 누적 추이. (ka90007)"""
 
@@ -1766,13 +1772,16 @@ def program_cumulative(date, amt_qty_tp, mrkt_tp, stex_tp):
 @program.command("stock-time")
 @click.argument("code")
 @click.option("--unit", "amt_qty_tp", type=HumanChoice(AMT_QTY_TP_1_2), default="amount", help="금액/수량")
-@click.option("--date", default="", help="날짜 (YYYYMMDD)")
+@click.option("--date", default="", help="날짜 (YYYYMMDD, 스펙상 필수)")
 def program_stock_time(code, amt_qty_tp, date):
     """종목 시간별 프로그램매매 추이. (ka90008)"""
+    # 스펙: date는 Required=Y, Length 8 (두 워크북 일치). ka40001과 같은 이유로
+    # 빈 문자열 대신 키를 뺀다.
+    body = {"amt_qty_tp": amt_qty_tp, "stk_cd": code}
+    if date:
+        body["date"] = date
     with KiwoomClient() as c:
-        data, _ = c.request("ka90008", {
-            "amt_qty_tp": amt_qty_tp, "stk_cd": code, "date": date,
-        })
+        data, _ = c.request("ka90008", body)
         print_api_response(data, f"종목시간별프로그램매매추이 ({code})")
 
 
@@ -1784,7 +1793,7 @@ def program_stock_time(code, amt_qty_tp, date):
 @click.option("--unit", "amt_qty_tp", type=HumanChoice(AMT_QTY_TP_1_2), default="amount", help="금액/수량")
 @click.option("--market", "market", type=click.Choice(["kospi", "kosdaq"]), default="kospi", help="시장구분")
 @click.option("--tick-type", "min_tic_tp", type=HumanChoice(MIN_TIC_TP), default="minute", help="분틱구분")
-@click.option("--exchange", "stex_tp", default="KRX", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
+@click.option("--exchange", "stex_tp", default="all", type=click.Choice(list(EXCHANGE_ALL)), help="거래소 (KRX/NXT/all)")
 def program_daily_trend(date, amt_qty_tp, market, min_tic_tp, stex_tp):
     """프로그램매매 추이 (일자별). (ka90010)"""
 
@@ -1808,8 +1817,13 @@ def program_daily_trend(date, amt_qty_tp, market, min_tic_tp, stex_tp):
 @click.option("--date", default="", help="날짜 (YYYYMMDD, 선택)")
 def program_stock_daily(code, amt_qty_tp, date):
     """종목 일별 프로그램매매 추이. (ka90013)"""
+    # 스펙: stk_cd만 Required=Y. amt_qty_tp/date는 Required=N이므로 미지정 시
+    # 빈 문자열을 보내지 않고 키 자체를 뺀다 (ka10038 rank broker-by-stock 선례).
+    body = {"stk_cd": code}
+    if amt_qty_tp:
+        body["amt_qty_tp"] = amt_qty_tp
+    if date:
+        body["date"] = date
     with KiwoomClient() as c:
-        data, _ = c.request("ka90013", {
-            "amt_qty_tp": amt_qty_tp, "stk_cd": code, "date": date,
-        })
+        data, _ = c.request("ka90013", body)
         print_api_response(data, f"종목일별프로그램매매추이 ({code})")
