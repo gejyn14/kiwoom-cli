@@ -9,9 +9,9 @@ _constants.py의 코드북 상수들은 api_id마다 독립이고, 값 집합이
 추가됐다. 세 술어 모두 **양방향**으로 계산한다 — A⊂B와 B⊂A는 다른 질문이다.
 
   (1) strict (key,value) subset : A의 모든 항목이 B에 있고 A != B
-        -> 순서 있음. 120쌍(전부 단방향, 양방향 0 — 정의상 불가능).
+        -> 순서 있음. 118쌍(전부 단방향, 양방향 0 — 정의상 불가능).
   (2) keys(A) ⊆ keys(B) 인데 공유 키의 값이 다름 (극성 뒤집힘)
-        -> 순서 있음. 204쌍 = 단방향 112 + 양방향 46쌍.
+        -> 순서 있음. 202쌍 = 단방향 110 + 양방향 46쌍.
            양방향 46쌍은 키 집합이 완전히 같고 값만 다른 순수 극성 해저드다.
   (3) 부분 겹침 + **양쪽 모두** 배타 키를 가짐, 공유 키 3개 이상,
       공유 키의 값이 전부 일치 (= 합쳐도 기존 값이 하나도 안 변해서
@@ -27,7 +27,8 @@ RANK_CHANGE_STK_CND <-> STOCK_CONDITION (공유 14키 전부 값 일치, 배타 
 어떤 쌍을 합치든(union) 두 상수는 **서로 같아진다**. 따라서 "이름이 다른
 두 상수가 같아지면 실패"라는 단 하나의 불변식이 위 세 술어가 잡아내는
 356쌍 전부를 한 번에 방어한다. 실제로 476개 병합을 전부 수행해 확인했다
-(mutation sweep): 술어 1에서 25쌍, 술어 2에서 9쌍, 술어 3에서 20쌍,
+(mutation sweep, EXCHANGE_TWO 제거 전 173개 기준): 술어 1에서 25쌍,
+술어 2에서 9쌍, 술어 3에서 20쌍,
 합계 54쌍이 기존 테스트 전체를 통과해 **조용히** 지나갔다. 이 파일의
 test_no_codebook_constants_are_accidentally_merged가 그 54쌍을 전부 잡는다.
 
@@ -361,8 +362,8 @@ def test_closure_predicates_run_in_both_directions():
         both = {(x, y) for x, y in s if (y, x) in s}
         return len(s - both), len(both) // 2
 
-    assert len(maps) == 173
-    assert len(p1) == 120
-    assert split(p1) == (120, 0)   # strict subset은 양방향이 정의상 불가능
-    assert len(p2) == 204
-    assert split(p2) == (112, 46)  # 46쌍은 키 집합 동일 + 값만 다름
+    assert len(maps) == 172
+    assert len(p1) == 118
+    assert split(p1) == (118, 0)   # strict subset은 양방향이 정의상 불가능
+    assert len(p2) == 202
+    assert split(p2) == (110, 46)  # 46쌍은 키 집합 동일 + 값만 다름

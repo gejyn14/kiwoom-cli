@@ -31,7 +31,15 @@ MARKET_PROGRAM = {"kospi": "P00101", "kosdaq": "P10102"}
 # mrkt_tp 코드북들과 키만 겹쳐(kosdaq이 "1"이 아니라 "10") 잘못 재사용될
 # 표면만 넓히고 있었다. 다시 필요해지면 그때 해당 api_id 스펙을 워크북에서
 # 직접 확인하고 그 api_id 이름으로 새로 만들 것.
-EXCHANGE_TWO = {"KRX": "1", "NXT": "2"}
+# EXCHANGE_TWO({KRX:1, NXT:2})는 v2.13.0에서 제거했다. market.py의 23곳이
+# 유일한 사용처였는데, 그 23개 api_id 전부가 스펙상 3:통합을 문서화하고
+# 있음이 확인돼(3중 확인: docs/미국 REST API 문서.xlsx + kwcli 0.1.1 번들
+# kiwoom_api_spec.json + kwcli maps/arguments.csv의 value_map
+# "KRX=1;NXT=2;ALL=3" 30/30 일치) EXCHANGE_ALL로
+# 넘어갔고 배선이 하나도 남지 않았다. 배선 없는 코드북 상수는 값을 고정할
+# 테스트를 붙일 수 없으면서 잘못 재사용될 표면만 넓힌다(MARKET_SEARCH
+# 제거와 같은 이유). 다시 필요해지면 해당 api_id 스펙을 직접 확인하고
+# 그 api_id 이름으로 새로 만들 것 — 이 이름을 되살리지 말 것.
 EXCHANGE_ALL = {"KRX": "1", "NXT": "2", "all": "3"}
 # stex_tp with "all"=0 (used by ka10075/ka10076/ka10085); distinct from EXCHANGE_ALL where "all"=3.
 EXCHANGE_ALL_ZERO = {"all": "0", "KRX": "1", "NXT": "2"}
