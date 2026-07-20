@@ -1,5 +1,44 @@
 # Changelog
 
+## [2.15.0] - 2026-07-21
+
+appkey/secretkey를 키체인 전용으로 둔 것은 의도된 제약이었습니다. 다만 실패
+모드가 하나 남아 있었습니다: **키체인이 없는 컨테이너는 스스로 토큰을 발급할 수
+없었습니다.** 호스트에서 발급한 `KIWOOM_TOKEN`을 주입받는 것이 유일한 경로였고,
+그 토큰이 만료되면 컨테이너는 복구할 방법이 없었습니다. 오래 도는 프로세스
+(MCP 서버 등)에는 치명적입니다. 환경변수 경로를 엽니다.
+
+### Added
+
+- **`KIWOOM_APPKEY` / `KIWOOM_SECRETKEY` 환경변수.** 키체인보다 우선하며
+  (`KIWOOM_TOKEN`·`KIWOOM_DOMAIN`과 같은 방향), 모든 프로필에 적용됩니다.
+- **`KIWOOM_APPKEY_FILE` / `KIWOOM_SECRETKEY_FILE`.** 같은 값을 파일에서 읽습니다.
+  도커·포드먼 시크릿은 `/run/secrets/`에 파일로 마운트되며, 이쪽을 쓰면 값이
+  `docker inspect`나 `/proc/<pid>/environ`에 노출되지 않습니다 — 컨테이너
+  권장 형태입니다. 값은 strip합니다 (시크릿 파일 끝의 개행이 그대로 실리면
+  인증이 실패합니다). `NAME`과 `NAME_FILE`을 동시에 설정하면 어느 쪽이 이겼는지
+  조용히 달라지는 대신 `INVALID_INPUT`(exit 1)으로 즉시 실패합니다.
+- **`KIWOOM_TOKEN_STORAGE` 환경변수** (`keychain` | `env`). 이것이 없으면 env
+  자격증명으로 토큰 발급에 성공하고도 `save_token`이 키체인에 쓰려다
+  `KEYCHAIN_UNAVAILABLE`로 죽었습니다 — 자격증명을 넣어줘도 컨테이너가 토큰을
+  발급할 수 없었습니다. 문서에 적기 전에 실제로 확인해서 찾은 결함입니다.
+- **`auth status` / `config show`의 `data.appkey_source`** — `"env"` /
+  `"env_file"` / `"keychain"` / `null`. 환경변수가 키체인을 조용히 덮으므로
+  실제 출처를 보고합니다. 값 자체는 노출하지 않습니다.
+
+### Changed
+
+- 테스트가 실행하는 사람의 `KIWOOM_*` 환경변수를 더 이상 읽지 않습니다
+  (conftest에서 초기화). 이 변경으로 개발자 셸에 떠 있던 `KIWOOM_APPKEY`가
+  즉시 12개 테스트를 깨뜨렸습니다 — 종전에는 코드가 그 변수들을 무시했기
+  때문에 우연히 조용했을 뿐입니다. 2018 → 2046개.
+
+### 주의
+
+셸에 `KIWOOM_APPKEY`를 export해 둔 사용자는 업그레이드 후 키체인에 저장된 값
+대신 그 값이 쓰입니다. 의도된 우선순위이지만 조용한 전환이므로,
+`kiwoom -f json auth status`의 `appkey_source`로 확인하세요.
+
 ## [2.14.0] - 2026-07-20
 
 공개 배포를 앞두고 한 감사에서 나온 결함들입니다. 전부 한 가지 모양이었습니다:
