@@ -27,7 +27,6 @@ from kiwoom_cli.commands._constants import (
     ETF_ALL_NAV,
     ETF_ALL_TAX_TYPE,
     ETF_ALL_TAXABLE,
-    ETF_RETURNS_PERIOD,
     EXCHANGE_ALL,
     EXCHANGE_ALL_ZERO,
     EXCLUDE_ENDED_ELW,
@@ -1662,8 +1661,25 @@ def test_etf_returns_default_body_unchanged(runner, fake_client):
     })
 
 
-@pytest.mark.parametrize("cli_value,api_value", list(ETF_RETURNS_PERIOD.items()))
+@pytest.mark.parametrize("cli_value,api_value", [
+    ("week", "0"),        # ka40001 dt: 0=1주
+    ("month", "1"),       #           1=1달
+    ("six-months", "2"),  #           2=6개월
+    ("year", "3"),        #           3=1년
+])
 def test_etf_returns_period_human_options(runner, fake_client, cli_value, api_value):
+    """기대값을 **리터럴로** 고정한다. ETF_RETURNS_PERIOD에서 가져오면 안 된다.
+
+    예전에는 `parametrize(list(ETF_RETURNS_PERIOD.items()))`였다. 상수와
+    기대값이 같은 출처라 상수를 어떻게 바꾸든 자기모순이 없어 항상 통과했다.
+    기본값(week)만 다른 body 테스트가 우연히 지키고 있었을 뿐, 나머지 세 값은
+    무방비였다: `year`를 "9"로 바꿔도, `month`와 `six-months` 값을 서로
+    맞바꿔도 전체 스위트가 그대로 green이었다(둘 다 실측).
+
+    맞바꾸기가 특히 위험하다 — 두 값 모두 스펙상 유효한 코드라 API가 200에
+    정상 응답을 준다. `--period month`를 요청한 사용자가 6개월 수익률을
+    받아도 어디에도 오류가 남지 않는다.
+    """
     result = runner.invoke(
         cli, ["market", "etf", "returns", "069500", "--period", cli_value]
     )
