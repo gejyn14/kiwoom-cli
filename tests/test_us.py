@@ -137,7 +137,7 @@ def tmp_cache(tmp_path, monkeypatch):
     """
     monkeypatch.setattr("kiwoom_cli.config.CACHE_DIR", tmp_path)
     monkeypatch.setenv("KIWOOM_DOMAIN", "mock")
-    return tmp_path / "us_exchanges-mock.json"
+    return tmp_path / "us_exchanges2-mock.json"
 
 
 def _fake_with_10098(entries):
@@ -823,3 +823,38 @@ def test_kr_chart_day_unchanged(runner, us_stock_fake):
     assert us_stock_fake.calls[0] == ("ka10081", {
         "stk_cd": "005930", "base_dt": "20260714", "upd_stkpc_tp": "0",
     })
+
+
+def test_exchange_cache_is_not_shared_across_profiles_with_different_domains(
+    monkeypatch, tmp_path
+):
+    """기존 test_exchange_cache_is_not_shared_across_domains는 KIWOOM_DOMAIN
+    env로만 도메인을 갈랐다. config.py의 env 단락이 resolve_profile보다 먼저
+    반환하므로, 그 테스트는 detect.py가 profile을 넘기든 안 넘기든 똑같이
+    통과했다 — 미완 수정이 나간 정확한 이유다. 이 테스트는 -p 축을 몬다.
+    """
+    import click
+
+    from kiwoom_cli import config as _config
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        '[general]\ndefault_profile = "sim"\n'
+        '[profiles.sim]\ndomain = "mock"\n'
+        '[profiles.live]\ndomain = "prod"\n'
+    )
+    monkeypatch.setattr("kiwoom_cli.config.CONFIG_FILE", cfg)
+    monkeypatch.setattr(_config, "CACHE_DIR", tmp_path)
+    monkeypatch.delenv("KIWOOM_PROFILE", raising=False)
+    monkeypatch.delenv("KIWOOM_DOMAIN", raising=False)
+
+    with click.Context(click.Command("x"), obj={"profile": "sim"}):
+        sim_file = detect._cache_file()
+    with click.Context(click.Command("x"), obj={"profile": "live"}):
+        live_file = detect._cache_file()
+
+    assert sim_file != live_file, (
+        f"-p로 프로필을 바꿔도 캐시 파일이 같다: {sim_file.name} — "
+        "모의에서 학습한 거래소가 실주문 stex_tp로 나간다"
+    )
+    assert "mock" in sim_file.name and "prod" in live_file.name
