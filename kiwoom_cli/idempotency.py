@@ -41,15 +41,20 @@ def fingerprint(api_id: str, body: dict[str, Any]) -> str:
 
 
 class LedgerLockBusy(Exception):
-    """원장 잠금을 제한시간 내 획득하지 못함 (Windows msvcrt ~10초 재시도 후)."""
+    """원장 잠금을 획득하지 못함.
+
+    두 경로에서 발생한다:
+      - Windows msvcrt: 블로킹 모드에서도 ~10초 재시도 후 실패
+      - 논블로킹 요청(`locked(blocking=False)`): 잠금이 이미 잡혀 있으면 즉시
+    """
 
 
 if sys.platform == "win32":  # pragma: no cover
     import msvcrt
 
-    def _acquire(f) -> None:
+    def _acquire(f, blocking: bool = True) -> None:
         f.seek(0)
-        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK, 1)
 
     def _release(f) -> None:
         f.seek(0)
@@ -57,21 +62,30 @@ if sys.platform == "win32":  # pragma: no cover
 else:
     import fcntl
 
-    def _acquire(f) -> None:
-        fcntl.flock(f, fcntl.LOCK_EX)
+    def _acquire(f, blocking: bool = True) -> None:
+        flags = fcntl.LOCK_EX if blocking else fcntl.LOCK_EX | fcntl.LOCK_NB
+        fcntl.flock(f, flags)
 
     def _release(f) -> None:
         fcntl.flock(f, fcntl.LOCK_UN)
 
 
 @contextmanager
-def locked():
+def locked(blocking: bool = True):
     """원장 파일 잠금 — 조회→전송→기록 구간을 프로세스 간 직렬화한다.
 
     같은 --client-order-id로 동시에 두 프로세스가 진입해 둘 다 미기록 상태를
     보고 둘 다 전송하는 중복 주문을 막는다. 프로필+환경 원장 단위 잠금이므로
     같은 프로필의 서로 다른 주문도 잠금 구간 동안 직렬화된다 (정확성 우선).
     재진입 불가(같은 프로세스에서 중첩 사용 시 데드락) — send_order 외에서 사용하지 말 것.
+
+    `blocking=False`는 **사람이 부르는 유지보수 경로 전용**이다. 주문 경로는
+    계속 블로킹해야 한다 — 거기서 즉시 실패로 바꾸면 동시 주문이 정확성을
+    위해 기다리는 대신 LEDGER_BUSY로 흔들린다.
+
+    POSIX의 flock은 LOCK_NB 없이는 **무한 대기**한다. 그래서 논블로킹을 주지
+    않으면 LedgerLockBusy를 잡는 호출자의 핸들러는 POSIX에서 절대 실행되지
+    않는다 (실행되는 대신 프롬프트가 조용히 멈춘다).
     """
     ledger = _ledger_file()
     config.ensure_config_dir()
@@ -80,8 +94,9 @@ def locked():
     with open(lock_path, "a+", encoding="utf-8") as f:
         config.secure_file(lock_path)
         try:
-            _acquire(f)
+            _acquire(f, blocking)
         except OSError as e:
+            # 논블로킹 실패는 BlockingIOError(OSError 하위)로 온다
             raise LedgerLockBusy(str(e)) from e
         try:
             yield
@@ -234,6 +249,11 @@ def prune(max_age_days: int = DEFAULT_MAX_AGE_DAYS, *,
 
     locked()는 재진입 불가다 — 주문 경로(_mutation.send_order) 안에서
     호출하지 말 것. 수동 명령 전용이다.
+
+    잠금은 **논블로킹**으로 잡는다(blocking=False). 사람이 프롬프트 앞에서
+    부르는 명령이라, 동시에 도는 주문 뒤에서 무한정 매달리는 대신 즉시
+    LedgerLockBusy로 알리고 사용자가 재시도를 판단하게 한다. 주문 경로의
+    잠금은 그대로 블로킹이다.
     """
     if max_age_days < 1:
         raise ValueError("max_age_days는 1 이상이어야 합니다.")
@@ -244,7 +264,7 @@ def prune(max_age_days: int = DEFAULT_MAX_AGE_DAYS, *,
     if not ledger.exists():
         return empty
 
-    with locked():
+    with locked(blocking=False):
         if not ledger.exists():  # 잠금 획득 사이에 사라졌을 수 있다
             return empty
         with open(ledger, encoding="utf-8") as f:

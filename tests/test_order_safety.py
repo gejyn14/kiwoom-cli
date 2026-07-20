@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from unittest import mock
@@ -949,15 +950,17 @@ def test_prune_holds_the_ledger_lock(isolated_env, monkeypatch):
     real_locked = idempotency.locked
 
     @contextmanager
-    def spy():
-        held.append("acquired")
-        with real_locked():
+    def spy(blocking: bool = True):
+        held.append(blocking)
+        with real_locked(blocking=blocking):
             yield
 
     monkeypatch.setattr(idempotency, "locked", spy)
     _write_ledger([_rec("old", "done", 200)])
     idempotency.prune(max_age_days=90)
-    assert held == ["acquired"]
+    # 잠금을 잡았고, **논블로킹**으로 잡았다 (D9/L1 — 블로킹이면 main.py의
+    # LedgerLockBusy 핸들러가 POSIX에서 절대 실행되지 않는다)
+    assert held == [False]
 
 
 def test_prune_preserves_file_permissions(isolated_env):
@@ -997,3 +1000,65 @@ def test_config_prune_ledger_rejects_bad_days(runner, isolated_env, days):
     assert result.exit_code == 1
     assert "No such command" not in result.output
     assert "1 이상" in result.output
+
+
+# ── D9/L1: prune의 잠금 대기는 논블로킹이어야 한다 ────────────
+#
+# main.py의 prune-ledger는 LedgerLockBusy를 잡아 "잠시 후 다시 시도하세요"를
+# 안내한다. 그런데 POSIX의 _acquire는 LOCK_NB 없이 flock(LOCK_EX)이라 영원히
+# 기다린다 — 동시에 주문이 돌면 그 핸들러는 절대 실행되지 않고 사용자
+# 프롬프트가 조용히 멈춘다. 주문 경로는 정확성 때문에 계속 블로킹해야 하므로
+# 논블로킹은 사람이 부르는 경로에만 준다.
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX flock 경로")
+def test_prune_reports_busy_instead_of_hanging(isolated_env):
+    """다른 프로세스가 잠금을 쥐고 있으면 매달리지 않고 LedgerLockBusy."""
+    _write_ledger([_rec("old", "done", 200)])
+    ledger = idempotency._ledger_file()
+    lock_path = ledger.with_suffix(".lock")
+
+    import fcntl
+    # 같은 프로세스라도 open이 다르면 file description이 달라 flock이 실제로
+    # 경합한다 — 별도 프로세스를 띄우지 않고도 경합을 재현할 수 있다.
+    with open(lock_path, "a+", encoding="utf-8") as holder:
+        fcntl.flock(holder, fcntl.LOCK_EX)
+        try:
+            with pytest.raises(idempotency.LedgerLockBusy):
+                idempotency.prune(max_age_days=90)
+        finally:
+            fcntl.flock(holder, fcntl.LOCK_UN)
+
+    # 잠금이 풀리면 정상 동작한다 (논블로킹이 항상 실패로 굳지 않았는지)
+    assert idempotency.prune(max_age_days=90)["removed_keys"] == 1
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX flock 경로")
+def test_order_path_lock_still_blocks(isolated_env):
+    """주문 경로(locked() 기본값)는 계속 블로킹한다 — 여기서 실패로 바꾸면
+    동시 주문이 LEDGER_BUSY로 흔들린다. 논블로킹은 prune 전용이다."""
+    import fcntl
+    import threading
+
+    ledger = idempotency._ledger_file()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = ledger.with_suffix(".lock")
+    entered = threading.Event()
+
+    with open(lock_path, "a+", encoding="utf-8") as holder:
+        fcntl.flock(holder, fcntl.LOCK_EX)
+
+        def waiter():
+            with idempotency.locked():
+                entered.set()
+
+        t = threading.Thread(target=waiter, daemon=True)
+        t.start()
+        # 논블로킹이었다면 즉시 LedgerLockBusy로 죽어 entered가 서지 않고
+        # 스레드가 끝난다. 블로킹이면 아직 대기 중이어야 한다.
+        assert not entered.wait(timeout=0.3), "주문 경로가 논블로킹으로 바뀌었다"
+        assert t.is_alive(), "주문 경로가 대기하지 않고 즉시 종료했다"
+        fcntl.flock(holder, fcntl.LOCK_UN)
+
+    assert entered.wait(timeout=2.0), "잠금 해제 후에도 진입하지 못했다"
+    t.join(timeout=2.0)

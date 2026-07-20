@@ -245,9 +245,15 @@ exit 2로 하드 실패하지 않고) `checks.price_known`이 `false`가 되어 
 
 멱등키는 주문 내용(api_id+body)의 fingerprint에 바인딩되며, 조회→전송→기록
 구간은 원장 파일 잠금으로 프로세스 간 직렬화된다. 같은 키로 다른 내용을
-보내면 `IDEMPOTENCY_CONFLICT`. 잠금 대기는 POSIX(fcntl)에서는 무한 대기하며,
+보내면 `IDEMPOTENCY_CONFLICT`. **주문 경로**의 잠금 대기는 POSIX(fcntl)에서는
+무한 대기하며(정확성 우선 — 동시 주문을 실패시키는 대신 직렬화한다),
 Windows(msvcrt)에서만 약 10초 재시도 후 획득 실패로 `LEDGER_BUSY`
 (exit 2, retryable)가 발생한다. 잠시 후 재시도하면 된다.
+
+반면 유지보수 명령 `kiwoom config prune-ledger`는 잠금을 **논블로킹**으로
+잡는다. 같은 프로필의 주문이 전송 중이면 기다리지 않고 즉시 실패하며,
+"원장이 다른 프로세스에 잠겨 있습니다" 안내와 함께 exit 1로 끝난다.
+사람이 프롬프트 앞에서 부르는 명령이 조용히 매달리지 않게 하기 위함이다.
 
 전송 직전에 원장에 "inflight" 표식을 남긴 뒤 전송한다. 이후 결과는 세 가지로
 갈린다:
