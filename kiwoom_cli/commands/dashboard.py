@@ -19,6 +19,7 @@ from ..formatters import (
     print_generic_table,
 )
 from ..output import console, err_console
+from ._constants import EXCHANGE_ALL
 
 
 def _build_account_panel(data: dict[str, Any]) -> Panel:
@@ -103,8 +104,16 @@ def dashboard():
                 "pric_tp": "0",
                 "trde_prica_tp": "0",
                 "mrkt_open_tp": "0",
-                "stex_tp": "1",
+                # `market rank volume`(같은 ka10030)의 --exchange 기본값과 맞춘다.
+                # D7이 그쪽 기본값을 KRX(1)에서 통합(3)으로 옮겼을 때 여기만
+                # "1"로 남아, 같은 "당일 거래량 상위"가 두 명령에서 갈렸다.
+                # 리터럴 대신 상수를 참조해 다음 이동 때 다시 갈리지 않게 한다.
+                "stex_tp": EXCHANGE_ALL["all"],
             })
+            # NOTE: mang_stk_incls는 여전히 두 명령이 다르다 — dashboard는
+            # "1"(exclude-managed), `market rank volume` 기본값은
+            # "0"(include-managed). 이건 D7이 만든 드리프트가 아니라 그 이전부터
+            # 있던 dashboard의 선택이라 여기서 바꾸지 않는다. 바꾸려면 별도 결정.
             # Extract list from response
             if movers_data:
                 for v in movers_data.values():

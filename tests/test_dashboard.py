@@ -181,3 +181,45 @@ def test_dashboard_success_json_shape_unchanged(runner, fake_client):
     assert doc["data"]["account"]["acnt_nm"] == "테스트"
     assert len(doc["data"]["top_volume"]) == 1
     assert doc["data"]["top_volume"][0]["name"] == "삼성전자"
+
+
+# ── D9/H4: dashboard와 market rank volume이 같은 목록을 봐야 한다 ────
+
+
+def test_dashboard_top_volume_uses_same_exchange_as_market_rank_volume(
+    runner, fake_client, monkeypatch,
+):
+    """dashboard의 ka10030 호출이 `market rank volume` 기본값과 같은 거래소를 쓴다.
+
+    D7이 ka10030의 --exchange 기본값을 통합(3)으로 옮겼을 때 dashboard만
+    "1"(KRX)로 하드코딩돼 남았다. 같은 "당일 거래량 상위"가 두 명령에서
+    다르게 나오는 상태였다.
+
+    옵션 선언이 아니라 **전송된 body**로 비교한다 — 선언만 보면 커맨드 본문의
+    하드코딩을 볼 수 없다.
+    """
+    fake_client.set_response("kt00004", ACCOUNT_RESPONSE)
+    fake_client.set_response("ka10030", MOVERS_RESPONSE)
+    assert runner.invoke(cli, ["-f", "json", "dashboard"]).exit_code == 0
+    dash_body = dict(next(b for a, b in fake_client.calls if a == "ka10030"))
+
+    market_fake = FakeKiwoomClient()
+    market_fake.set_response("ka10030", MOVERS_RESPONSE)
+    monkeypatch.setattr(
+        "kiwoom_cli.commands.market.KiwoomClient",
+        lambda *a, **kw: market_fake,
+    )
+    assert runner.invoke(cli, ["-f", "json", "market", "rank", "volume"]).exit_code == 0
+    rank_body = dict(next(b for a, b in market_fake.calls if a == "ka10030"))
+
+    assert dash_body["stex_tp"] == rank_body["stex_tp"], (
+        f"dashboard={dash_body['stex_tp']!r} vs market rank volume="
+        f"{rank_body['stex_tp']!r} — 같은 목록이 두 명령에서 갈린다"
+    )
+    # 남아 있는 차이를 **명시적으로** 고정한다. 조용히 두면 다음 드리프트가
+    # "원래 다르던 것"에 섞여 안 보인다. mang_stk_incls 차이는 D7 이전부터
+    # 있던 dashboard의 선택이고, 그 외 필드는 전부 같아야 한다.
+    assert dash_body["mang_stk_incls"] == "1"   # exclude-managed (dashboard 선택)
+    assert rank_body["mang_stk_incls"] == "0"   # include-managed (market 기본값)
+    assert {k: v for k, v in dash_body.items() if k != "mang_stk_incls"} == \
+           {k: v for k, v in rank_body.items() if k != "mang_stk_incls"}
