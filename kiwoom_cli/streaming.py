@@ -453,6 +453,19 @@ def run_stream(
             "content-type": "application/json;charset=UTF-8",
         }
 
+        # 등록 ack를 실제로 받았는가. 수신 루프가 어떤 이유로 끝나든(소켓 종료,
+        # --duration/--until 만료) 이게 False면 구독은 성사되지 않은 것이므로
+        # 성공으로 끝내면 안 된다. LOGIN 자리의 '응답 없음'과 같은 부류다.
+        registered = False
+
+        def _not_registered() -> tuple[int, dict[str, Any] | None]:
+            msg = "등록 응답을 받기 전에 스트림이 끝났습니다 (구독 미성사)."
+            if json_mode:
+                return EXIT_API, envelope.error_body(
+                    msg, code="UPSTREAM_ERROR", retryable=True)
+            console.print(f"[red]{msg}[/]")
+            return EXIT_API, None
+
         try:
             async with websockets.connect(
                 url,
@@ -559,6 +572,7 @@ def run_stream(
                     rc = data.get("return_code")
                     if rc is not None:
                         if str(rc) == "0":
+                            registered = True
                             err_console.print("[green]등록 성공[/]")
                         else:
                             # 등록 실패 후 계속 돌면 구독 없는 소켓이 마감시각까지
@@ -589,6 +603,11 @@ def run_stream(
                     if should_stop(state, _now_kst()):
                         break
 
+                # 루프를 어떻게 빠져나왔든(소켓 정상 종료, --duration/--until 만료)
+                # 등록 ack가 없었으면 아무것도 구독하지 못한 것이다.
+                if not registered:
+                    return _not_registered()
+
         except websockets.exceptions.ConnectionClosedOK as e:
             # 정상 종료(1000)는 스트림의 끝이지 실패가 아니다. 수신 루프는 자체적으로
             # break하므로 여기까지 오는 건 PING 에코 등 send 경로뿐이다.
@@ -596,6 +615,9 @@ def run_stream(
             # 와야 한다 — 순서를 바꾸면 정상 종료가 아래 EXIT_API로 빨려 들어간다.
             if not json_mode:  # json 모드 stdout은 NDJSON 전용 (Rich 출력 금지)
                 console.print(f"\n[yellow]연결 종료: {e}[/]")
+            # send 경로(PING 에코 등)에서 끊긴 경우도 등록 전이면 실패다.
+            if not registered:
+                return _not_registered()
         except websockets.exceptions.ConnectionClosed as e:
             # 비정상 종료(ConnectionClosedError, 1006 등)는 실패다.
             if json_mode:

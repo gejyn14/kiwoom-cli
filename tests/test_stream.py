@@ -693,6 +693,80 @@ class TestStreamRegistrationFailure:
         assert docs[-1]["data"]["price"] == 70000
 
 
+class TestStreamRegistrationNeverAcked:
+    """등록 ack를 못 받은 채 루프가 끝나면 구독은 성사되지 않았다 → 실패다.
+
+    D1이 REG **실패 응답**(return_code != 0)은 잡게 만들었지만, ack가 아예
+    오지 않는 경우는 이월됐다: LOGIN 성공 → REG 전송 → 서버가 답 없이 종료.
+    수신 루프가 그냥 break해 exit 0이 나가고, json 모드는 envelope조차 없이
+    빈 stdout으로 끝난다 — 에이전트에게는 "성공, 이벤트 0건"과 구별되지 않는다.
+
+    LOGIN 자리는 이미 같은 상황을 exit 3으로 처리한다(연결 끊김/응답 없음).
+    REG 자리도 대칭으로 다루되, 등록 실패 갈래와 같은 exit 2를 쓴다.
+    """
+
+    def test_close_before_reg_ack_exits_api(self, runner, ws_env):
+        result = _run(runner, ws_env, [LOGIN_OK])
+        assert result.exit_code == 2, result.output
+        assert "등록" in result.output
+        assert "등록 성공" not in result.output
+
+    def test_close_before_reg_ack_emits_envelope_in_json_mode(self, runner, ws_env):
+        """빈 stdout + exit 0이 '성공, 이벤트 없음'으로 읽히던 자리."""
+        result = _run(runner, ws_env, [LOGIN_OK], fmt="json")
+        assert result.exit_code == 2, result.output
+        docs = [json.loads(ln) for ln in result.output.splitlines() if ln.startswith("{")]
+        assert docs, "json 모드가 envelope 없이 종료했다"
+        assert docs[-1]["ok"] is False
+        assert docs[-1]["error"]["code"] == "UPSTREAM_ERROR"
+
+    def test_deadline_before_reg_ack_also_fails(self, runner, ws_env):
+        """--duration 만료도 예외가 아니다. 등록이 안 됐으면 스트림은 시작조차 안 했다.
+
+        이 단언이 '소켓 종료일 때만 실패'라는 더 좁은 구현과 구분한다.
+        """
+        ws_env([LOGIN_OK, {"trnm": "PING"}])
+        result = runner.invoke(
+            cli, ["stream", "quote", "005930", "--duration", "1s"]
+        )
+        assert result.exit_code == 2, result.output
+
+    def test_reg_ack_then_close_is_success(self, runner, ws_env):
+        """대조군: ack를 받은 뒤의 정상 종료는 그대로 exit 0이어야 한다.
+
+        '항상 2를 반환한다'는 오답을 배제한다.
+        """
+        result = _run(runner, ws_env, [LOGIN_OK, REG_OK])
+        assert result.exit_code == 0, result.output
+        assert "등록 성공" in result.output
+
+    def test_close_on_ping_echo_before_reg_ack_exits_api(self, runner, ws_env):
+        """수신 루프 **밖**(PING 에코 send)에서 끊긴 경우도 등록 전이면 실패다.
+
+        바깥 ConnectionClosedOK 핸들러는 등록 여부를 보지 않으면 무조건 0을
+        돌려준다. 루프 안 검사만으로는 이 경로에 닿지 않는다 — 이 테스트가
+        없으면 바깥 핸들러의 검사는 검증되지 않은 코드로 남는다.
+        """
+        from tests.fakes import FakeConnectionClosedOK
+
+        ws_env(
+            [LOGIN_OK, {"trnm": "PING"}],  # REG ack 없음
+            send_exc=FakeConnectionClosedOK("1000 bye"),
+            fail_send_after=2,  # LOGIN·REG 전송은 성공, PING 에코에서 닫힘
+        )
+        result = runner.invoke(cli, ["stream", "quote", "005930"])
+        assert result.exit_code == 2, result.output
+
+    def test_reg_ack_buffered_during_login_wait_still_counts(self, runner, ws_env):
+        """REG ack가 LOGIN 자리에서 거부돼 pending에 버퍼링된 경우도 등록으로 친다.
+
+        recv_ack의 reject_trnm이 REG 프레임을 buffer로 넘기므로, 등록 판정을
+        소켓 수신에만 걸면 이 순서에서 오탐이 난다.
+        """
+        result = _run(runner, ws_env, [REG_OK, LOGIN_OK])
+        assert result.exit_code == 0, result.output
+
+
 class TestStreamMissingToken:
     def test_table_mode_exits_auth(self, runner, ws_env, monkeypatch):
         """토큰 없음도 table/json 양쪽에서 exit 3 (기존 table: 메시지 후 exit 0)."""
