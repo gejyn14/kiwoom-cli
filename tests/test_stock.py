@@ -158,9 +158,13 @@ def test_search_empty_result_emits_json_envelope(runner, tmp_stock_cache):
     기존에는 click.echo("검색 결과가 없습니다.")로 평문만 남겨 -f json에서
     stdout이 파싱 불가능한 문장이 됐다.
     """
+    # fetched_at은 TTL 판정에 쓰이므로 고정 날짜를 박으면 언젠가 만료돼
+    # 자동 재동기화(→ 인증 필요, exit 3)로 새는 테스트가 된다. 현재 시각 기준.
+    from datetime import datetime
+
     tmp_stock_cache.write_text(
         json.dumps({
-            "fetched_at": "2026-01-01T00:00:00",
+            "fetched_at": datetime.now().isoformat(),
             "count": 1,
             "data": [
                 {"stk_cd": "005930", "stk_nm": "삼성전자", "market": "코스피", "type": "주식"},
@@ -1934,3 +1938,66 @@ def test_lending_by_stock_all_still_accepts_arbitrary_text(runner, fake_client):
 
     assert result.exit_code == 0
     assert fake_client.calls[0][1]["all_tp"] == "9"
+
+
+# ============================================================
+#  종목 리스트 캐시 만료 (Task 29-4)
+# ============================================================
+#
+# _save_stock_cache는 fetched_at을 기록했지만 읽는 곳이 없어서 stocks.json이
+# 영구 캐시였다 — 신규 상장/폐지가 `stock sync`를 손으로 돌리기 전까지 절대
+# 반영되지 않는다. 아래 테스트는 fetched_at을 실제로 판정에 쓰는지 본다.
+
+
+def _write_stock_cache(path, *, fetched_at, data=None):
+    import json
+    payload = {"count": 1, "data": data if data is not None else [{"stk_cd": "005930"}]}
+    if fetched_at is not None:
+        payload["fetched_at"] = fetched_at
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def test_stock_cache_fresh_is_loaded(tmp_stock_cache):
+    from datetime import datetime, timedelta
+
+    from kiwoom_cli.commands.stock import _load_stock_cache
+    _write_stock_cache(tmp_stock_cache,
+                       fetched_at=(datetime.now() - timedelta(days=1)).isoformat())
+    assert _load_stock_cache() == [{"stk_cd": "005930"}]
+
+
+def test_stock_cache_stale_is_ignored(tmp_stock_cache):
+    """TTL을 넘긴 캐시는 None을 돌려줘야 search가 자동 재동기화한다."""
+    from datetime import datetime, timedelta
+
+    from kiwoom_cli.commands.stock import _load_stock_cache
+    _write_stock_cache(tmp_stock_cache,
+                       fetched_at=(datetime.now() - timedelta(days=30)).isoformat())
+    assert _load_stock_cache() is None
+
+
+@pytest.mark.parametrize("bad", [None, "", "not-a-date", 12345])
+def test_stock_cache_unusable_fetched_at_is_stale(tmp_stock_cache, bad):
+    """fetched_at이 없거나 해석 불가면 신선도를 주장할 수 없으므로 만료 취급."""
+    from kiwoom_cli.commands.stock import _load_stock_cache
+    _write_stock_cache(tmp_stock_cache, fetched_at=bad)
+    assert _load_stock_cache() is None
+
+
+@pytest.mark.parametrize("argv,api_id", [
+    (["stock", "info", "A005930"], "ka10001"),
+    (["stock", "price", "A005930"], "ka10001"),
+    (["stock", "orderbook", "A005930"], "ka10004"),
+    (["stock", "chart", "day", "A005930", "--base-date", "20260101"], "ka10081"),
+])
+def test_prefixed_code_routes_kr_and_strips_prefix(runner, fake_client, argv, api_id):
+    """'A005930'은 국내로 라우팅되고 stk_cd에는 접두사 없이 실려야 한다.
+
+    접두사가 남으면 국내 API가 모르는 코드를 받고, 판정이 틀리면 애초에
+    미국 경로(usa*)로 새어 호출된 api_id 자체가 달라진다.
+    """
+    result = runner.invoke(cli, argv)
+    assert result.exit_code == 0
+    called_id, body = fake_client.calls[0]
+    assert called_id == api_id
+    assert body["stk_cd"] == "005930"
