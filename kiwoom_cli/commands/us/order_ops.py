@@ -13,6 +13,7 @@ from .._mutation import (
     finish_dry_run,
     parse_quote_price,
     send_order,
+    validate_order_price,
 )
 from ._constants import (
     US_LIMIT_TYPES,
@@ -27,7 +28,12 @@ _EXCHANGE_NAMES = {"ND": "NASDAQ", "NY": "NYSE", "NA": "AMEX"}
 
 
 def fmt_us_price(price: float) -> str:
-    """소수점 4자리까지, 뒤 0 제거. 0이면 빈 문자열(시장가)."""
+    """소수점 4자리까지, 뒤 0 제거. 0이면 빈 문자열(시장가).
+
+    이 함수는 **검증하지 않는다** — `not price`만 보므로 NaN은 truthy로 통과해
+    `"nan"`을, 음수는 `"-5"`를 만들어 그대로 전송된다(이 가드 이전의 실제 동작).
+    호출부는 반드시 먼저 validate_order_price를 거칠 것.
+    """
     if not price:
         return ""
     return f"{price:.4f}".rstrip("0").rstrip(".")
@@ -156,6 +162,9 @@ def buy(code: str, qty: int, price: float, order_type: str,
         exchange: str | None, confirm: bool,
         dry_run: bool = False, client_order_id: str | None = None) -> None:
     """미국주식 매수 (ust20000)."""
+    # _validate_us_type보다 먼저 — 그쪽은 price의 truthiness만 보므로 NaN을
+    # "가격 지정됨"으로 통과시킨다.
+    validate_order_price(price, label="주문가격")
     trde_tp = _validate_us_type(order_type, "buy", price)
 
     def body_fn(stex_tp: str) -> dict[str, str]:
@@ -182,6 +191,8 @@ def sell(code: str, qty: int, price: float, order_type: str,
          exchange: str | None, stop: float, confirm: bool,
          dry_run: bool = False, client_order_id: str | None = None) -> None:
     """미국주식 매도 (ust20001)."""
+    validate_order_price(price, label="주문가격")
+    validate_order_price(stop, label="STOP가격")
     trde_tp = _validate_us_type(order_type, "sell", price)
     if order_type in US_STOP_TYPES and not stop:
         fail_input(f"'{order_type}' 주문에는 --stop 가격이 필요합니다.")
@@ -214,8 +225,31 @@ def sell(code: str, qty: int, price: float, order_type: str,
 def modify(orig_order_no: str, code: str, qty: int, price: float,
            exchange: str | None, stop: float, confirm: bool,
            dry_run: bool = False, client_order_id: str | None = None) -> None:
-    """미국주식 정정 (ust20002) — 가격 정정만 지원, 항상 잔량 전체."""
-    human("[yellow]미국주식 정정은 수량 변경 미지원 — 전량 가격정정으로 처리됩니다.[/]")
+    """미국주식 정정 (ust20002) — 가격 정정만 지원, 항상 잔량 전체.
+
+    ust20002의 **요청** 스펙에는 수량 필드가 아예 없다(orig_ord_no/stex_tp/
+    stk_cd/mdfy_uv/stop_pric가 전부다). 워크북에 보이는 `mdfy_ord_qty`는
+    **응답** 필드다. 따라서 사용자가 준 수량은 보낼 곳이 없다.
+
+    이전에는 그 수량을 조용히 버리고 stderr 경고 한 줄만 냈다 — json/csv
+    소비자는 그 경고를 볼 수 없으므로, 에이전트 입장에서는 "수량 5로 정정
+    요청했고 성공했다"로 보였다. 경고는 수량을 주지 않은 경우에도 무조건
+    떴기 때문에 신호로서도 쓸모가 없었다.
+
+    그래서 0이 아닌 수량은 거부한다(exit 1, 미전송). 이 형태는 새로 만든 게
+    아니라 같은 파일의 `cancel`이 이미 쓰는 계약이다 — 거기도 미국 경로가
+    도메인 공용 qty 인자를 지원하지 않아 0 이외의 값을 거부한다.
+
+    kwcli는 이 결정에 근거를 주지 못한다: 키움 배포 CLI에는 미국 API가 0건이라
+    ust20002 자체가 없다. 침묵을 허용으로 읽지 않고 워크북 요청 스펙에 근거한다.
+    """
+    if qty:
+        fail_input(
+            "미국주식 정정은 수량 변경을 지원하지 않습니다 (ust20002 요청 스펙에 "
+            "수량 필드가 없습니다). 잔량 전체 가격정정이므로 수량은 0으로 두세요."
+        )
+    validate_order_price(price, allow_zero=False, label="정정단가")
+    validate_order_price(stop, label="STOP가격")
 
     def body_fn(stex_tp: str) -> dict[str, str]:
         body = {

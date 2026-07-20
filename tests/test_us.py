@@ -613,12 +613,15 @@ def test_us_market_dry_run_unparseable_quote_fails_loudly(runner, us_fake):
 
 
 def test_us_modify_price_only_no_qty_sent(runner, us_fake):
+    """수량 인자는 0이어야 한다 — ust20002 요청 스펙에 수량 필드가 없어서
+    0이 아닌 값은 거부된다(test_order_bounds.test_us_modify_rejects_nonzero_qty).
+    이 테스트가 계속 지키는 것은 "body에 수량 필드가 없다"이다."""
     result = runner.invoke(
         cli,
-        ["order", "modify", "000000123", "NVDA", "5", "215.5", "--confirm"],
+        ["order", "modify", "000000123", "NVDA", "0", "215.5", "--confirm"],
     )
     assert result.exit_code == 0
-    assert "전량" in result.output  # 수량 변경 미지원 notice
+    assert "전량" in result.output  # 미리보기가 수량을 '전량'으로 표시
     calls = _order_calls(us_fake, "ust20002")
     assert calls == [(
         "ust20002",
@@ -629,7 +632,7 @@ def test_us_modify_price_only_no_qty_sent(runner, us_fake):
 def test_us_modify_stop_limit_sends_stop_pric(runner, us_fake):
     result = runner.invoke(
         cli,
-        ["order", "modify", "000000123", "NVDA", "5", "215.5", "--stop", "210.0", "--confirm"],
+        ["order", "modify", "000000123", "NVDA", "0", "215.5", "--stop", "210.0", "--confirm"],
     )
     assert result.exit_code == 0
     body = _order_calls(us_fake, "ust20002")[0][1]

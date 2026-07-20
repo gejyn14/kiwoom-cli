@@ -16,7 +16,7 @@ import click
 
 from .. import envelope, idempotency
 from ..client import KiwoomAPIError, KiwoomAuthError
-from ..formatters import _get_format, fail_api, human, print_order_result
+from ..formatters import _get_format, fail_api, fail_input, human, print_order_result
 from ..output import err_console
 
 
@@ -58,6 +58,62 @@ def parse_quote_price(value: Any) -> float:
     if f <= 0:
         raise QuoteUnavailable(f"시세 값이 0 이하입니다 (시세 없음 — 거래정지/상장전 등): {value!r}")
     return f
+
+
+def validate_order_qty(qty: int, *, allow_zero: bool = False,
+                       label: str = "주문수량") -> int:
+    """주문 수량 하한 검증. 위반 시 fail_input(exit 1)이며 요청은 전송되지 않는다.
+
+    근거는 키움이 직접 배포하는 kwcli 0.1.1의 `maps/arguments.csv`다 —
+    주문·정정 수량(ord_qty/mdfy_qty)은 `type=quantity`, 취소 수량(cncl_qty)은
+    `type=cancel_quantity`로 선언되고, `argument_maps.py`의 TYPE_PARSERS가 각각
+    `positive_int_string`(`<= 0` 거부)과 `nonnegative_int_string`(0 허용)에
+    매핑한다. allow_zero=True가 후자에 해당한다.
+
+    **allow_zero=True는 취소 경로에만 쓸 것.** 매수/매도/정정에 0을 허용하면
+    ord_qty="0"이 그대로 전송된다 — 이 가드 이전의 실제 동작이 그랬다.
+
+    취소에서 0을 허용하는 것은 우리 문서화된 계약(`--qty 0` = 전량취소, 그리고
+    `--qty`의 기본값이 0)이자 kwcli의 credit-cancel/gold-cancel 선언과도 같다.
+    kwcli는 `domestic orders cancel --qty`만 `quantity`(양수)로 선언해 자기
+    형제 명령들과 어긋나는데, 그쪽을 따르면 우리 기본값 0이 항상 거부되므로
+    따르지 않는다 — kwcli 내부 불일치로 보고 우리 계약을 유지한다.
+    """
+    if qty < 0 or (qty == 0 and not allow_zero):
+        limit = "0 이상" if allow_zero else "1 이상"
+        fail_input(f"{label}은(는) {limit}이어야 합니다 (입력값: {qty}).")
+    return qty
+
+
+def validate_order_price(price: float, *, allow_zero: bool = True,
+                         label: str = "주문가격") -> float:
+    """주문 가격 검증: 비유한(NaN/Inf)과 음수를 거부한다. 위반 시 exit 1.
+
+    근거는 kwcli 0.1.1이 모든 가격 필드(ord_uv/mdfy_uv/cond_uv)에 붙이는
+    `type=price` → `price_string`이다: `^\\d+$` 매칭 후 `int(value) < 0`을
+    거부하므로 음수·NaN·Inf가 전부 걸러진다. 0은 통과시킨다.
+
+    allow_zero=True(기본)인 이유: 이 코드베이스 전반에서 price=0은 "가격 미지정"
+    = 시장가 센티널이며(`ord_uv`를 빈 문자열로 보낸다), 값이 아니다. 여기서 0을
+    막으면 시장가 주문 전체가 막힌다. 정정처럼 시장가 개념이 없는 경로만
+    allow_zero=False를 쓴다.
+
+    NaN/Inf를 별도로 막는 이유: 이 가드 이전에는 국내 경로에서
+    `int(float('nan'))`이 ValueError를, `int(float('inf'))`가 OverflowError를
+    던져 envelope 없이 죽었고(json 모드 stdout 공백 — envelope-항상 계약 위반),
+    미국 경로에서는 `fmt_us_price`가 NaN을 truthy로 보아 `ord_uv="nan"`을
+    실제로 전송했다.
+
+    _mutation.py의 `parse_quote_price`와 혼동하지 말 것 — 그쪽은 **시세 응답**을
+    검증하고 이쪽은 **사용자 입력**을 검증한다. 계약도 다르다(그쪽은 0 이하를
+    "시세 없음"으로 거부한다).
+    """
+    if not math.isfinite(price):
+        fail_input(f"{label}이(가) 유효한 숫자가 아닙니다 (입력값: {price}).")
+    if price < 0 or (price == 0 and not allow_zero):
+        limit = "0 이상이어야" if allow_zero else "0보다 커야"
+        fail_input(f"{label}은(는) {limit} 합니다 (입력값: {price:g}).")
+    return price
 
 
 def suppress_pagination() -> None:

@@ -39,6 +39,8 @@ from ._mutation import (
     parse_quote_price,
     send_order,
     suppress_pagination,
+    validate_order_price,
+    validate_order_qty,
 )
 from .us import order_ops as us_order_ops
 from .us._constants import US_ORDER_TYPES
@@ -73,7 +75,14 @@ ORDER_EXCHANGES = ["KRX", "NXT", "SOR", "nasdaq", "nyse", "amex"]
 
 
 def _kr_price_or_exit(price: float) -> int:
-    """국내 주문 가격은 정수(원). 소수점 입력 시 exit 1."""
+    """국내 주문 가격은 정수(원). 소수점 입력 시 exit 1.
+
+    유한성·음수 검사를 먼저 돌린다 — 이 순서가 아니면 NaN/Inf가 아래 `int(price)`에
+    도달해 ValueError/OverflowError로 envelope 없이 죽는다(이 가드 이전의 실제
+    동작). 국내 경로(주식/신용/금현물의 매수·매도·정정)는 전부 이 함수를 지나므로
+    여기 한 곳에서 세 계열을 모두 덮는다.
+    """
+    validate_order_price(price, label="국내 주문가격")
     if price != int(price):
         fail_input("국내 주문 가격은 정수(원)여야 합니다.")
     return int(price)
@@ -307,6 +316,8 @@ def buy(code: str, qty: int, price: float, order_type: str | None, exchange: str
     예: kiwoom order buy 005930 10 --price 70000 --type limit --confirm
         kiwoom order buy NVDA 10 --price 213.04 --confirm
     """
+    # US 분기 이전에 검증한다 — 국내/미국 양쪽 경로를 한 곳에서 덮는다.
+    validate_order_qty(qty, label="매수수량")
     order_type = _resolve_order_type(order_type, price)
     code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
@@ -352,6 +363,8 @@ def sell(code: str, qty: int, price: float, order_type: str | None, exchange: st
     예: kiwoom order sell 005930 10 --type market --confirm
         kiwoom order sell NVDA 5 --type stop-limit --price 200.5 --stop 199.99 --confirm
     """
+    # US 분기 이전에 검증한다 — 국내/미국 양쪽 경로를 한 곳에서 덮는다.
+    validate_order_qty(qty, label="매도수량")
     order_type = _resolve_order_type(order_type, price)
     code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
@@ -409,6 +422,11 @@ def modify(orig_order_no: str, code: str, qty: int, price: float, exchange: str 
     if stop:
         fail_input("--stop은 미국주식에서만 사용합니다.")
     dmst_stex_tp = exchange or "KRX"
+    # 정정 수량 검증은 US 분기 뒤에 온다 — 국내와 미국의 계약이 다르기 때문이다.
+    # 국내 kt10002는 mdfy_qty를 실제로 보내므로 양수여야 하고(kwcli도 mdfy_qty를
+    # type=quantity로 선언한다), 미국 ust20002는 요청 스펙에 수량 필드 자체가
+    # 없어 us_order_ops.modify가 0 이외의 값을 거부한다.
+    validate_order_qty(qty, label="정정수량")
     kr_price = _kr_price_or_exit(price)
     body = {
         "dmst_stex_tp": dmst_stex_tp,
@@ -441,6 +459,8 @@ def cancel(orig_order_no: str, code: str, qty: int, exchange: str | None, confir
     예: kiwoom order cancel 0000140 005930 --confirm
         kiwoom order cancel 000000123 NVDA --confirm
     """
+    # 취소만 allow_zero=True — `--qty 0`(기본값) = 전량취소가 문서화된 계약이다.
+    validate_order_qty(qty, allow_zero=True, label="취소수량")
     code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
         return us_order_ops.cancel(orig_order_no, code, qty, exchange, confirm,
@@ -621,6 +641,7 @@ def credit_buy(code: str, qty: int, price: float, order_type: str | None, dmst_s
 
     예: kiwoom order credit buy 005930 10 --type limit --price 70000 --confirm
     """
+    validate_order_qty(qty, label="신용 매수수량")
     order_type = _resolve_order_type(order_type, price)
     kr_price = _kr_price_or_exit(price)
     body = {
@@ -655,6 +676,7 @@ def credit_sell(code: str, qty: int, price: float, order_type: str | None, dmst_
 
     예: kiwoom order credit sell 005930 10 --type market --confirm
     """
+    validate_order_qty(qty, label="신용 매도수량")
     order_type = _resolve_order_type(order_type, price)
     kr_price = _kr_price_or_exit(price)
     body = {
@@ -689,6 +711,7 @@ def credit_modify(orig_order_no: str, code: str, qty: int, price: float, dmst_st
 
     예: kiwoom order credit modify 0000139 005930 1 70000 --confirm
     """
+    validate_order_qty(qty, label="신용 정정수량")
     kr_price = _kr_price_or_exit(price)
     body = {
         "dmst_stex_tp": dmst_stex_tp,
@@ -720,6 +743,7 @@ def credit_cancel(orig_order_no: str, code: str, qty: int, dmst_stex_tp: str, co
 
     예: kiwoom order credit cancel 0000140 005930 --confirm
     """
+    validate_order_qty(qty, allow_zero=True, label="신용 취소수량")
     body = {
         "dmst_stex_tp": dmst_stex_tp,
         "orig_ord_no": orig_order_no,
@@ -758,6 +782,7 @@ def gold_buy(code: str, qty: int, price: float, order_type: str | None, confirm:
 
     예: kiwoom order gold buy M04020000 10 --type limit --price 90000 --confirm
     """
+    validate_order_qty(qty, label="금현물 매수수량")
     order_type = _resolve_order_type(order_type, price)
     trde_tp, order_type_label = _resolve_gold_type(order_type)
     kr_price = _kr_price_or_exit(price)
@@ -794,6 +819,7 @@ def gold_sell(code: str, qty: int, price: float, order_type: str | None, confirm
 
     예: kiwoom order gold sell M04020000 10 --type limit --price 90000 --confirm
     """
+    validate_order_qty(qty, label="금현물 매도수량")
     order_type = _resolve_order_type(order_type, price)
     trde_tp, order_type_label = _resolve_gold_type(order_type)
     kr_price = _kr_price_or_exit(price)
@@ -830,6 +856,7 @@ def gold_modify(orig_order_no: str, code: str, qty: int, price: float, confirm: 
 
     예: kiwoom order gold modify 0000139 M04020000 1 90000 --confirm
     """
+    validate_order_qty(qty, label="금현물 정정수량")
     kr_price = _kr_price_or_exit(price)
     body = {
         "orig_ord_no": orig_order_no,
@@ -858,6 +885,7 @@ def gold_cancel(orig_order_no: str, code: str, qty: int, confirm: bool, dry_run:
 
     예: kiwoom order gold cancel 0000140 M04020000 --confirm
     """
+    validate_order_qty(qty, allow_zero=True, label="금현물 취소수량")
     body = {
         "orig_ord_no": orig_order_no,
         "stk_cd": code,

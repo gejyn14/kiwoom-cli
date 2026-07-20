@@ -27,8 +27,19 @@ def fx_rate(direction: str):
         print_generic_table(data, title=f"환율 ({_DIRECTION_LABELS[direction]})")
 
 
+# 환전금액 하한. ust31300/ust31302 스펙상 fc_exmn_amt는 "매도통화기준 환전금액"
+# (Length 12, ust31302에서는 Required=Y)이며 음수·0은 의미가 없다 — 이전에는
+# `-500000`이 fc_exmn_amt="-500000"으로 그대로 전송되고 확인 패널은 이를
+# "-500,000원"으로 정상인 양 렌더링했다.
+#
+# kwcli는 이 필드에 대해 침묵한다: 키움이 배포하는 CLI에는 미국 API가 단 하나도
+# 없어(ust*/usa* 0건) 환전 명령 자체가 존재하지 않는다. 침묵은 "무엇이든
+# 허용된다"는 근거가 아니므로, 근거는 워크북 스펙과 도메인 의미에 둔다.
+_AMOUNT = click.IntRange(min=1)
+
+
 @exchange_group.command("estimate")
-@click.argument("amount", type=int)
+@click.argument("amount", type=_AMOUNT)
 @click.option("--direction", "direction", default="krw-usd", type=click.Choice(list(DIRECTION)), help="환전 방향")
 def fx_estimate(amount: int, direction: str):
     """환전 예상 금액 조회 (ust31300). AMOUNT는 매도통화 기준."""
@@ -41,7 +52,7 @@ def fx_estimate(amount: int, direction: str):
 
 
 @exchange_group.command("apply")
-@click.argument("amount", type=int)
+@click.argument("amount", type=_AMOUNT)
 @click.option("--direction", "direction", default="krw-usd", type=click.Choice(list(DIRECTION)), help="환전 방향")
 @click.option("--confirm", "--yes", "confirm", is_flag=True, help="확인 프롬프트 없이 실행")
 def fx_apply(amount: int, direction: str, confirm: bool):
