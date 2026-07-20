@@ -68,7 +68,7 @@ kiwoom -f json describe order buy                             # 명령 스키마
 - **AI 에이전트 퍼스트**: 구조화된 JSON 출력(`-f json`), 일관된 exit code(0/1/2/3), 주문 확인 게이트(`--confirm`). Claude Code, 자동매매 스크립트에 바로 연결됩니다.
 - **미국주식 자동 라우팅**: `005930`은 국내로, `NVDA`는 미국으로. 거래소(NASDAQ/NYSE/AMEX)도 자동 판별. 국내+미국 통합 잔고를 원화 총계로 보여줍니다.
 - **사람에게도 친절**: Rich 테이블, 상승=빨강/하락=파랑 색상, 실시간 TUI 대시보드, shell 자동완성.
-- **2046개 테스트 + CI**: Python 3.10–3.13 매트릭스.
+- **2046개 테스트 + CI**: Python 3.10–3.13 매트릭스, CodeQL 정적 분석.
 
 > **전체 문서는 [Wiki](https://github.com/gejyn14/kiwoom-cli/wiki)에서**: 설치 가이드, 명령어 레퍼런스, 미국주식·AI 에이전트·멀티 프로필 가이드, 릴리스 노트.
 
