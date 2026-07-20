@@ -1545,14 +1545,16 @@ def gold_chart_tick(stk_cd, tic_scope, upd_stkpc_tp):
 @gold.command("chart-minute")
 @click.option("--code", "stk_cd", default="M04020000", help="종목코드")
 @click.option("--scope", "tic_scope", default="1", help="틱범위 (1,3,5,10,15,30,45,60)")
-@click.option("--price-type", "upd_stkpc_tp", default="", help="수정주가구분 (선택)")
+@click.option("--price-type", "upd_stkpc_tp", default="", help="수정주가구분 (선택, 0=원본/1=수정주가)")
 def gold_chart_minute(stk_cd, tic_scope, upd_stkpc_tp):
     """금현물 분봉 차트. (ka50080)"""
+    # 스펙: upd_stkpc_tp는 Required=N. 미지정은 "빈 값을 명시"가 아니라
+    # "보내지 않는다"이므로 키 자체를 뺀다 (ka10038 rank broker-by-stock 선례).
+    body = {"stk_cd": stk_cd, "tic_scope": tic_scope}
+    if upd_stkpc_tp:
+        body["upd_stkpc_tp"] = upd_stkpc_tp
     with KiwoomClient() as c:
-        data, _ = c.request("ka50080", {
-            "stk_cd": stk_cd, "tic_scope": tic_scope,
-            "upd_stkpc_tp": upd_stkpc_tp,
-        })
+        data, _ = c.request("ka50080", body)
         print_api_response(data, "금현물분봉차트")
 
 
@@ -1807,8 +1809,13 @@ def program_daily_trend(date, amt_qty_tp, market, min_tic_tp, stex_tp):
 @click.option("--date", default="", help="날짜 (YYYYMMDD, 선택)")
 def program_stock_daily(code, amt_qty_tp, date):
     """종목 일별 프로그램매매 추이. (ka90013)"""
+    # 스펙: stk_cd만 Required=Y. amt_qty_tp/date는 Required=N이므로 미지정 시
+    # 빈 문자열을 보내지 않고 키 자체를 뺀다 (ka10038 rank broker-by-stock 선례).
+    body = {"stk_cd": code}
+    if amt_qty_tp:
+        body["amt_qty_tp"] = amt_qty_tp
+    if date:
+        body["date"] = date
     with KiwoomClient() as c:
-        data, _ = c.request("ka90013", {
-            "amt_qty_tp": amt_qty_tp, "stk_cd": code, "date": date,
-        })
+        data, _ = c.request("ka90013", body)
         print_api_response(data, f"종목일별프로그램매매추이 ({code})")

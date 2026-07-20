@@ -1627,12 +1627,16 @@ def test_program_stock_time_unit_human_options(runner, fake_client, cli_value, a
 
 
 def test_program_stock_daily_unit_still_raw_text(runner, fake_client):
-    """ka90013(stock-daily)의 --unit은 Required=N + 기존 기본값이 빈 문자열이라
-    이번 태스크에서 HumanChoice로 전환하지 않았다 — raw 텍스트 그대로 통과해야 한다."""
+    """ka90013(stock-daily)의 --unit은 HumanChoice로 전환하지 않았다 —
+    Required=N이라 자유 텍스트였고, enum을 씌우면 받는 값 집합이 줄어 breaking이다.
+    raw 코드는 그대로 통과해야 한다.
+
+    (D8/29-5에서 미지정 시 빈 문자열 대신 키를 빼도록 바뀌었다. 기본 호출의
+    body는 test_program_stock_daily_omits_optional_keys_when_unset가 고정한다.)"""
     result = runner.invoke(cli, ["market", "program", "stock-daily", "005930", "--unit", "1"])
     assert result.exit_code == 0
     assert fake_client.calls[0] == ("ka90013", {
-        "amt_qty_tp": "1", "stk_cd": "005930", "date": "",
+        "stk_cd": "005930", "amt_qty_tp": "1",
     })
 
 
@@ -1944,16 +1948,15 @@ def test_gold_chart_day_default_body_unchanged(runner, fake_client):
 
 
 def test_gold_chart_minute_price_type_still_raw_text(runner, fake_client):
-    """ka50080(chart-minute)의 --price-type은 Required=N + 기존 기본값이 빈
-    문자열이라 이번 태스크에서 전환하지 않았다 — raw 코드가 그대로 통과하고,
-    기본 호출은 빈 문자열을 그대로 보내야 한다."""
-    result = runner.invoke(cli, ["market", "gold", "chart-minute"])
-    assert result.exit_code == 0
-    assert fake_client.calls[0][1]["upd_stkpc_tp"] == ""
+    """ka50080(chart-minute)의 --price-type은 HumanChoice로 전환하지 않았다 —
+    Required=N이라 자유 텍스트였고, GOLD_PRICE_TYPE을 씌우면 받는 값 집합이
+    줄어 breaking이다. raw 코드는 그대로 통과해야 한다.
 
-    result2 = runner.invoke(cli, ["market", "gold", "chart-minute", "--price-type", "1"])
-    assert result2.exit_code == 0
-    assert fake_client.calls[-1][1]["upd_stkpc_tp"] == "1"
+    (D8/29-5에서 미지정 시 빈 문자열 대신 키를 빼도록 바뀌었다. 기본 호출의
+    body는 test_gold_chart_minute_omits_price_type_key_when_unset가 고정한다.)"""
+    result = runner.invoke(cli, ["market", "gold", "chart-minute", "--price-type", "1"])
+    assert result.exit_code == 0
+    assert fake_client.calls[0][1]["upd_stkpc_tp"] == "1"
 
 
 # ── Task 33: 형제 상수 이름 거부(상위집합 오염 방지) ─────────────────
@@ -2479,3 +2482,57 @@ def test_exchange_all_is_not_exchange_all_zero():
     assert EXCHANGE_ALL_ZERO["all"] == "0"
     assert set(EXCHANGE_ALL) == set(EXCHANGE_ALL_ZERO)
     assert EXCHANGE_ALL != EXCHANGE_ALL_ZERO
+
+
+# ── D8/29-5: 선택 파라미터는 빈 문자열이 아니라 키 자체를 빼야 한다 ──
+#
+# 스펙(docs/미국 REST API 문서.xlsx)에서 Required=N인 Body 필드는 "보내지
+# 않는 것"이 미지정이다. 빈 문자열을 넣어 보내는 것은 "빈 값을 명시했다"는
+# 다른 신호다. 선례는 같은 파일의 ka10038(rank broker-by-stock) —
+# 조건부로 키를 추가하고, 아니면 키를 아예 만들지 않는다.
+#
+# 이 테스트들은 반드시 **전송된 body**를 본다. 옵션 선언 덤프
+# (default=="" 인지)는 키 생략이 body에서 일어나므로 구조적으로 눈이 멀었다.
+
+
+def test_gold_chart_minute_omits_price_type_key_when_unset(runner, fake_client):
+    """ka50080 upd_stkpc_tp는 Required=N — 미지정 시 키가 body에 없어야 한다."""
+    result = runner.invoke(cli, ["market", "gold", "chart-minute"])
+    assert result.exit_code == 0, result.output
+    api_id, body = fake_client.calls[0]
+    assert api_id == "ka50080"
+    assert "upd_stkpc_tp" not in body, f'키가 남아 있다: {body!r}'
+    # 필수 필드는 그대로 있어야 한다 (키를 통째로 지우는 과잉수정 방지)
+    assert body["stk_cd"] == "M04020000"
+    assert body["tic_scope"] == "1"
+
+
+def test_gold_chart_minute_sends_price_type_when_given(runner, fake_client):
+    """지정하면 그대로 전송된다 — "항상 키를 뺀다"는 오답을 배제한다."""
+    result = runner.invoke(cli, ["market", "gold", "chart-minute", "--price-type", "1"])
+    assert result.exit_code == 0, result.output
+    assert fake_client.calls[0][1]["upd_stkpc_tp"] == "1"
+
+
+def test_program_stock_daily_omits_optional_keys_when_unset(runner, fake_client):
+    """ka90013 amt_qty_tp/date 모두 Required=N — 미지정 시 키가 없어야 한다."""
+    result = runner.invoke(cli, ["market", "program", "stock-daily", "005930"])
+    assert result.exit_code == 0, result.output
+    api_id, body = fake_client.calls[0]
+    assert api_id == "ka90013"
+    assert "amt_qty_tp" not in body, f'키가 남아 있다: {body!r}'
+    assert "date" not in body, f'키가 남아 있다: {body!r}'
+    assert body["stk_cd"] == "005930"  # Required=Y
+
+
+def test_program_stock_daily_sends_optional_keys_when_given(runner, fake_client):
+    """지정하면 그대로 전송된다 — "항상 키를 뺀다"는 오답을 배제한다."""
+    result = runner.invoke(cli, [
+        "market", "program", "stock-daily", "005930",
+        "--unit", "1", "--date", "20250408",
+    ])
+    assert result.exit_code == 0, result.output
+    body = fake_client.calls[0][1]
+    assert body["amt_qty_tp"] == "1"
+    assert body["date"] == "20250408"
+
