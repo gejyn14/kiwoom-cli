@@ -395,10 +395,26 @@ required, choices, is_flag)를 반환합니다. 도움말 파싱 대신 이걸 �
 
 ## 인증 (비대화형 환경)
 
-키체인 접근이 불가한 샌드박스/CI/에이전트 환경에서는 사용자 터미널에서 발급한
-토큰을 `KIWOOM_TOKEN` 환경변수로 전달받으세요. appkey/secretkey는 환경변수를
-지원하지 않습니다(의도된 제약). `KIWOOM_DOMAIN`(prod/mock), `KIWOOM_PROFILE`,
-`KIWOOM_ACCOUNT`도 환경변수로 지정 가능합니다.
+키체인 접근이 불가한 샌드박스/CI/에이전트/컨테이너 환경에서 쓸 수 있는 환경변수:
+
+| 변수 | 용도 |
+|---|---|
+| `KIWOOM_TOKEN` | 발급된 토큰 직접 전달. 키체인 토큰보다 우선 |
+| `KIWOOM_APPKEY` / `KIWOOM_SECRETKEY` | 자격증명. **v2.15.0부터 지원** — 키체인보다 우선 |
+| `KIWOOM_APPKEY_FILE` / `KIWOOM_SECRETKEY_FILE` | 같은 값을 파일에서 읽는다 (도커/포드먼 시크릿) |
+| `KIWOOM_DOMAIN` | `prod` / `mock` |
+| `KIWOOM_PROFILE` | 활성 프로필 |
+| `KIWOOM_ACCOUNT` | 계좌번호 |
+
+토큰만 있으면 조회·스트리밍이 되고, appkey/secretkey까지 있으면 컨테이너가
+스스로 토큰을 발급·갱신할 수 있습니다. 이전에는 appkey/secretkey가 키체인
+전용이라, 주입한 토큰이 만료되면 컨테이너가 복구할 수 없었습니다.
+
+- 같은 이름의 `NAME`과 `NAME_FILE`을 동시에 설정하면 `INVALID_INPUT`(exit 1)입니다.
+- `_FILE` 값은 strip됩니다 (시크릿 파일 끝의 개행이 그대로 실리면 인증이 실패합니다).
+- 실제로 어느 출처가 쓰였는지는 `kiwoom -f json auth status`의 `data.appkey_source`
+  (`"env"` / `"env_file"` / `"keychain"` / `null`)로 확인하세요. 환경변수가 키체인을
+  조용히 덮으므로, 자격증명이 예상과 다르면 여기부터 봅니다.
 
 ## Litmus loop: 전체 흐름 예시
 

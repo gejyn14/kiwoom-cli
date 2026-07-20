@@ -15,7 +15,8 @@
 
 - **appkey/secretkey**: `keyring`을 통해 **OS 키체인**(macOS Keychain / Windows
   Credential Manager / Linux Secret Service)에 저장. 키 형식은 `{profile}:appkey`,
-  `{profile}:secretkey`. 파일에 평문으로 남지 않습니다.
+  `{profile}:secretkey`. 파일에 평문으로 남지 않습니다. v2.15.0부터 환경변수
+  경로도 지원합니다 — 아래 [컨테이너·헤드리스 환경의 자격증명](#컨테이너헤드리스-환경의-자격증명) 참고.
 - **토큰**: 같은 키체인에 `{profile}:token`으로 저장. `token_storage = env`를
   선택하면 키체인에 저장하지 않고 사용자가 `KIWOOM_TOKEN` 환경변수로 직접
   관리합니다(키체인 접근이 불가능한 샌드박스·CI·에이전트 환경용).
@@ -53,6 +54,33 @@ v2.0까지는 appkey/secretkey를 앱 자체 비밀번호(PBKDF2 + Fernet)로 �
 같은 이유로 OS 시스템 인증(Touch ID 등)도 검토 후 채택하지 않았습니다 —
 AI 에이전트가 지문을 제시할 수 없어, 이 도구의 핵심 사용처를 막습니다.
 
+### 컨테이너·헤드리스 환경의 자격증명
+
+v2.14.0까지 appkey/secretkey는 키체인 전용이었습니다. 의도된 제약이었지만
+실패 모드가 하나 있었습니다: 키체인이 없는 컨테이너는 호스트에서 발급한
+`KIWOOM_TOKEN`을 주입받는 것이 유일한 경로였고, **그 토큰이 만료되면 컨테이너
+스스로 복구할 수 없었습니다.** v2.15.0에서 환경변수 경로를 열었습니다.
+
+우선순위 (높은 쪽이 이깁니다):
+
+| 순위 | 출처 | 비고 |
+|---|---|---|
+| 1 | `KIWOOM_APPKEY` / `KIWOOM_SECRETKEY` | 프로세스 환경에 평문으로 남습니다 |
+| 2 | `KIWOOM_APPKEY_FILE` / `KIWOOM_SECRETKEY_FILE` | 파일에서 읽습니다 — **컨테이너 권장** |
+| 3 | OS 키체인 | 데스크톱 기본값 |
+
+`KIWOOM_TOKEN`·`KIWOOM_DOMAIN`과 같은 방향(환경변수가 키체인·설정을 덮음)이며,
+env 자격증명은 **모든 프로필에 적용됩니다.**
+
+- 컨테이너에서는 `_FILE` 변형을 쓰세요. 도커/포드먼 시크릿은 `/run/secrets/`에
+  파일로 마운트되며, 값이 `docker inspect`·`/proc/<pid>/environ`·프로세스 목록에
+  노출되지 않습니다.
+- `NAME`과 `NAME_FILE`을 동시에 설정하면 어느 쪽이 이겼는지 조용히 달라지는
+  대신 즉시 실패합니다(`INVALID_INPUT`, exit 1).
+- **셸에 `KIWOOM_APPKEY`를 export해 두면 키체인에 저장된 값 대신 그 값이
+  쓰입니다.** 실제 출처는 `kiwoom -f json auth status`의 `data.appkey_source`가
+  보고합니다(`env` / `env_file` / `keychain` / `null`).
+
 ## Threat Model
 
 **방어 대상:**
@@ -66,7 +94,9 @@ AI 에이전트가 지문을 제시할 수 없어, 이 도구의 핵심 사용�
 - 사용자 계정을 이미 장악한 로컬 공격자 (키체인 잠금 해제 상태에서는 어떤
   앱 계층도 막지 못합니다)
 - 키움 서버 측 침해
-- `KIWOOM_TOKEN`을 셸 히스토리·프로세스 목록에 노출하는 사용 방식
+- `KIWOOM_TOKEN`·`KIWOOM_APPKEY`·`KIWOOM_SECRETKEY`를 셸 히스토리·프로세스
+  목록·이미지 레이어에 노출하는 사용 방식. 환경변수 경로를 여는 것은 컨테이너를
+  위한 선택이며, 그 환경에서는 `_FILE` 변형이 권장 형태입니다
 
 ## Reporting a Vulnerability
 

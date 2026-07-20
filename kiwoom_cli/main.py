@@ -29,6 +29,15 @@ EXIT_INPUT = 1   # Bad args (invalid option value, missing argument, malformed i
 EXIT_API = 2     # API or network error
 EXIT_AUTH = 3    # Token missing or expired
 
+# config.appkey_source()의 반환값 → 사람이 읽는 라벨. env 자격증명이 키체인을
+# 덮으므로 "설정됨 (키체인)"으로 뭉뚱그리면 실제 출처를 숨기게 된다.
+_APPKEY_SOURCE_LABELS = {
+    "env": "환경변수 KIWOOM_APPKEY",
+    "env_file": "환경변수 KIWOOM_APPKEY_FILE",
+    "keychain": "OS 키체인",
+    None: "미설정",
+}
+
 # Click's UsageError defaults to exit code 2, which collides with EXIT_API and
 # breaks the documented contract (1=입력오류, 2=API오류). Automation must be able
 # to tell "fix my arguments" from "the API failed".
@@ -338,6 +347,8 @@ def config_show(ctx):
     configured = config.is_configured(profile)
     profile_cfg = cfg.get("profiles", {}).get(profile, {})
     token_storage = config.get_token_storage(profile)
+    # env 자격증명이 키체인을 덮으므로 어느 쪽이 실제로 쓰였는지 함께 보고한다.
+    key_source = config.appkey_source(profile)
     if _get_format() == "json":
         envelope.emit(data={
             "profile": profile,
@@ -347,6 +358,7 @@ def config_show(ctx):
             # 실서버로 갔다.
             "domain": config.get_domain_key(profile),
             "configured": configured,
+            "appkey_source": key_source,
             "account": profile_cfg.get("account", ""),
             "token_storage": token_storage,
         })
@@ -354,10 +366,10 @@ def config_show(ctx):
     human(f"  프로필: [bold]{profile}[/]")
     human(f"  설정 파일: {config.CONFIG_FILE}")
     human(f"  도메인: {config.get_domain_key(profile)}")
-    human(f"  App Key: {'[dim]설정됨 (키체인)[/]' if configured else '(미설정)'}")
+    human(f"  App Key: {'[dim]설정됨 (' + _APPKEY_SOURCE_LABELS[key_source] + ')[/]' if configured else '(미설정)'}")
     human(f"  계좌번호: {profile_cfg.get('account', '(미설정)')}")
     human(f"  토큰 저장: {'환경변수 (KIWOOM_TOKEN)' if token_storage == 'env' else 'OS 키체인'}")
-    human(f"  보안: [bold]{'OS 키체인 저장' if configured else '미설정'}[/]")
+    human(f"  보안: [bold]{_APPKEY_SOURCE_LABELS[key_source] if configured else '미설정'}[/]")
 
 
 @config_cmd.command("set")
@@ -572,12 +584,14 @@ def auth_status(ctx):
     token_source = None
     if token is not None:
         token_source = "env" if os.environ.get("KIWOOM_TOKEN") else "keyring"
+    key_source = config.appkey_source(profile)
     if _get_format() == "json":
         envelope.emit(data={
             "profile": profile,
             # config show와 같은 이유로 실제 접속 도메인을 보고한다.
             "domain": config.get_domain_key(profile),
             "configured": configured,
+            "appkey_source": key_source,
             "has_token": token is not None,
             "token_source": token_source,
             "token_storage": token_storage,
@@ -590,6 +604,8 @@ def auth_status(ctx):
             human("[yellow]설정 필요.[/] 'kiwoom config setup' 으로 설정하세요.")
         return
     human(f"  프로필: [bold]{profile}[/]")
+    if configured:
+        human(f"  App Key: [dim]{_APPKEY_SOURCE_LABELS[key_source]}[/]")
     if token is not None:
         source_label = "환경변수 KIWOOM_TOKEN" if token_source == "env" else "키체인 저장됨"
         human(f"[green]토큰 있음[/] [dim]({source_label})[/]")

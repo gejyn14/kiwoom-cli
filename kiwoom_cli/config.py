@@ -11,10 +11,19 @@ Non-sensitive settings (domain, account, token_storage) remain in config.toml.
 token_storage: "keychain" (기본, auth login이 토큰을 키체인에 저장) 또는
 "env" (키체인에 저장하지 않음 — 사용자가 KIWOOM_TOKEN 환경변수로 직접 관리).
 
-Environment variables (non-sensitive only):
+Environment variables:
   KIWOOM_DOMAIN       도메인 (prod / mock)
   KIWOOM_ACCOUNT      계좌번호
   KIWOOM_PROFILE      활성 프로필 이름
+  KIWOOM_APPKEY       앱키 (+ KIWOOM_APPKEY_FILE)
+  KIWOOM_SECRETKEY    시크릿키 (+ KIWOOM_SECRETKEY_FILE)
+
+appkey/secretkey는 v2.15.0부터 환경변수를 지원한다. 종전에는 키체인 전용이었으나
+키체인이 없는 컨테이너(도커/포드먼)에서 토큰을 스스로 발급할 방법이 없었다 —
+호스트에서 발급한 KIWOOM_TOKEN을 주입하는 것이 유일한 경로였고, 그 토큰이
+만료되면 컨테이너는 복구할 수 없었다. env가 키체인을 이긴다 (KIWOOM_TOKEN·
+KIWOOM_DOMAIN과 같은 방향). 컨테이너에서는 프로세스 환경에 값이 남지 않는
+`_FILE` 변형을 쓴다. 어느 쪽이 쓰였는지는 appkey_source()가 보고한다.
 
 Config file: ~/.kiwoom/config.toml
 """
@@ -206,6 +215,43 @@ def get_domain(profile: str | None = None) -> str:
     return DOMAINS[get_domain_key(profile)]
 
 
+def _env_or_file(name: str) -> tuple[str | None, str | None]:
+    """환경변수 `NAME` 또는 `NAME_FILE`에서 값을 읽는다. 반환: (값, 출처).
+
+    출처는 "env" | "env_file" | None. 컨테이너(도커/포드먼) 시크릿은 파일로
+    마운트되므로 `_FILE` 변형을 함께 지원한다 — 프로세스 환경에 비밀 값이
+    남지 않으므로 컨테이너에서는 이쪽이 권장 형태다.
+
+    파일 내용은 strip한다: 시크릿 파일은 거의 항상 개행으로 끝나는데, 그대로
+    쓰면 appkey에 "\\n"이 붙어 인증이 실패한다.
+
+    빈 값은 "미설정"으로 취급한다 (빈 문자열 환경변수와 동일). 둘 다 설정된
+    경우는 어느 쪽이 이겼는지 조용히 달라지는 것보다 즉시 실패가 낫다.
+    """
+    direct = os.environ.get(name)
+    path = os.environ.get(f"{name}_FILE")
+    if direct and path:
+        err = click.ClickException(
+            f"{name}와 {name}_FILE이 동시에 설정되었습니다. 하나만 사용하세요."
+        )
+        err.code = "INVALID_INPUT"
+        raise err
+    if direct:
+        value = direct.strip()
+        return (value, "env") if value else (None, None)
+    if path:
+        try:
+            value = Path(path).read_text(encoding="utf-8").strip()
+        except OSError as e:
+            err = click.ClickException(
+                f"{name}_FILE을 읽을 수 없습니다 ({path}): {e}"
+            )
+            err.code = "INVALID_INPUT"
+            raise err from e
+        return (value, "env_file") if value else (None, None)
+    return (None, None)
+
+
 def _keyring_get(key: str) -> str | None:
     """keyring.get_password, treating keyring errors as "not stored".
 
@@ -250,7 +296,14 @@ def purge_legacy_credentials() -> None:
 
 
 def is_configured(profile: str | None = None) -> bool:
-    """True if an appkey is stored for the profile (and not in legacy format)."""
+    """True if an appkey is available — env/파일 자격증명 또는 키체인 저장분.
+
+    env 자격증명은 프로필과 무관하게 동작하므로 config.toml이 없는 컨테이너에서도
+    True가 된다 (그래야 auth login이 토큰을 발급할 수 있다).
+    """
+    value, _ = _env_or_file("KIWOOM_APPKEY")
+    if value:
+        return True
     if is_legacy_encrypted():
         return False
     p = resolve_profile(profile)
@@ -258,6 +311,9 @@ def is_configured(profile: str | None = None) -> bool:
 
 
 def get_appkey(profile: str | None = None) -> str:
+    value, _ = _env_or_file("KIWOOM_APPKEY")
+    if value:
+        return value
     if is_legacy_encrypted():
         return ""
     p = resolve_profile(profile)
@@ -265,10 +321,29 @@ def get_appkey(profile: str | None = None) -> str:
 
 
 def get_secretkey(profile: str | None = None) -> str:
+    value, _ = _env_or_file("KIWOOM_SECRETKEY")
+    if value:
+        return value
     if is_legacy_encrypted():
         return ""
     p = resolve_profile(profile)
     return _keyring_get(f"{p}:secretkey") or ""
+
+
+def appkey_source(profile: str | None = None) -> str | None:
+    """appkey가 어디서 왔는지: "env" | "env_file" | "keychain" | None.
+
+    env 자격증명은 키체인을 조용히 덮으므로(KIWOOM_TOKEN·KIWOOM_DOMAIN과 동일한
+    우선순위), 어느 쪽이 실제로 쓰였는지 auth status/config show가 보고할 수
+    있어야 한다. 값 자체는 절대 노출하지 않는다.
+    """
+    _, source = _env_or_file("KIWOOM_APPKEY")
+    if source:
+        return source
+    if is_legacy_encrypted():
+        return None
+    p = resolve_profile(profile)
+    return "keychain" if _keyring_get(f"{p}:appkey") is not None else None
 
 
 def set_appkey(value: str, profile: str | None = None) -> None:
@@ -282,7 +357,19 @@ def set_secretkey(value: str, profile: str | None = None) -> None:
 
 
 def get_token_storage(profile: str | None = None) -> str:
-    """토큰 저장 방식: "keychain" (OS 키체인) 또는 "env" (KIWOOM_TOKEN 직접 관리)."""
+    """토큰 저장 방식: "keychain" (OS 키체인) 또는 "env" (KIWOOM_TOKEN 직접 관리).
+
+    KIWOOM_TOKEN_STORAGE env > 프로필 설정 > "keychain".
+
+    **env 변수가 필요한 이유.** 키체인이 없는 컨테이너에서는 config.toml도 없어
+    프로필 설정을 쓸 방법이 없다. 그래서 env 자격증명으로 토큰을 발급해도
+    save_token이 키체인에 쓰려다 KEYCHAIN_UNAVAILABLE로 죽었다 — 자격증명을
+    넣어줘도 컨테이너가 토큰을 발급할 수 없었다. 잘못된 값은 다른 env 해석과
+    같은 방향으로 안전한 기본값(keychain)으로 강제한다.
+    """
+    env = os.environ.get("KIWOOM_TOKEN_STORAGE")
+    if env:
+        return env if env in TOKEN_STORAGES else "keychain"
     p = resolve_profile(profile)
     cfg = load_config()
     value = cfg.get("profiles", {}).get(p, {}).get("token_storage", "keychain")

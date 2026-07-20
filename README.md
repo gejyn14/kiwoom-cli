@@ -194,16 +194,25 @@ kiwoom config show          # 현재 설정 확인
 
 ### 환경변수 설정
 
-도메인, 계좌번호, 프로필, 토큰은 환경변수로도 설정 가능합니다.
+도메인, 계좌번호, 프로필, 토큰, 자격증명을 환경변수로 설정할 수 있습니다.
 
 ```bash
 export KIWOOM_DOMAIN="prod"       # prod 또는 mock
 export KIWOOM_ACCOUNT="1234567"   # 선택
 export KIWOOM_PROFILE="isa"       # 선택
 export KIWOOM_TOKEN="..."         # 선택: 키체인 대신 사용할 접근토큰 (샌드박스/CI용)
+
+# v2.15.0+: 키체인이 없는 환경에서 토큰을 직접 발급하려면
+export KIWOOM_APPKEY="..."
+export KIWOOM_SECRETKEY="..."
+# 또는 파일에서 (도커/포드먼 시크릿 — 프로세스 환경에 값이 남지 않아 권장)
+export KIWOOM_APPKEY_FILE="/run/secrets/kiwoom_appkey"
+export KIWOOM_SECRETKEY_FILE="/run/secrets/kiwoom_secretkey"
 ```
 
-appkey/secretkey는 보안을 위해 환경변수를 지원하지 않습니다. 반드시 `kiwoom config setup`으로 OS 키체인에 저장하세요. `KIWOOM_TOKEN`은 만료·폐기 가능한 접근토큰만 담는 통로로, 키체인에 접근할 수 없는 환경(샌드박스, CI, AI 에이전트)에서 사용합니다. 설정하면 키체인 토큰보다 우선합니다.
+**환경변수가 키체인을 덮습니다.** `KIWOOM_APPKEY`를 셸에 export해 두면 `config setup`으로 키체인에 저장한 값 대신 그 값이 쓰입니다. 실제로 어느 출처가 쓰였는지는 `kiwoom auth status`가 보고합니다.
+
+데스크톱에서는 `kiwoom config setup`으로 키체인에 저장하는 쪽을 권장합니다. 환경변수 경로는 키체인이 없는 환경(컨테이너, CI, 샌드박스)을 위한 것입니다 — v2.14.0까지는 주입한 `KIWOOM_TOKEN`이 만료되면 컨테이너가 스스로 복구할 수 없었습니다. `NAME`과 `NAME_FILE`을 동시에 설정하면 exit 1로 즉시 실패합니다.
 
 ### 토큰 저장 방식 (keychain vs env)
 
@@ -276,7 +285,9 @@ kiwoom api list 주문        # 키워드로 필터
 
 ### 샌드박스 환경 (키체인 접근 불가)
 
-샌드박스 셸, CI, 컨테이너에서는 OS 키체인을 읽을 수 없습니다. 이때는 본인 터미널에서 토큰을 발급받아 `KIWOOM_TOKEN`으로 전달하세요. appkey/secretkey는 키체인 밖으로 나가지 않고 토큰은 만료·폐기 가능합니다.
+샌드박스 셸, CI, 컨테이너에서는 OS 키체인을 읽을 수 없습니다. 두 가지 방법이 있습니다.
+
+**1) 토큰만 전달 (자격증명이 키체인 밖으로 나가지 않음).** 짧은 세션에 적합합니다.
 
 ```bash
 # 본인 터미널에서 (하루 1회 정도). env 모드라면 login이 export 명령을 그대로 출력
@@ -293,6 +304,23 @@ keychain 모드를 유지하면서 일회성으로 꺼내 쓰려면:
 ```bash
 export KIWOOM_TOKEN=$(security find-generic-password -s kiwoom-cli -a "default:token" -w)  # macOS
 ```
+
+**2) 자격증명 전달 (v2.15.0+).** 오래 도는 프로세스에 적합합니다 — 토큰이 만료돼도 스스로 재발급합니다. 주입한 토큰만 있으면 만료 시 복구할 수 없습니다.
+
+```bash
+# 파일로 주는 쪽을 권장 (프로세스 환경·docker inspect에 값이 남지 않음)
+export KIWOOM_APPKEY_FILE=/run/secrets/kiwoom_appkey
+export KIWOOM_SECRETKEY_FILE=/run/secrets/kiwoom_secretkey
+export KIWOOM_DOMAIN=mock
+export KIWOOM_TOKEN_STORAGE=env   # 필수: 없으면 발급한 토큰을 키체인에 쓰려다 실패합니다
+
+kiwoom auth login          # 컨테이너 안에서 직접 발급 (키체인 불필요)
+kiwoom auth status         # App Key: 환경변수 KIWOOM_APPKEY_FILE
+```
+
+`KIWOOM_TOKEN_STORAGE=env`를 빠뜨리면 `auth login`이 토큰 발급에는 성공하고도 저장 단계에서 `KEYCHAIN_UNAVAILABLE`(exit 1)로 끝납니다. 이 모드에서는 토큰이 어디에도 저장되지 않으므로, 출력된 값을 `KIWOOM_TOKEN`으로 전달해 쓰세요.
+
+이 경로는 자격증명을 컨테이너 안으로 들여보내므로, 실거래(`prod`)에 쓰기 전에 이미지·시크릿 관리 방식을 검토하세요.
 
 ## 명령어 구조
 
