@@ -435,8 +435,12 @@ def sell(code: str, qty: int, price: float, order_type: str | None, exchange: st
 def modify(orig_order_no: str, code: str, qty: int, price: float, exchange: str | None, mdfy_cond_uv: int, stop: float, confirm: bool, dry_run: bool, client_order_id: str | None):
     """주식 정정주문 (국내 kt10002 / 미국 ust20002).
 
+    QTY 0은 국내에서 "잔량 전부 정정"이고(kt10002/kt10008/kt50002 스펙),
+    미국(ust20002)은 요청 스펙에 수량 필드가 없어 **0만** 받는다.
+
     예: kiwoom order modify 0000139 005930 1 70000 --confirm
-        kiwoom order modify 000000123 NVDA 5 215.5 --confirm
+        kiwoom order modify 0000139 005930 0 70000 --confirm   # 잔량 전부
+        kiwoom order modify 000000123 NVDA 0 215.5 --confirm   # 미국은 항상 0
     """
     code = strip_kr_market_prefix(code)
     if is_us_symbol(code, exchange):
@@ -449,10 +453,12 @@ def modify(orig_order_no: str, code: str, qty: int, price: float, exchange: str 
         fail_input("--stop은 미국주식에서만 사용합니다.")
     dmst_stex_tp = exchange or "KRX"
     # 정정 수량 검증은 US 분기 뒤에 온다 — 국내와 미국의 계약이 다르기 때문이다.
-    # 국내 kt10002는 mdfy_qty를 실제로 보내므로 양수여야 하고(kwcli도 mdfy_qty를
-    # type=quantity로 선언한다), 미국 ust20002는 요청 스펙에 수량 필드 자체가
+    # 국내 kt10002는 mdfy_qty를 실제로 보내고 **0을 특수값으로 정의한다**:
+    # "단위: 1주, '0' 입력 시 잔량 전부 정정" (docs/미국 REST API 문서.xlsx
+    # 시트 kt10002 Request). 부분체결 뒤 남은 잔량을 재호가하는 문서화된
+    # 관용구라 allow_zero=True다. 미국 ust20002는 요청 스펙에 수량 필드 자체가
     # 없어 us_order_ops.modify가 0 이외의 값을 거부한다.
-    validate_order_qty(qty, label="정정수량")
+    validate_order_qty(qty, allow_zero=True, label="정정수량")
     kr_price = _kr_price_or_exit(price)
     body = {
         "dmst_stex_tp": dmst_stex_tp,
@@ -754,7 +760,8 @@ def credit_modify(orig_order_no: str, code: str, qty: int, price: float, dmst_st
 
     예: kiwoom order credit modify 0000139 005930 1 70000 --confirm
     """
-    validate_order_qty(qty, label="신용 정정수량")
+    # kt10002와 같은 비고: "'0' 입력 시 잔량 전부 정정" (kt10008 Request)
+    validate_order_qty(qty, allow_zero=True, label="신용 정정수량")
     kr_price = _kr_price_or_exit(price)
     body = {
         "dmst_stex_tp": dmst_stex_tp,
@@ -899,7 +906,8 @@ def gold_modify(orig_order_no: str, code: str, qty: int, price: float, confirm: 
 
     예: kiwoom order gold modify 0000139 M04020000 1 90000 --confirm
     """
-    validate_order_qty(qty, label="금현물 정정수량")
+    # kt10002와 같은 비고: "'0' 입력 시 잔량 전부 정정" (kt50002 Request)
+    validate_order_qty(qty, allow_zero=True, label="금현물 정정수량")
     kr_price = _kr_price_or_exit(price)
     body = {
         "orig_ord_no": orig_order_no,

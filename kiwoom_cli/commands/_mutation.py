@@ -96,20 +96,34 @@ def validate_order_qty(qty: int, *, allow_zero: bool = False,
 
     판정은 `is_valid_order_qty`에 위임한다 — 임계값 정의는 그쪽 한 곳뿐이다.
 
-    근거는 키움이 직접 배포하는 kwcli 0.1.1의 `maps/arguments.csv`다 —
-    주문·정정 수량(ord_qty/mdfy_qty)은 `type=quantity`, 취소 수량(cncl_qty)은
-    `type=cancel_quantity`로 선언되고, `argument_maps.py`의 TYPE_PARSERS가 각각
-    `positive_int_string`(`<= 0` 거부)과 `nonnegative_int_string`(0 허용)에
-    매핑한다. allow_zero=True가 후자에 해당한다.
-
-    **allow_zero=True는 취소 경로에만 쓸 것.** 매수/매도/정정에 0을 허용하면
+    **allow_zero=True는 취소·정정 경로에만 쓸 것.** 매수/매도에 0을 허용하면
     ord_qty="0"이 그대로 전송된다 — 이 가드 이전의 실제 동작이 그랬다.
 
-    취소에서 0을 허용하는 것은 우리 문서화된 계약(`--qty 0` = 전량취소, 그리고
-    `--qty`의 기본값이 0)이자 kwcli의 credit-cancel/gold-cancel 선언과도 같다.
-    kwcli는 `domestic orders cancel --qty`만 `quantity`(양수)로 선언해 자기
-    형제 명령들과 어긋나는데, 그쪽을 따르면 우리 기본값 0이 항상 거부되므로
-    따르지 않는다 — kwcli 내부 불일치로 보고 우리 계약을 유지한다.
+    ── 0을 허용하는 두 경로와 그 근거 ────────────────────────────────
+    두 근거가 서로 어긋난다. **REST 스펙을 따른다** (스펙은 API가 실제로 받는
+    값을 정의하고, kwcli는 그 위에 얹은 한 CLI의 입력 정책일 뿐이다).
+
+    - **취소**(cncl_qty, kt10003/kt10009/kt50003): 스펙 비고가 "'0' 입력시
+      잔량 전부 취소"다. 우리 문서화된 계약(`--qty 0` = 전량취소, `--qty`
+      기본값 0)과도 같다.
+    - **정정**(mdfy_qty, kt10002/kt10008/kt50002): 스펙 비고가 "단위: 1주,
+      '0' 입력 시 잔량 전부 정정"이다 (docs/미국 REST API 문서.xlsx의 해당
+      시트 Request). 부분체결 뒤 남은 알 수 없는 잔량을 재호가하는 문서화된
+      관용구다. v2.12까지 mdfy_qty="0"이 실제로 전송됐고, D5의 하한 가드가
+      이를 exit 1로 막았다가 여기서 되살렸다.
+
+      주의: 구 워크북 `docs/키움 REST API 문서.xlsx`에는 mdfy_qty 행에 비고
+      칸 자체가 없다 (cncl_qty에는 있다). 두 워크북이 다르며, 미국 워크북
+      쪽이 더 완전하다(메모리: 216/217 커버).
+
+    **kwcli는 반대로 선언한다** — 숨기지 않고 적어 둔다. kwcli 0.1.1의
+    `maps/arguments.csv`는 ord_qty/mdfy_qty를 `type=quantity`
+    (=`positive_int_string`, `<= 0` 거부), cncl_qty를 `type=cancel_quantity`
+    (=`nonnegative_int_string`, 0 허용)로 선언한다. 즉 kwcli 기준이면 정정 0은
+    거부된다. 그러나 kwcli는 이 지점에서 **자기 자신과도 어긋난다**:
+    `domestic orders cancel --qty`만 `quantity`(양수)로 선언해 형제
+    `credit-cancel`/`gold-cancel`(nonnegative)과 다르다. 한 CLI의 입력 정책이
+    스펙 비고를 뒤집을 근거는 되지 못한다고 보고 스펙을 따른다.
     """
     if not is_valid_order_qty(qty, allow_zero=allow_zero):
         limit = "0 이상" if allow_zero else "1 이상"

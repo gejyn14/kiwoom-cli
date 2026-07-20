@@ -138,15 +138,66 @@ def test_gold_buy_rejects_zero_qty(runner):
     assert result.exit_code == 1
 
 
-def test_modify_rejects_zero_qty(runner):
-    """국내 정정 수량 0 — kwcli는 mdfy_qty를 `quantity`(양수)로 선언한다."""
+def test_modify_zero_qty_means_modify_entire_remainder(runner):
+    """정정 수량 0 = 잔량 전부 정정. 스펙에 명시된 관용구다.
+
+    근거: docs/미국 REST API 문서.xlsx 시트 kt10002/kt10008/kt50002의 Request
+    `mdfy_qty` 비고 — "단위: 1주, '0' 입력 시 잔량 전부 정정". 부분체결 뒤
+    남은 알 수 없는 잔량을 재호가할 때 쓰는 문서화된 방법이다.
+
+    수량 하한 가드(D5)가 이 관용구를 exit 1로 막았었다. 게이트가 아니라
+    가드가 통과했는지 보려면 --confirm으로 게이트를 먼저 넘긴 뒤 **전송된
+    body**를 봐야 한다.
+    """
     result, sent = _invoke(
         runner,
         ["-f", "json", "order", "modify", "0000139", "005930", "0", "70000", "--confirm"],
         KR,
     )
-    assert sent == []
+    assert result.exit_code == 0, result.output
+    assert sent == [("kt10002", {
+        "dmst_stex_tp": "KRX", "orig_ord_no": "0000139", "stk_cd": "005930",
+        "mdfy_qty": "0", "mdfy_uv": "70000", "mdfy_cond_uv": "",
+    })]
+
+
+def test_credit_modify_zero_qty_means_modify_entire_remainder(runner):
+    """kt10008도 같은 비고를 갖는다 (신용 정정)."""
+    result, sent = _invoke(
+        runner,
+        ["-f", "json", "order", "credit", "modify", "0000139", "005930", "0",
+         "70000", "--confirm"],
+        KR,
+    )
+    assert result.exit_code == 0, result.output
+    assert sent[0][0] == "kt10008"
+    assert sent[0][1]["mdfy_qty"] == "0"
+
+
+def test_gold_modify_zero_qty_means_modify_entire_remainder(runner):
+    """kt50002도 같은 비고를 갖는다 (금현물 정정)."""
+    result, sent = _invoke(
+        runner,
+        ["-f", "json", "order", "gold", "modify", "0000139", "M04020000", "0",
+         "90000", "--confirm"],
+        KR,
+    )
+    assert result.exit_code == 0, result.output
+    assert sent[0][0] == "kt50002"
+    assert sent[0][1]["mdfy_qty"] == "0"
+
+
+@pytest.mark.parametrize("args", [
+    ["order", "modify", "0000139", "005930", "--", "-5", "70000"],
+    ["order", "credit", "modify", "0000139", "005930", "--", "-5", "70000"],
+    ["order", "gold", "modify", "0000139", "M04020000", "--", "-5", "90000"],
+])
+def test_modify_still_rejects_negative_qty(runner, args):
+    """0을 되살린 것이 음수까지 열어준 것은 아니다 — 하한은 0으로 내려갔을 뿐이다."""
+    result, sent = _invoke(runner, ["-f", "json", *args, "--confirm"], KR)
+    assert sent == [], f"음수 정정수량이 전송되었다: {sent}"
     assert result.exit_code == 1
+    assert _err_code(result) == "INVALID_INPUT"
 
 
 def test_cancel_rejects_negative_qty(runner):
