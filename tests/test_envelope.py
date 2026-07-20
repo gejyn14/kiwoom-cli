@@ -631,3 +631,27 @@ def test_client_domain_and_meta_env_cannot_diverge(monkeypatch, tmp_path):
                 f"보고한 env={meta['env']} 인데 실제 접속 도메인은 {c.domain}"
             )
             assert c.profile == meta["profile"]
+
+
+def test_partial_failures_appears_only_when_supplied(capsys):
+    """envelope.py에 build_doc 헬퍼가 없어 계획이 예고한 capsys 경로를 쓴다."""
+    from kiwoom_cli import envelope as env
+
+    env.emit(data={"kr": None}, partial_failures={"kr": "NOT_FOUND"})
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["meta"]["partial_failures"] == {"kr": "NOT_FOUND"}
+    assert doc["ok"] is True, "부분 실패는 ok를 뒤집지 않는다 (ok ≡ error is None 불변식)"
+
+    env.emit(data={"kr": {}})
+    plain = json.loads(capsys.readouterr().out)
+    assert "partial_failures" not in plain["meta"], \
+        "성공 시에는 키 자체가 없어야 한다 (meta.fields_unmatched 선례)"
+
+
+def test_partial_failures_empty_dict_is_omitted(capsys):
+    """빈 dict는 '실패한 레그 없음'이므로 키를 만들지 않는다."""
+    from kiwoom_cli import envelope as env
+
+    env.emit(data={"kr": {}}, partial_failures={})
+    doc = json.loads(capsys.readouterr().out)
+    assert "partial_failures" not in doc["meta"]

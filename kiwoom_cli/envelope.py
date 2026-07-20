@@ -175,8 +175,13 @@ def _collect_matched(data: Any, fields: list[str], found: set[str]) -> None:
             _collect_matched(v, fields, found)
 
 
-def emit(data: Any = None, *, error: dict[str, Any] | None = None) -> None:
-    """Envelope 전체를 단일 JSON 문서로 stdout에 출력."""
+def emit(data: Any = None, *, error: dict[str, Any] | None = None,
+         partial_failures: dict[str, str] | None = None) -> None:
+    """Envelope 전체를 단일 JSON 문서로 stdout에 출력.
+
+    partial_failures: 여러 레그를 합치는 명령(계좌 kr/us 등)에서 일부만
+    실패했을 때 {"레그이름": "ERROR_CODE"}. 비어 있으면 키를 만들지 않는다.
+    """
     ctx = click.get_current_context(silent=True)
     obj = ctx.obj if ctx is not None and isinstance(ctx.obj, dict) else {}
     fields = obj.get("fields")
@@ -189,6 +194,12 @@ def emit(data: Any = None, *, error: dict[str, Any] | None = None) -> None:
     meta = build_meta()
     if unmatched:
         meta["fields_unmatched"] = unmatched
+    if partial_failures:
+        # 조건부 meta 키. meta.fields_unmatched와 같은 선례를 따른다.
+        # ok/exit code/data 모양을 건드리지 않으므로 AGENTS.md의 "한쪽만
+        # 실패하면 exit 0 + 해당 키 null" 약속을 깨지 않는다. null이 '그
+        # 계좌가 없다'인지 '조회가 깨졌다'인지 구별하기 위한 것이다.
+        meta["partial_failures"] = partial_failures
     doc = {
         "ok": error is None,
         "schema": SCHEMA,
