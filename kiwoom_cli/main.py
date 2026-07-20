@@ -478,13 +478,27 @@ def auth_logout(ctx):
         _fail_not_configured()
     # 폐기 실패(KiwoomAPIError)는 전역 핸들러가 envelope/exit 2로 처리
     with KiwoomClient() as c:
-        c.revoke_token()
+        outcome = c.revoke_token()
     if _get_format() == "json":
-        envelope.emit(data={"profile": profile, "revoked": True})
+        envelope.emit(data={
+            "profile": profile,
+            "revoked": True,
+            "token_source": outcome["token_source"],
+            "keychain_token_deleted": outcome["keychain_token_deleted"],
+        })
+        return
+    human("[green]토큰 폐기 완료.[/]")
+    if outcome["token_source"] == "env":
+        # 폐기된 것은 env 토큰이다. 예전에는 여기서 키체인 토큰까지 지워
+        # 폐기한 적 없는 토큰을 폐기 불가능하게 만들었다 — 무엇을 하지
+        # 않았는지까지 정확히 알린다.
+        human("  폐기 대상: [bold]KIWOOM_TOKEN 환경변수의 토큰[/] (이제 무효)")
+        human("  [yellow]unset KIWOOM_TOKEN 으로 셸에서 제거하세요.[/]")
+        if not outcome["keychain_token_deleted"]:
+            human("  키체인 토큰은 [bold]삭제하지 않았습니다[/] — 별개의 토큰이라 "
+                  "그대로 유효합니다. 폐기하려면 unset 후 다시 실행하세요.")
     else:
-        human("[green]토큰 폐기 완료.[/]")
-    if os.environ.get("KIWOOM_TOKEN"):
-        human("[yellow]KIWOOM_TOKEN 환경변수가 설정되어 있어 이 셸에서는 해당 토큰이 계속 사용됩니다. unset KIWOOM_TOKEN 으로 제거하세요.[/]")
+        human("  폐기 대상: [bold]키체인에 저장된 토큰[/] (키체인에서 삭제됨)")
 
 
 @auth_cmd.command("status")

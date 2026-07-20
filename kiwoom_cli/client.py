@@ -6,6 +6,7 @@ Handles authentication headers, pagination, and error handling.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 import click
@@ -217,10 +218,20 @@ class KiwoomClient:
             self.token = token
         return token
 
-    def revoke_token(self) -> None:
-        """Revoke the current access token via au10002."""
+    def revoke_token(self) -> dict[str, Any]:
+        """Revoke the current access token via au10002.
+
+        어느 토큰을 폐기했고 키체인 항목을 지웠는지를 돌려준다
+        (`{"token_source": "env"|"keychain", "keychain_token_deleted": bool}`).
+
+        auth.load_token은 KIWOOM_TOKEN을 키체인보다 먼저 반환하므로, env 토큰을
+        폐기해 놓고 키체인의 {profile}:token을 지우면 **폐기한 적 없는 다른 살아
+        있는 토큰**을 없애 영영 폐기 불가능하게 만든다. 그래서 키체인 항목은
+        그것이 방금 폐기한 바로 그 토큰일 때만 지운다.
+        """
         ak = config.get_appkey(profile=self.profile)
         sk = config.get_secretkey(profile=self.profile)
+        env_token = os.environ.get("KIWOOM_TOKEN")
         token = self.token or auth.load_token(profile=self.profile)
         if not token:
             raise click.ClickException("No token to revoke.")
@@ -230,5 +241,15 @@ class KiwoomClient:
             headers={"content-type": CONTENT_TYPE, "api-id": "au10002"},
             json={"appkey": ak, "secretkey": sk, "token": token},
         )
-        auth.delete_token(profile=self.profile)
+        from_env = bool(env_token) and token == env_token
+        # 키체인이 방금 폐기한 토큰을 들고 있으면 출처와 무관하게 지운다
+        # (죽은 토큰을 남기면 auth status가 유효한 것처럼 보고한다).
+        keychain_token = auth.load_keychain_token(profile=self.profile)
+        delete_keychain = keychain_token == token or not from_env
+        if delete_keychain:
+            auth.delete_token(profile=self.profile)
         self.token = None
+        return {
+            "token_source": "env" if from_env else "keychain",
+            "keychain_token_deleted": bool(delete_keychain and keychain_token is not None),
+        }

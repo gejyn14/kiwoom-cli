@@ -51,6 +51,17 @@ def load_token(profile: str | None = None) -> str | None:
     return config._keyring_get(f"{p}:token")
 
 
+def load_keychain_token(profile: str | None = None) -> str | None:
+    """KIWOOM_TOKEN을 무시하고 키체인에 저장된 토큰만 읽는다.
+
+    load_token은 env를 우선하므로 "지금 쓰는 토큰"과 "키체인에 있는 토큰"을
+    구분할 수 없다. 폐기(revoke)처럼 어느 쪽을 지울지 결정해야 하는 곳에서
+    쓴다 — 폐기한 적 없는 토큰을 지워 폐기 불가능하게 만드는 것을 막는다.
+    """
+    p = config.resolve_profile(profile)
+    return config._keyring_get(f"{p}:token")
+
+
 def delete_token(profile: str | None = None) -> None:
     p = config.resolve_profile(profile)
     try:

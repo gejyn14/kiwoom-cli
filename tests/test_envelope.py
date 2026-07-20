@@ -487,12 +487,17 @@ def test_auth_login_failure_table_mode_exits_2(runner, monkeypatch, configured_d
 def test_auth_logout_json_envelope(runner, monkeypatch, configured_default):
     from kiwoom_cli.client import KiwoomClient as RealClient
 
-    monkeypatch.setattr(RealClient, "revoke_token", lambda self: None)
+    # revoke_token은 어느 토큰을 폐기했는지를 돌려준다 (envelope에 그대로 실림)
+    monkeypatch.setattr(
+        RealClient, "revoke_token",
+        lambda self: {"token_source": "keychain", "keychain_token_deleted": True},
+    )
     result = runner.invoke(cli, ["-f", "json", "auth", "logout"])
     assert result.exit_code == 0, result.output
     doc = json.loads(result.stdout)
     assert doc["ok"] is True
     assert doc["data"]["revoked"] is True
+    assert doc["data"]["token_source"] == "keychain"
 
 
 def test_config_profiles_json_envelope(runner, configured_default):

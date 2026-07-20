@@ -333,3 +333,81 @@ def test_auth_required_message_defaults_to_login_when_keychain_readable(monkeypa
     assert doc["error"]["code"] == "AUTH_REQUIRED"
     assert "auth login" in doc["error"]["message"]
     assert "KIWOOM_TOKEN" not in doc["error"]["message"]
+
+
+# ── auth logout: 폐기한 토큰과 지운 토큰이 일치하는가 ──────────────────
+
+
+@pytest.fixture
+def logout_ready(monkeypatch):
+    """logout이 필요한 최소 설정 + revoke HTTP 응답 mock."""
+    from kiwoom_cli import client as client_mod
+
+    keyring.set_password(config.KEYRING_SERVICE, "default:appkey", "ak")
+    keyring.set_password(config.KEYRING_SERVICE, "default:secretkey", "sk")
+    monkeypatch.delenv("KIWOOM_TOKEN", raising=False)
+
+    posted: dict = {}
+
+    class _Resp:
+        status_code = 200
+
+        def json(self):
+            return {"return_code": 0}
+
+        def raise_for_status(self):
+            return None
+
+    def _post(self, url, **kwargs):
+        posted.update(kwargs.get("json") or {})
+        return _Resp()
+
+    monkeypatch.setattr(client_mod.httpx.Client, "post", _post)
+    return posted
+
+
+def test_logout_with_env_token_does_not_delete_keychain_token(
+    logout_ready, monkeypatch,
+):
+    """KIWOOM_TOKEN이 있으면 그 토큰이 폐기된다. 키체인의 별개 토큰까지
+    지워버리면 그 토큰은 영영 폐기할 수 없다."""
+    monkeypatch.setenv("KIWOOM_TOKEN", "env-token")
+    keyring.set_password(config.KEYRING_SERVICE, "default:token", "keychain-token")
+
+    result = CliRunner().invoke(cli, ["auth", "logout"])
+
+    assert result.exit_code == 0, result.output
+    assert logout_ready["token"] == "env-token"
+    assert (
+        keyring.get_password(config.KEYRING_SERVICE, "default:token")
+        == "keychain-token"
+    ), "폐기하지 않은 키체인 토큰이 삭제됐다"
+    # 메시지가 실제로 한 일과 일치해야 한다
+    assert "삭제하지 않았습니다" in result.output
+    assert "unset KIWOOM_TOKEN" in result.output
+
+
+def test_logout_json_reports_which_token_was_revoked(logout_ready, monkeypatch):
+    import json as _json
+
+    monkeypatch.setenv("KIWOOM_TOKEN", "env-token")
+    keyring.set_password(config.KEYRING_SERVICE, "default:token", "keychain-token")
+
+    result = CliRunner().invoke(cli, ["-f", "json", "auth", "logout"])
+
+    assert result.exit_code == 0, result.output
+    doc = _json.loads(result.stdout)
+    assert doc["ok"] is True
+    assert doc["data"]["token_source"] == "env"
+    assert doc["data"]["keychain_token_deleted"] is False
+
+
+def test_logout_without_env_token_deletes_keychain_token(logout_ready):
+    keyring.set_password(config.KEYRING_SERVICE, "default:token", "keychain-token")
+
+    result = CliRunner().invoke(cli, ["auth", "logout"])
+
+    assert result.exit_code == 0, result.output
+    assert logout_ready["token"] == "keychain-token"
+    assert keyring.get_password(config.KEYRING_SERVICE, "default:token") is None
+    assert "키체인" in result.output
