@@ -67,6 +67,29 @@ REALTIME_TYPES: dict[str, tuple[str, str]] = {
     "1h": ("VI발동/해제", "변동성완화장치 발동/해제"),
 }
 
+# 미국주식 실시간 타입. REALTIME_TYPES와 **일부러 분리**한다.
+#
+# REALTIME_TYPES는 두 가지로 쓰인다: `stream types` 목록과 `stream custom`의
+# 입력 검증(commands/stream.py). 그런데 run_stream은 URL을 /api/dostk/websocket로
+# 고정하고 있고, US 실시간은 스펙상 /api/us/websocket이라는 **다른 엔드포인트**다
+# (docs/미국 REST API 문서.xlsx 시트 '미국주식 10호가(FT)'의 URL 항목).
+# 여기에 FT를 넣으면 `stream custom FT NVDA`가 검증을 통과한 뒤 국내 소켓에
+# 붙어 오지 않을 데이터를 기다리며 매달린다 — 지금의 깔끔한 거부보다 나쁘다.
+# 그래서 이 맵은 **표시 전용**이다: 이미 들어온 FT 프레임(녹화 재생 등)의
+# type_name을 풀어주기만 하고 구독 가능 목록에는 넣지 않는다.
+# US 스트리밍을 실제로 지원하려면 엔드포인트 분기와 item 페이로드 형식
+# ({"jmcode","stex_tp"})까지 필요하다 — 별도 청크.
+US_REALTIME_TYPES: dict[str, tuple[str, str]] = {
+    "FT": ("미국주식 10호가", "미국주식 매도/매수 10단계 호가"),
+    # 형제 F4(주문확인)/F5(체결)/FE(체결가)는 아직 미등록 — 별도 청크.
+}
+
+
+def type_name_of(type_code: str) -> str:
+    """실시간 타입 코드 -> 표시용 이름. 국내/미국 양쪽 맵을 본다."""
+    entry = REALTIME_TYPES.get(type_code) or US_REALTIME_TYPES.get(type_code)
+    return entry[0] if entry else "?"
+
 WS_DOMAINS = {
     "prod": "wss://api.kiwoom.com:10000",
     "mock": "wss://mockapi.kiwoom.com:10000",
@@ -215,10 +238,17 @@ def handle_message(data: dict[str, Any], state: dict[str, Any]) -> list[dict[str
         type_code = entry.get("type", "")
         event: dict[str, Any] = {
             "type": type_code,
-            "type_name": REALTIME_TYPES.get(type_code, ("?", ""))[0],
+            "type_name": type_name_of(type_code),
             "symbol": entry.get("item") or fields.get("symbol"),
             "ts": fields.pop("ts", None),
         }
+        # 미국주식 프레임은 거래소코드를 values가 아니라 entry의 형제 키
+        # stexTp로 보낸다 (예: {"item":"NVDA","stexTp":"ND"}). 같은 티커가
+        # 거래소별로 갈리므로 버리면 안 된다. 국내 프레임엔 없는 키라 있을
+        # 때만 싣는다 — 없는데 만들어내면 국내 이벤트에 빈 컬럼이 생긴다.
+        exchange = entry.get("stexTp")
+        if exchange:
+            event["exchange"] = exchange
         fields.pop("symbol", None)
         event.update(fields)
         events.append(event)
@@ -321,7 +351,7 @@ async def recv_ack(
 def _print_entry_table(entry: dict[str, Any]) -> None:
     """REAL 항목 한 건을 테이블 모드 한 줄로 출력 (기존 출력 형식 그대로)."""
     type_code = entry.get("type", "")
-    type_name = REALTIME_TYPES.get(type_code, ("?", ""))[0]
+    type_name = type_name_of(type_code)
     item_code = entry.get("item", "")
     values = entry.get("values", {})
     if isinstance(values, list) and values:

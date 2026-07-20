@@ -206,6 +206,147 @@ class TestQuoteBook0D:
         assert ev["acc_volume"] == 30379650
 
 
+# ── FT 미국주식 10호가 ────────────────────────────────
+
+# docs/미국 REST API 문서.xlsx 시트 '미국주식 10호가(FT)'의 Response Example
+# 원문. FT는 0D와 **같은 필드 ID 체계**를 쓴다 (21 시간, 41~50 매도N호가,
+# 51~60 매수N호가, 61~70 매도N호가잔량, 71~80 매수N호가잔량). 0D와 다른 점은
+# 가격이 원화 정수가 아니라 달러 소수(4자리)이고, values 바깥에 거래소코드
+# stexTp가 붙는다는 것.
+_SPEC_FT_ASKS = ["+198.5400", "+198.6100", "+198.6200", "+198.6300", "+198.6500",
+                 "+198.6600", "+198.6700", "+198.6800", "+198.7200", "+198.7400"]
+_SPEC_FT_BIDS = ["+198.4800", "+198.4700", "+198.4600", "+198.4500", "+198.4400",
+                 "+198.4300", "+198.4200", "+198.4100", "+198.4000", "+198.3700"]
+_SPEC_FT_ASK_QTY = ["2", "20", "139", "20", "250", "28", "20", "20", "90", "1"]
+_SPEC_FT_BID_QTY = ["22", "1", "2", "115", "16", "20", "1", "118", "122", "20"]
+
+_SPEC_FT_VALUES = {"21": "215300"}
+for _i in range(10):
+    _SPEC_FT_VALUES[str(41 + _i)] = _SPEC_FT_ASKS[_i]
+    _SPEC_FT_VALUES[str(51 + _i)] = _SPEC_FT_BIDS[_i]
+    _SPEC_FT_VALUES[str(61 + _i)] = _SPEC_FT_ASK_QTY[_i]
+    _SPEC_FT_VALUES[str(71 + _i)] = _SPEC_FT_BID_QTY[_i]
+# 직전대비 81~100은 스펙 예시에서 선행 공백이 붙은 " 0"으로 온다 (원문 그대로).
+for _i in range(81, 101):
+    _SPEC_FT_VALUES[str(_i)] = " 0"
+_SPEC_FT_VALUES.update({"121": "590", "122": " 0", "125": "437", "126": " 0"})
+del _i
+
+
+def spec_ft_frame(item: str = "NVDA") -> dict:
+    """스펙 Response Example 그대로의 FT REAL 프레임 (서버가 보내는 모양).
+
+    0D와 달리 entry에 stexTp(거래소코드)가 형제 키로 붙는다.
+    """
+    return {
+        "trnm": "REAL",
+        "data": [{
+            "type": "FT", "name": "미국10호가", "item": item, "stexTp": "ND",
+            "values": dict(_SPEC_FT_VALUES),
+        }],
+    }
+
+
+class TestQuoteBookFT:
+    """FT(미국주식 10호가). 필드 ID는 0D와 완전히 같아 D2에서 이미 매핑됐고,
+    남은 결함은 US 고유 요소(타입명 미등록, 거래소코드 유실)다."""
+
+    def test_ft_reuses_0d_field_id_layout(self):
+        """FT와 0D가 같은 ID를 공유한다는 사실 자체를 고정한다.
+
+        누군가 한쪽만 보고 41~80을 재배치하면 다른 쪽이 조용히 망가진다.
+        분류 상수는 api_id 문맥이 없으므로 이 공유는 되돌릴 수 없는 결합이다.
+        """
+        from kiwoom_cli.normalize import WS_CANONICAL
+        for i in range(10):
+            assert WS_CANONICAL[str(41 + i)] == f"ask{i + 1}"
+            assert WS_CANONICAL[str(51 + i)] == f"bid{i + 1}"
+            assert WS_CANONICAL[str(61 + i)] == f"ask_qty{i + 1}"
+            assert WS_CANONICAL[str(71 + i)] == f"bid_qty{i + 1}"
+        assert WS_CANONICAL["21"] == "ts"
+
+    def test_ask_and_bid_not_swapped_numerically(self):
+        """한글 필드명만 믿지 않고 값으로 검증한다 (0D와 같은 판정 기준).
+        매도는 오름차순, 매수는 내림차순, ask1 > bid1."""
+        out = normalize_ws_values(dict(_SPEC_FT_VALUES))
+        asks = [out[f"ask{i}"] for i in range(1, 11)]
+        bids = [out[f"bid{i}"] for i in range(1, 11)]
+        assert asks == [198.54, 198.61, 198.62, 198.63, 198.65,
+                        198.66, 198.67, 198.68, 198.72, 198.74]
+        assert bids == [198.48, 198.47, 198.46, 198.45, 198.44,
+                        198.43, 198.42, 198.41, 198.40, 198.37]
+        assert asks[0] > bids[0], "ask1이 bid1보다 낮다 — 매도/매수가 뒤바뀜"
+        assert asks == sorted(asks), "매도호가가 오름차순이 아님"
+        assert bids == sorted(bids, reverse=True), "매수호가가 내림차순이 아님"
+
+    def test_decimal_prices_survive_as_floats(self):
+        """0D(원화 정수)와 달리 FT는 달러 소수다. int로 뭉개지면 안 된다."""
+        out = normalize_ws_values(dict(_SPEC_FT_VALUES))
+        assert isinstance(out["ask1"], float)
+        assert out["ask1"] == 198.54
+
+    def test_sub_cent_precision_not_truncated(self):
+        """페니 주식($0.0012)의 4자리 소수가 2자리로 잘리면 안 된다.
+        정규화 경로는 문자열이 아니라 float를 내므로 소수 자릿수가 보존된다."""
+        out = normalize_ws_values({"41": "+0.0012", "51": "+0.0011"})
+        assert out["ask1"] == 0.0012
+        assert out["bid1"] == 0.0011
+
+    def test_quantities_are_ints(self):
+        out = normalize_ws_values(dict(_SPEC_FT_VALUES))
+        assert out["ask_qty1"] == 2 and out["bid_qty1"] == 22
+        assert all(isinstance(out[f"ask_qty{i}"], int) for i in range(1, 11))
+        assert all(isinstance(out[f"bid_qty{i}"], int) for i in range(1, 11))
+
+    def test_type_name_is_resolved(self):
+        """REALTIME_TYPES에 FT가 없어 모든 US 호가 이벤트가 '?'로 나갔다."""
+        ev = handle_message(spec_ft_frame(), {})[0]
+        assert ev["type_name"] != "?", "FT 타입명이 REALTIME_TYPES에 없음"
+        assert ev["type_name"] == "미국주식 10호가"
+
+    def test_exchange_code_preserved(self):
+        """stexTp(거래소코드)는 values 바깥 형제 키라 handle_message가 통째로
+        버렸다. 미국주식은 같은 티커가 거래소별로 갈리므로 유실되면 안 된다."""
+        ev = handle_message(spec_ft_frame(), {})[0]
+        assert ev.get("exchange") == "ND", "거래소코드(stexTp)가 유실됨"
+
+    def test_korean_frame_has_no_exchange_key(self):
+        """국내 프레임에는 stexTp가 없다 — 없는데 키를 만들어내면 안 된다."""
+        ev = handle_message(spec_0d_frame(), {})[0]
+        assert "exchange" not in ev
+
+    def test_ft_is_not_advertised_as_subscribable(self):
+        """FT는 표시 전용이다 — 구독 가능 목록에 넣으면 안 된다.
+
+        run_stream은 /api/dostk/websocket에 고정돼 있고 US 실시간은
+        /api/us/websocket이라 프레임이 오지 않는다. REALTIME_TYPES에 넣으면
+        `stream custom FT`가 검증을 통과해 국내 소켓에서 무한정 매달린다.
+        두 맵을 합치면 이 테스트가 깨진다.
+        """
+        from kiwoom_cli.streaming import REALTIME_TYPES, US_REALTIME_TYPES
+        assert "FT" not in REALTIME_TYPES, "FT가 구독 가능 목록에 들어감"
+        assert "FT" in US_REALTIME_TYPES
+        assert not (set(REALTIME_TYPES) & set(US_REALTIME_TYPES)), "두 맵이 겹침"
+        # `stream custom FT`는 여전히 거부돼야 한다 (지원하지 않는 것이 사실이므로)
+        result = CliRunner().invoke(cli, ["stream", "custom", "FT", "NVDA"])
+        assert result.exit_code != 0
+        assert "FT" in result.output
+
+    def test_end_to_end_real_frame(self):
+        """서버 프레임 -> handle_message. 정규화된 dict에서 출발하지 않는다."""
+        events = handle_message(spec_ft_frame(), {})
+        assert len(events) == 1
+        ev = events[0]
+        assert ev["type"] == "FT"
+        assert ev["type_name"] == "미국주식 10호가"
+        assert ev["symbol"] == "NVDA"
+        assert ev["exchange"] == "ND"
+        assert ev["ts"] == "21:53:00+09:00"
+        assert ev["ask1"] == 198.54 and ev["bid1"] == 198.48
+        assert ev["ask_qty1"] == 2 and ev["bid_qty1"] == 22
+        assert not [k for k in ev if k.isdigit() and 41 <= int(k) <= 80]
+
+
 # ── handle_message ────────────────────────────────────
 
 
