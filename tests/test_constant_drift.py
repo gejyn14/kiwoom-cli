@@ -396,3 +396,66 @@ def test_closure_predicates_run_in_both_directions():
     assert split(p1) == (118, 0)   # strict subset은 양방향이 정의상 불가능
     assert len(p2) == 202
     assert split(p2) == (110, 46)  # 46쌍은 키 집합 동일 + 값만 다름
+
+
+# ── D9/L2: 중첩 코드북은 위 술어들에게 보이지 않는다 ────────────
+
+
+def _nested_codebook_mappings() -> dict[str, dict[str, dict[str, str]]]:
+    """str -> dict[str, str] 모양의 **중첩** 코드북.
+
+    `_codebook_mappings()`는 값이 str인 것만 모으므로 이런 상수는 위 세 술어와
+    동치 불변식 어디에도 잡히지 않는다. 재귀 수집으로 평평한 것들과 섞으면
+    `len(maps) == 172`부터 술어 카운트까지 전부 흔들리고, 안쪽 dict끼리의
+    부분집합 관계는 바깥 상수의 병합 위험과 의미가 달라 같은 축에서 셀 수도
+    없다. 그래서 합치지 않고 **인벤토리를 따로 고정**한다.
+    """
+    return {
+        name: value
+        for name in dir(_constants)
+        if not name.startswith("_")
+        and isinstance(value := getattr(_constants, name), dict)
+        and value
+        and all(
+            isinstance(k, str)
+            and isinstance(v, dict)
+            and v
+            and all(isinstance(ik, str) and isinstance(iv, str) for ik, iv in v.items())
+            for k, v in value.items()
+        )
+    }
+
+
+# 중첩 코드북 인벤토리. 여기 없는 것이 새로 생기면 실패한다 — 새 중첩 코드북은
+# 자동 커버리지가 **0**이므로, 등록과 동시에 전송 body를 직접 고정하는 테스트를
+# 반드시 함께 만들어야 한다. 침묵이 위험이다.
+_KNOWN_NESTED_CODEBOOKS = {
+    # ka90005/ka90010의 mrkt_tp — 시장(kospi/kosdaq) × 거래소(1/2/3) 2차원.
+    # 전송 body 고정: tests/test_market.py의 program daily-trend / hourly-trend
+    "PROGRAM_MARKET_BY_EXCHANGE": {"kospi", "kosdaq"},
+}
+
+
+def test_nested_codebook_inventory_is_frozen():
+    """중첩 코드북이 새로 생기면(또는 사라지면) 사람이 검토하게 만든다.
+
+    `_codebook_mappings()`가 str->str만 보므로 중첩 코드북은 이 파일의 어떤
+    테스트도 건드리지 않는다. 조용히 늘어나면 "드리프트 테스트가 전수로
+    돈다"는 이 파일의 전제가 사실이 아니게 된다.
+    """
+    found = _nested_codebook_mappings()
+    assert set(found) == set(_KNOWN_NESTED_CODEBOOKS), (
+        f"새 중첩 코드북: {sorted(set(found) - set(_KNOWN_NESTED_CODEBOOKS))} "
+        f"(자동 커버리지 0 — 전송 body 고정 테스트를 함께 만들 것) / "
+        f"사라진 것: {sorted(set(_KNOWN_NESTED_CODEBOOKS) - set(found))}"
+    )
+    for name, outer_keys in _KNOWN_NESTED_CODEBOOKS.items():
+        assert set(found[name]) == outer_keys, (
+            f"{name}의 바깥 키가 바뀌었다: {sorted(found[name])}"
+        )
+
+
+def test_nested_codebooks_are_not_collected_as_flat():
+    """중첩 코드북이 평평한 수집에 섞이지 않는지 (섞이면 카운트가 흔들린다)."""
+    flat = _codebook_mappings()
+    assert set(flat).isdisjoint(_nested_codebook_mappings())
